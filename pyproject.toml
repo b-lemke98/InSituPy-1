@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "xeniumdata"
+version = "0.1.0"
+description = "Package introducing the XeniumData structure to read an analyze Xenium in situ data in a structured manner."
+authors = ["jwrth <j.wirth@tum.de>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+scanpy = "^1.9.5"
+dask-image = "^2023.8.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

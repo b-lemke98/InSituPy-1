@@ -1,0 +1,22 @@
+class textformat:
+    '''
+    Helper class to format printed text.
+    e.g. print(color.RED + color.BOLD + 'Hello, World!' + color.END)
+    '''
+    # colors and formats
+    PURPLE = '\033[95m'
+    CYAN = '\033[96m'
+    DARKCYAN = '\033[36m'
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+    
+    # signs
+    TSIGN = "\u251c"
+    LSIGN = "\u2514"
+    HLINE = "\u2500"
+    RARROWHEAD = "\u27A4"
