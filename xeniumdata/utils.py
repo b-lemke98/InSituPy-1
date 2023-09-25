@@ -20,3 +20,11 @@ class textformat:
     LSIGN = "\u2514"
     HLINE = "\u2500"
     RARROWHEAD = "\u27A4"
+
+def remove_last_line_from_csv(filename):
+    with open(filename) as myFile:
+        lines = myFile.readlines()
+        last_line = lines[len(lines)-1]
+        lines[len(lines)-1] = last_line.rstrip()
+    with open(filename, 'w') as myFile:    
+        myFile.writelines(lines)
