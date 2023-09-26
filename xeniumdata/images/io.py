@@ -5,7 +5,7 @@ import cv2
 from pathlib import Path
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 import os
-from .image_manipulation import resize_image
+from .manipulation import resize_image
 
 def img_resize(img,scale_factor):
     width = int(np.floor(img.shape[1] * scale_factor))

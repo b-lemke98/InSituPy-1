@@ -1,4 +1,4 @@
-from .image_manipulation import *
-from .image_registration import *
+from .manipulation import *
+from .registration import *
 from .deconvolution import *
-from .image_io import *
+from .io import *

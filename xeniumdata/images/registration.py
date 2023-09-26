@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 from datetime import datetime
 import numpy as np
-from .image_manipulation import resize_image, convert_to_8bit
+from .manipulation import resize_image, convert_to_8bit
 import dask.array as da
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 

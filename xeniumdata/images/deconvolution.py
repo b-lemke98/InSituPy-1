@@ -2,7 +2,7 @@ import numpy as np
 import numpy as np
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from skimage.color import rgb2hed, hed2rgb
-from .image_manipulation import convert_to_8bit
+from .manipulation import convert_to_8bit
 
 def deconvolve_he(
     img: np.ndarray,

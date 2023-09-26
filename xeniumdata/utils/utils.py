@@ -20,6 +20,9 @@ class textformat:
     LSIGN = "\u2514"
     HLINE = "\u2500"
     RARROWHEAD = "\u27A4"
+    
+    # spacer
+    SPACER = "    "
 
 def remove_last_line_from_csv(filename):
     with open(filename) as myFile:

@@ -8,8 +8,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from dask_image.imread import imread
 import dask
-from .utils import textformat as tf
-from .utils import remove_last_line_from_csv
+from .utils.utils import textformat as tf
+from .utils.utils import remove_last_line_from_csv
+from .utils.annotations import read_qupath_annotation
 from parse import *
 from .images import resize_image, register_image, fit_image_to_size_limit, deconvolve_he, write_ome_tiff
 import cv2
@@ -63,31 +64,38 @@ class XeniumData:
         
     def __repr__(self):
         repr = (
-            f"{tf.BOLD+tf.RED} XeniumData{tf.END}\n" 
-            f"{tf.BOLD}Data path:{tf.END} {self.path.parent}\n"
-            f"{tf.BOLD}Data folder:{tf.END} {self.path.name}\n"
-            f"{tf.BOLD}Metadata file:{tf.END} {self.metadata_filename}"            
+            f"{tf.BOLD+tf.RED}XeniumData{tf.END}\n" 
+            f"{tf.BOLD}Slide ID:{tf.END}\t{self.slide_id}\n"
+            f"{tf.BOLD}Region ID:{tf.END}\t{self.region_id}\n"
+            f"{tf.BOLD}Data path:{tf.END}\t{self.path.parent}\n"
+            f"{tf.BOLD}Data folder:{tf.END}\t{self.path.name}\n"
+            f"{tf.BOLD}Metadata file:{tf.END}\t{self.metadata_filename}"            
         )
         
         if hasattr(self, "images"):
             images_repr = self.images.__repr__()
             repr = (
                 #repr + f"\n{tf.BOLD}Images:{tf.END} "
-                repr + f"\n\t{tf.RARROWHEAD} " + images_repr.replace("\n", "\n\t   ")
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + images_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
             
         if hasattr(self, "matrix"):
             matrix_repr = self.matrix.__repr__()
             repr = (
-                repr + f"\n\t{tf.RARROWHEAD+tf.GREEN+tf.BOLD} matrix{tf.END}\n\t   " + matrix_repr.replace("\n", "\n\t   ")
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.GREEN+tf.BOLD} matrix{tf.END}\n{tf.SPACER}   " + matrix_repr.replace("\n", "\n\t   ")
             )
         
         if hasattr(self, "transcripts"):
-            #trans_repr = str(type(self.transcripts)).split(" ")[1].rstrip(">") + \
             trans_repr = f"DataFrame with shape {self.transcripts.shape[0]} x {self.transcripts.shape[1]}"
             
             repr = (
-                repr + f"\n\t{tf.RARROWHEAD+tf.CYAN+tf.BOLD} transcripts{tf.END}\n\t   " + trans_repr
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.CYAN+tf.BOLD} transcripts{tf.END}\n\t   " + trans_repr
+            )
+            
+        if hasattr(self, "annotations"):
+            annot_repr = self.annotations.__repr__()
+            repr = (
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + annot_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
         return repr
     
@@ -135,9 +143,32 @@ class XeniumData:
         # read transcripts
         self.transcripts = pd.read_parquet(self.path / self.transcript_filename)
         
+    def read_annotations(self,
+                         annot_path: Union[str, os.PathLike, Path] = "../annotations",
+                         suffix: str = ".geojson",
+                         pattern_annotation_file: str = "annotation-{slide_id}__{region_id}__{name}"
+                         ) -> pd.DataFrame:
+        annot_path = Path(annot_path)
+        
+        # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
+        if not annot_path.is_dir():
+            annot_path = Path(os.path.normpath(os.path.join(self.path, annot_path)))
+            assert annot_path.is_dir(), "`annot_path` is neither a direct path nor a relative path."
+        
+        annot_path = annot_path
+        self.annotations = AnnotationData()
+        for file in annot_path.glob(f"*{suffix}"):
+            if self.slide_id in str(file.stem) and (self.region_id in str(file.stem)):
+                parsed = parse(pattern_annotation_file, file.stem)
+                annot_name = parsed.named["name"]
+                
+                # read annotation and store in dictionary
+                self.annotations.add_annotation(read_qupath_annotation(file=file), annot_name)
+        
+        
     def register_images(self,
                         img_dir: Union[str, os.PathLike, Path],
-                        img_suffix: str = ".tif",
+                        img_suffix: str = ".ome.tif",
                         dapi_type: str = "focus",
                         pattern_img_file: str = "{slide_id}__{region_id}__{image_name}",
                         decon_scale_factor: float = 0.2
@@ -279,7 +310,34 @@ class XeniumData:
                 del image, template, registered, hema_upsized, hema, eo, dab
                 gc.collect()
         
+
+class AnnotationData:
+    '''
+    Object to store annotations.
+    '''
+    def __init__(self):
+        self.names = []
+        self.n_annotations = []
+        self.n_classes = []
         
+    def __repr__(self):
+        if len(self.names) > 0:
+            repr_strings = [f"{tf.BOLD}{a}:{tf.END}\t{b} annotations, {c} classes" for a,b,c in zip(self.names, self.n_annotations, self.n_classes)]
+            s = "\n".join(repr_strings)
+        else:
+            s = ""
+        repr = f"{tf.DARKCYAN+tf.BOLD}annotations{tf.END}\n{s}"
+        return repr
+        
+    def add_annotation(self,
+                       dataframe: pd.DataFrame,
+                       name: str
+                       ):
+        setattr(self, name, dataframe)
+        self.names.append(name)
+        self.n_annotations.append(len(dataframe))
+        self.n_classes.append(len(dataframe.name.unique()))
+
 class ImageData:
     '''
     Object to read and load images.
@@ -297,7 +355,7 @@ class ImageData:
             self.img_shapes.append(img.shape)
         
     def __repr__(self):
-        repr_strings = [f"{tf.BOLD + a + tf.END}\t{b}" for a,b in zip(self.img_names, self.img_shapes)]
+        repr_strings = [f"{tf.BOLD}{a}:{tf.END}\t{b}" for a,b in zip(self.img_names, self.img_shapes)]
         s = "\n".join(repr_strings)
         repr = f"{tf.BLUE+tf.BOLD}images{tf.END}\n{s}"
         return repr
