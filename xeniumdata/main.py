@@ -164,6 +164,15 @@ class XeniumData:
                 
                 # read annotation and store in dictionary
                 self.annotations.add_annotation(read_qupath_annotation(file=file), annot_name)
+                
+    def read_all(self, verbose: bool = True):
+        read_funcs = [elem for elem in dir(self) if elem.startswith("read_")]
+        read_funcs = [elem for elem in read_funcs if elem != "read_all"]
+        for f in read_funcs:
+            if verbose: 
+                print(f"Running {f}()")
+            func = getattr(self, f)
+            func()
         
         
     def register_images(self,
