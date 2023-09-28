@@ -15,6 +15,8 @@ from parse import *
 from .images import resize_image, register_image, fit_image_to_size_limit, deconvolve_he, write_ome_tiff
 import cv2
 import gc
+import functools as ft
+import seaborn as sns
 
 # make sure that image does not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
 SHRT_MAX = 2**15-1 # 32767
@@ -164,6 +166,39 @@ class XeniumData:
                 
                 # read annotation and store in dictionary
                 self.annotations.add_annotation(read_qupath_annotation(file=file), annot_name)
+                
+    def plot_dimred(self, save: Optional[str] = None):
+        '''
+        Read dimensionality reduction plots.
+        '''
+        # construct paths
+        analysis_path = self.path / "analysis"
+        umap_file = analysis_path / "umap" / "gene_expression_2_components" / "projection.csv"
+        pca_file = analysis_path / "pca" / "gene_expression_10_components" / "projection.csv"
+        cluster_file = analysis_path / "clustering" / "gene_expression_graphclust" / "clusters.csv"
+        
+        
+        # read data
+        umap_data = pd.read_csv(umap_file)
+        pca_data = pd.read_csv(pca_file)
+        cluster_data = pd.read_csv(cluster_file)
+        
+        # merge dimred data with clustering data
+        data = ft.reduce(lambda left, right: pd.merge(left, right, on='Barcode'), [umap_data, pca_data.iloc[:, :3], cluster_data])
+        data["Cluster"] = data["Cluster"].astype('category')
+                        
+        # plot
+        nrows = 1
+        ncols = 2
+        fig, axs = plt.subplots(nrows, ncols, figsize=(8*ncols, 6*nrows))
+        sns.scatterplot(data=data, x="PC-1", y="PC-2", hue="Cluster", palette="tab20", ax=axs[0])
+        sns.scatterplot(data=data, x="UMAP-1", y="UMAP-2", hue="Cluster", palette="tab20", ax=axs[1])
+        if save is not None:
+            plt.savefig(save)
+        plt.show()
+        
+        
+        
                 
     def read_all(self, verbose: bool = True):
         read_funcs = [elem for elem in dir(self) if elem.startswith("read_")]
@@ -327,11 +362,15 @@ class AnnotationData:
     def __init__(self):
         self.names = []
         self.n_annotations = []
-        self.n_classes = []
+        self.classes = []
+        #self.n_classes = []
         
     def __repr__(self):
         if len(self.names) > 0:
-            repr_strings = [f"{tf.BOLD}{a}:{tf.END}\t{b} annotations, {c} classes" for a,b,c in zip(self.names, self.n_annotations, self.n_classes)]
+            repr_strings = [f"{tf.BOLD}{a}:{tf.END}\t{b} annotations, {len(c)} classes {*c,}" for a,b,c in zip(self.names, 
+                                                                                                    self.n_annotations, 
+                                                                                                    self.classes
+                                                                                                    )]
             s = "\n".join(repr_strings)
         else:
             s = ""
@@ -345,7 +384,8 @@ class AnnotationData:
         setattr(self, name, dataframe)
         self.names.append(name)
         self.n_annotations.append(len(dataframe))
-        self.n_classes.append(len(dataframe.name.unique()))
+        self.classes.append(dataframe.name.unique())
+        #self.n_classes.append(len(dataframe.name.unique()))
 
 class ImageData:
     '''
