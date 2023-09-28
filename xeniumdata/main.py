@@ -94,6 +94,13 @@ class XeniumData:
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.CYAN+tf.BOLD} transcripts{tf.END}\n\t   " + trans_repr
             )
             
+        if hasattr(self, "boundaries"):
+            bound_repr = self.boundaries.__repr__()
+            repr = (
+                #repr + f"\n{tf.BOLD}Images:{tf.END} "
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + bound_repr.replace("\n", f"\n{tf.SPACER}   ")
+            )
+            
         if hasattr(self, "annotations"):
             annot_repr = self.annotations.__repr__()
             repr = (
@@ -139,11 +146,14 @@ class XeniumData:
         self.img_names = ["DAPI"] + self.img_names
         
         # load image
-        self.images = ImageData(self.path, img_files, self.img_names, dapi_type)
+        self.images = ImageData(self.path, img_files, self.img_names)
         
     def read_transcripts(self):
         # read transcripts
         self.transcripts = pd.read_parquet(self.path / self.transcript_filename)
+        
+    def read_boundaries(self):
+        self.boundaries = BoundariesData(path=self.path)
         
     def read_annotations(self,
                          annot_path: Union[str, os.PathLike, Path] = "../annotations",
@@ -391,7 +401,11 @@ class ImageData:
     '''
     Object to read and load images.
     '''
-    def __init__(self, path, img_files, img_names, dapi_type):
+    def __init__(self, 
+                 path: Union[str, os.PathLike, Path], 
+                 img_files: List[str], 
+                 img_names: List[str], 
+                 ):
         
         self.img_files = img_files
         self.img_names = img_names
@@ -423,3 +437,26 @@ class ImageData:
         for n in which:
             img_loaded = getattr(self, n).compute()
             setattr(self, n, img_loaded)
+            
+class BoundariesData:
+    '''
+    Object to read and load boundaries of cells and nuclei.
+    '''
+    def __init__(self, 
+                 path: Union[str, os.PathLike, Path], 
+                 cell_boundaries_file: str = "cell_boundaries.parquet",
+                 nucleus_boundaries_file: str = "nucleus_boundaries.parquet"
+                 ):
+        # generate paths
+        cellbound_path = path / "cell_boundaries.parquet"
+        nucbound_path = path / "nucleus_boundaries.parquet"
+        
+        # load data and add to object
+        setattr(self, "cells", pd.read_parquet(cellbound_path))
+        setattr(self, "nuclei", pd.read_parquet(nucbound_path))
+        
+    def __repr__(self):
+        repr_strings = [f"{tf.BOLD+a+tf.END}" for a in ["cells", "nuclei"]]
+        s = "\n".join(repr_strings)
+        repr = f"{tf.PURPLE+tf.BOLD}boundaries{tf.END}\n{s}"
+        return repr
