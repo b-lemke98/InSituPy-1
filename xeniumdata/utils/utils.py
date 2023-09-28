@@ -31,3 +31,9 @@ def remove_last_line_from_csv(filename):
         lines[len(lines)-1] = last_line.rstrip()
     with open(filename, 'w') as myFile:    
         myFile.writelines(lines)
+        
+def decode_robust(s):
+    try:
+        return s.decode("utf-8")
+    except (UnicodeDecodeError, AttributeError):
+        return s

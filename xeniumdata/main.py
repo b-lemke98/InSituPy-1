@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from dask_image.imread import imread
 import dask
 from .utils.utils import textformat as tf
-from .utils.utils import remove_last_line_from_csv
+from .utils.utils import remove_last_line_from_csv, decode_robust
 from .utils.annotations import read_qupath_annotation
 from parse import *
 from .images import resize_image, register_image, fit_image_to_size_limit, deconvolve_he, write_ome_tiff
@@ -118,7 +118,7 @@ class XeniumData:
             
             # transform cell ids from bytes to str
             cells = cells.set_index("cell_id")
-            cells.index = [elem.decode() for elem in cells.index]
+            cells.index = [decode_robust(elem) for elem in cells.index]
             
             # add information to anndata observations
             self.matrix.obs = pd.merge(left=self.matrix.obs, right=cells, left_index=True, right_index=True)
