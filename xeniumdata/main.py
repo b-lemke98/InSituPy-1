@@ -2,15 +2,13 @@ import json
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from pathlib import Path
 import os
-import scanpy as sc
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from dask_image.imread import imread
 import dask
-from .utils.utils import textformat as tf
-from .utils.utils import remove_last_line_from_csv, decode_robust
-from .utils.annotations import read_qupath_annotation
+from .utils import textformat as tf
+from .utils import remove_last_line_from_csv
 from parse import *
 from .images import resize_image, register_image, fit_image_to_size_limit, deconvolve_he, write_ome_tiff
 import cv2
@@ -40,6 +38,7 @@ class XeniumData:
     '''
     XeniumData object to read Xenium in situ data in a structured way.
     '''
+    from .utils import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
                  metadata_filename: str = "experiment_modified.xenium",
@@ -66,38 +65,38 @@ class XeniumData:
         
     def __repr__(self):
         repr = (
-            f"{tf.BOLD+tf.RED}XeniumData{tf.END}\n" 
-            f"{tf.BOLD}Slide ID:{tf.END}\t{self.slide_id}\n"
-            f"{tf.BOLD}Region ID:{tf.END}\t{self.region_id}\n"
-            f"{tf.BOLD}Data path:{tf.END}\t{self.path.parent}\n"
-            f"{tf.BOLD}Data folder:{tf.END}\t{self.path.name}\n"
-            f"{tf.BOLD}Metadata file:{tf.END}\t{self.metadata_filename}"            
+            f"{tf.Bold+tf.Red}XeniumData{tf.ResetAll}\n" 
+            f"{tf.Bold}Slide ID:{tf.ResetAll}\t{self.slide_id}\n"
+            f"{tf.Bold}Region ID:{tf.ResetAll}\t{self.region_id}\n"
+            f"{tf.Bold}Data path:{tf.ResetAll}\t{self.path.parent}\n"
+            f"{tf.Bold}Data folder:{tf.ResetAll}\t{self.path.name}\n"
+            f"{tf.Bold}Metadata file:{tf.ResetAll}\t{self.metadata_filename}"            
         )
         
         if hasattr(self, "images"):
             images_repr = self.images.__repr__()
             repr = (
-                #repr + f"\n{tf.BOLD}Images:{tf.END} "
+                #repr + f"\n{tf.Bold}Images:{tf.ResetAll} "
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + images_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
             
         if hasattr(self, "matrix"):
             matrix_repr = self.matrix.__repr__()
             repr = (
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.GREEN+tf.BOLD} matrix{tf.END}\n{tf.SPACER}   " + matrix_repr.replace("\n", "\n\t   ")
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} matrix{tf.ResetAll}\n{tf.SPACER}   " + matrix_repr.replace("\n", "\n\t   ")
             )
         
         if hasattr(self, "transcripts"):
             trans_repr = f"DataFrame with shape {self.transcripts.shape[0]} x {self.transcripts.shape[1]}"
             
             repr = (
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.CYAN+tf.BOLD} transcripts{tf.END}\n\t   " + trans_repr
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.LightCyan+tf.Bold} transcripts{tf.ResetAll}\n\t   " + trans_repr
             )
             
         if hasattr(self, "boundaries"):
             bound_repr = self.boundaries.__repr__()
             repr = (
-                #repr + f"\n{tf.BOLD}Images:{tf.END} "
+                #repr + f"\n{tf.Bold}Images:{tf.ResetAll} "
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + bound_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
             
@@ -108,75 +107,6 @@ class XeniumData:
             )
         return repr
     
-    def read_matrix(self, 
-                    read_cells: bool = True
-                    ):
-        cf_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
-        cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
-
-        # read matrix data
-        self.matrix = sc.read_10x_h5(cf_h5_path)
-        
-        if read_cells:
-            # read cell information
-            cells_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cells_zarr_filepath"]
-            cells_parquet_path = cells_zarr_path.parent / cells_zarr_path.name.replace(".zarr.zip", ".parquet")
-            cells = pd.read_parquet(cells_parquet_path)
-            
-            # transform cell ids from bytes to str
-            cells = cells.set_index("cell_id")
-            cells.index = [decode_robust(elem) for elem in cells.index]
-            
-            # add information to anndata observations
-            self.matrix.obs = pd.merge(left=self.matrix.obs, right=cells, left_index=True, right_index=True)
-        
-    def read_images(self,
-                    dapi_type: str = "focus"
-                    ):
-        # get available image keys in metadata
-        dapi_key = f"morphology_{dapi_type}_filepath"
-        img_keys = [elem for elem in self.metadata["images"] if elem.startswith("registered")]
-        img_keys = [dapi_key] + img_keys
-        
-        # get image files from keys
-        img_files = [self.metadata["images"][k] for k in img_keys]
-                
-        # extract image names
-        self.img_names = [elem.split(".")[0].split("_")[1] for elem in img_files[1:]]
-        self.img_names = ["DAPI"] + self.img_names
-        
-        # load image
-        self.images = ImageData(self.path, img_files, self.img_names)
-        
-    def read_transcripts(self):
-        # read transcripts
-        self.transcripts = pd.read_parquet(self.path / self.transcript_filename)
-        
-    def read_boundaries(self):
-        self.boundaries = BoundariesData(path=self.path)
-        
-    def read_annotations(self,
-                         annot_path: Union[str, os.PathLike, Path] = "../annotations",
-                         suffix: str = ".geojson",
-                         pattern_annotation_file: str = "annotation-{slide_id}__{region_id}__{name}"
-                         ) -> pd.DataFrame:
-        annot_path = Path(annot_path)
-        
-        # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
-        if not annot_path.is_dir():
-            annot_path = Path(os.path.normpath(os.path.join(self.path, annot_path)))
-            assert annot_path.is_dir(), "`annot_path` is neither a direct path nor a relative path."
-        
-        annot_path = annot_path
-        self.annotations = AnnotationData()
-        for file in annot_path.glob(f"*{suffix}"):
-            if self.slide_id in str(file.stem) and (self.region_id in str(file.stem)):
-                parsed = parse(pattern_annotation_file, file.stem)
-                annot_name = parsed.named["name"]
-                
-                # read annotation and store in dictionary
-                self.annotations.add_annotation(read_qupath_annotation(file=file), annot_name)
-                
     def plot_dimred(self, save: Optional[str] = None):
         '''
         Read dimensionality reduction plots.
@@ -194,7 +124,7 @@ class XeniumData:
         cluster_data = pd.read_csv(cluster_file)
         
         # merge dimred data with clustering data
-        data = ft.reduce(lambda left, right: pd.merge(left, right, on='Barcode'), [umap_data, pca_data.iloc[:, :3], cluster_data])
+        data = ft.Reduce(lambda left, right: pd.merge(left, right, on='Barcode'), [umap_data, pca_data.iloc[:, :3], cluster_data])
         data["Cluster"] = data["Cluster"].astype('category')
                         
         # plot
@@ -206,18 +136,6 @@ class XeniumData:
         if save is not None:
             plt.savefig(save)
         plt.show()
-        
-        
-        
-                
-    def read_all(self, verbose: bool = True):
-        read_funcs = [elem for elem in dir(self) if elem.startswith("read_")]
-        read_funcs = [elem for elem in read_funcs if elem != "read_all"]
-        for f in read_funcs:
-            if verbose: 
-                print(f"Running {f}()")
-            func = getattr(self, f)
-            func()
         
         
     def register_images(self,
@@ -234,7 +152,7 @@ class XeniumData:
         self.img_dir = Path(img_dir)
         self.pattern_img_file = pattern_img_file
         
-        print("Processing path {}{}{}".format(tf.BOLD, self.path, tf.END), flush=True)
+        print("Processing path {}{}{}".format(tf.Bold, self.path, tf.ResetAll), flush=True)
 
         # get a list of image files
         img_files = sorted(self.img_dir.glob("*{}".format(img_suffix)))
@@ -258,7 +176,7 @@ class XeniumData:
                 img_stem = img_file.stem.split(".")[0] # make sure to remove also suffices like .ome.tif
                 img_file_parsed = parse(pattern_img_file, img_stem)
                 img_name = img_file_parsed.named["image_name"]
-                print('\tProcessing {}"{}"{} image'.format(tf.BOLD, img_name, tf.END), flush=True)
+                print('\tProcessing {}"{}"{} image'.format(tf.Bold, img_name, tf.ResetAll), flush=True)
                 
                 # load registered image (usually DAPI in case of Xenium)
                 relpath_template = self.metadata['images']['morphology_{}_filepath'.format(dapi_type)]
@@ -364,99 +282,3 @@ class XeniumData:
                 del image, template, registered, hema_upsized, hema, eo, dab
                 gc.collect()
         
-
-class AnnotationData:
-    '''
-    Object to store annotations.
-    '''
-    def __init__(self):
-        self.names = []
-        self.n_annotations = []
-        self.classes = []
-        #self.n_classes = []
-        
-    def __repr__(self):
-        if len(self.names) > 0:
-            repr_strings = [f"{tf.BOLD}{a}:{tf.END}\t{b} annotations, {len(c)} classes {*c,}" for a,b,c in zip(self.names, 
-                                                                                                    self.n_annotations, 
-                                                                                                    self.classes
-                                                                                                    )]
-            s = "\n".join(repr_strings)
-        else:
-            s = ""
-        repr = f"{tf.DARKCYAN+tf.BOLD}annotations{tf.END}\n{s}"
-        return repr
-        
-    def add_annotation(self,
-                       dataframe: pd.DataFrame,
-                       name: str
-                       ):
-        setattr(self, name, dataframe)
-        self.names.append(name)
-        self.n_annotations.append(len(dataframe))
-        self.classes.append(dataframe.name.unique())
-        #self.n_classes.append(len(dataframe.name.unique()))
-
-class ImageData:
-    '''
-    Object to read and load images.
-    '''
-    def __init__(self, 
-                 path: Union[str, os.PathLike, Path], 
-                 img_files: List[str], 
-                 img_names: List[str], 
-                 ):
-        
-        self.img_files = img_files
-        self.img_names = img_names
-        
-        self.img_shapes = []
-        for n, f in zip(self.img_names, self.img_files):
-            # load images
-            img = imread(path / f)[0]
-            setattr(self, n, img)
-            self.img_shapes.append(img.shape)
-        
-    def __repr__(self):
-        repr_strings = [f"{tf.BOLD}{a}:{tf.END}\t{b}" for a,b in zip(self.img_names, self.img_shapes)]
-        s = "\n".join(repr_strings)
-        repr = f"{tf.BLUE+tf.BOLD}images{tf.END}\n{s}"
-        return repr
-    
-    def load(self, 
-             which: Union[List[str], str] = "all"
-             ):
-        '''
-        Load images into memory.
-        '''
-        if which == "all":
-            which = self.img_names
-            
-        # make sure which is a list
-        which = [which] if isinstance(which, str) else list(which)
-        for n in which:
-            img_loaded = getattr(self, n).compute()
-            setattr(self, n, img_loaded)
-            
-class BoundariesData:
-    '''
-    Object to read and load boundaries of cells and nuclei.
-    '''
-    def __init__(self, 
-                 path: Union[str, os.PathLike, Path], 
-                 cell_boundaries_file: str = "cell_boundaries.parquet",
-                 nucleus_boundaries_file: str = "nucleus_boundaries.parquet"
-                 ):
-        # generate paths
-        cellbound_path = path / "cell_boundaries.parquet"
-        nucbound_path = path / "nucleus_boundaries.parquet"
-        
-        # load data and add to object
-        setattr(self, "cells", pd.read_parquet(cellbound_path))
-        setattr(self, "nuclei", pd.read_parquet(nucbound_path))
-        
-    def __repr__(self):
-        repr_strings = [f"{tf.BOLD+a+tf.END}" for a in ["cells", "nuclei"]]
-        s = "\n".join(repr_strings)
-        repr = f"{tf.PURPLE+tf.BOLD}boundaries{tf.END}\n{s}"
-        return repr

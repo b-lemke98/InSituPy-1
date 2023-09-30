@@ -16,6 +16,7 @@ def read_qupath_annotation(file: Union[str, os.PathLike, Path],
                            use_geopandas: bool = True
                            ) -> pd.DataFrame:
     # read dataframe
+    print(file)
     df = geopandas.read_file(file)
 
     # flatten classification
