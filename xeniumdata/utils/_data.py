@@ -4,6 +4,7 @@ import os
 import pandas as pd
 from dask_image.imread import imread
 from .utils import textformat as tf
+from .utils import convert_to_list
 from parse import *
 
 class AnnotationData:
@@ -11,16 +12,18 @@ class AnnotationData:
     Object to store annotations.
     '''
     def __init__(self):
-        self.names = []
+        self.labels = []
         self.n_annotations = []
         self.classes = []
+        self.analyzed = []
         #self.n_classes = []
         
     def __repr__(self):
-        if len(self.names) > 0:
-            repr_strings = [f"{tf.Bold}{a}:{tf.ResetAll}\t{b} annotations, {len(c)} classes {*c,}" for a,b,c in zip(self.names, 
+        if len(self.labels) > 0:
+            repr_strings = [f"{tf.Bold}{a}:{tf.ResetAll}\t{b} annotations, {len(c)} classes {*c,} {d}" for a,b,c,d in zip(self.labels, 
                                                                                                     self.n_annotations, 
-                                                                                                    self.classes
+                                                                                                    self.classes,
+                                                                                                    self.analyzed
                                                                                                     )]
             s = "\n".join(repr_strings)
         else:
@@ -33,9 +36,10 @@ class AnnotationData:
                        name: str
                        ):
         setattr(self, name, dataframe)
-        self.names.append(name)
+        self.labels.append(name)
         self.n_annotations.append(len(dataframe))
         self.classes.append(dataframe.name.unique())
+        self.analyzed.append("")
         #self.n_classes.append(len(dataframe.name.unique()))
 
 class ImageData:
@@ -74,7 +78,7 @@ class ImageData:
             which = self.img_names
             
         # make sure which is a list
-        which = [which] if isinstance(which, str) else list(which)
+        which = convert_to_list(which)
         for n in which:
             img_loaded = getattr(self, n).compute()
             setattr(self, n, img_loaded)

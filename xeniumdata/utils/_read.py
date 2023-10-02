@@ -11,6 +11,8 @@ from ._data import ImageData, BoundariesData, AnnotationData
 def read_matrix(self, 
                 read_cells: bool = True
                 ):
+    # extract parameters from metadata
+    pixel_size = self.metadata["pixel_size"]
     cf_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
     cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
 
@@ -33,7 +35,7 @@ def read_matrix(self,
     # transfer coordinates to .obsm
     coord_cols = ["x_centroid", "y_centroid"]
     self.matrix.obsm["spatial"] = self.matrix.obs[coord_cols].values
-    self.matrix.obs.drop(coord_cols, axis=1, inplace=True)
+    self.matrix.obsm["spatial"] /= pixel_size
     
 def read_images(self,
                 dapi_type: str = "focus"

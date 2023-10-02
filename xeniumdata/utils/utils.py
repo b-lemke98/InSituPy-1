@@ -72,6 +72,7 @@ class textformat:
     LSIGN = "\u2514"
     HLINE = "\u2500"
     RARROWHEAD = "\u27A4"
+    TICK = "\u2714"
 
     # spacer
     SPACER = "    "
@@ -91,3 +92,9 @@ def decode_robust(s):
         return s.decode("utf-8")
     except (UnicodeDecodeError, AttributeError):
         return s
+    
+def convert_to_list(elem):
+    '''
+    Return element to list if it is not a list already.
+    '''
+    return [elem] if isinstance(elem, str) else list(elem)

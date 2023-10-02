@@ -38,7 +38,12 @@ class XeniumData:
     '''
     XeniumData object to read Xenium in situ data in a structured way.
     '''
-    from .utils import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
+    # import read functions
+    from .utils._read import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
+    
+    # import analysis functions
+    from .utils._analyze import annotate
+    
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
                  metadata_filename: str = "experiment_modified.xenium",
