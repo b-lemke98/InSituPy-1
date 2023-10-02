@@ -10,8 +10,6 @@ os.environ['USE_PYGEOS'] = '0'
 import geopandas
 from shapely import Polygon
 
-
-
 def read_qupath_annotation(file: Union[str, os.PathLike, Path], 
                            use_geopandas: bool = True
                            ) -> pd.DataFrame:

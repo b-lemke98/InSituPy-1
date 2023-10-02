@@ -98,3 +98,21 @@ def convert_to_list(elem):
     Return element to list if it is not a list already.
     '''
     return [elem] if isinstance(elem, str) else list(elem)
+
+def check_sanity(adata, batch, hvg, hvg_key):
+    check_adata(adata)
+    check_batch(batch, adata.obs)
+    if hvg:
+        check_hvg(hvg, hvg_key, adata.var)
+
+
+def split_batches(adata, batch, hvg=None, return_categories=False):
+    split = []
+    batch_categories = adata.obs[batch].unique()
+    if hvg is not None:
+        adata = adata[:, hvg]
+    for i in batch_categories:
+        split.append(adata[adata.obs[batch] == i].copy())
+    if return_categories:
+        return split, batch_categories
+    return split

@@ -44,6 +44,9 @@ class XeniumData:
     # import analysis functions
     from .utils._analyze import annotate
     
+    # import preprocessing functions
+    from .utils.preprocessing import normalize, hvg, reduce_dimensions
+    
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
                  metadata_filename: str = "experiment_modified.xenium",
