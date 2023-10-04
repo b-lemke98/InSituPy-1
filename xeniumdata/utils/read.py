@@ -6,7 +6,7 @@ import pandas as pd
 from .utils import decode_robust
 from .annotations import read_qupath_annotation
 from parse import *
-from ._data import ImageData, BoundariesData, AnnotationData
+from .data import ImageData, BoundariesData, AnnotationData
 
 def read_matrix(self, 
                 read_cells: bool = True
@@ -92,3 +92,4 @@ def read_all(self, verbose: bool = True):
             print(f"Running {f}()")
         func = getattr(self, f)
         func()
+        

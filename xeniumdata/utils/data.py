@@ -2,9 +2,10 @@ from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from pathlib import Path
 import os
 import pandas as pd
-from dask_image.imread import imread
+#from dask_image.imread import imread
+from tifffile import imread
 from .utils import textformat as tf
-from .utils import convert_to_list
+from .utils import convert_to_list, load_pyramid
 from parse import *
 
 class AnnotationData:
@@ -52,18 +53,38 @@ class ImageData:
                  img_names: List[str], 
                  ):
         
-        self.img_files = img_files
-        self.img_names = img_names
+        self.files = img_files
         
-        self.img_shapes = []
-        for n, f in zip(self.img_names, self.img_files):
+        self.metadata = {}
+        for n, f in zip(img_names, self.files):
             # load images
-            img = imread(path / f)[0]
-            setattr(self, n, img)
-            self.img_shapes.append(img.shape)
-        
+            store = imread(path / f, aszarr=True)
+            pyramid = load_pyramid(store)
+            
+            # set attribute
+            setattr(self, n, pyramid) 
+            
+            # add metadata
+            self.metadata[n] = {}
+            self.metadata[n]["shape"] = pyramid[0].shape # store shape
+            self.metadata[n]["subresolutions"] = len(pyramid) - 1 # store number of subresolutions of pyramid
+            
+            # check whether the image is RGB or not
+            if len(pyramid[0].shape) == 3:
+                self.metadata[n]["rgb"] = True
+            elif len(pyramid[0].shape) == 2:
+                self.metadata[n]["rgb"] = False
+            else:
+                raise ValueError(f"Unknown image shape: {pyramid[0].shape}")
+            
+            # get image contrast limits
+            if self.metadata[n]["rgb"]:
+                self.metadata[n]["contrast_limits"] = [0, 255]
+            else:
+                self.metadata[n]["contrast_limits"] = [0, int(pyramid[0].max())]
+            
     def __repr__(self):
-        repr_strings = [f"{tf.Bold}{a}:{tf.ResetAll}\t{b}" for a,b in zip(self.img_names, self.img_shapes)]
+        repr_strings = [f"{tf.Bold}{n}:{tf.ResetAll}\t{metadata['shape']}" for n,metadata in self.metadata.items()]
         s = "\n".join(repr_strings)
         repr = f"{tf.Blue+tf.Bold}images{tf.ResetAll}\n{s}"
         return repr
