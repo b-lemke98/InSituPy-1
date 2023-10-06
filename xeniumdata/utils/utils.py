@@ -1,3 +1,7 @@
+import anndata
+import dask.array as da
+import zarr
+
 class textformat:
     '''
     Helper class to format printed text.
@@ -77,8 +81,6 @@ class textformat:
     # spacer
     SPACER = "    "
     
-    
-
 def remove_last_line_from_csv(filename):
     with open(filename) as myFile:
         lines = myFile.readlines()
@@ -99,6 +101,28 @@ def convert_to_list(elem):
     '''
     return [elem] if isinstance(elem, str) else list(elem)
 
+# checker functions for data sanity
+def check_adata(adata):
+    if type(adata) is not anndata.AnnData:
+        raise TypeError('Input is not a valid AnnData object')
+
+
+def check_batch(batch, obs, verbose=False):
+    if batch not in obs:
+        raise ValueError(f'column {batch} is not in obs')
+    elif verbose:
+        print(f'Object contains {obs[batch].nunique()} batches.')
+
+
+def check_hvg(hvg, hvg_key, adata_var):
+    if type(hvg) is not list:
+        raise TypeError('HVG list is not a list')
+    else:
+        if not all(i in adata_var.index for i in hvg):
+            raise ValueError('Not all HVGs are in the adata object')
+    if not hvg_key in adata_var:
+        raise KeyError('`hvg_key` not found in `adata.var`')
+
 def check_sanity(adata, batch, hvg, hvg_key):
     check_adata(adata)
     check_batch(batch, adata.obs)
@@ -116,3 +140,19 @@ def split_batches(adata, batch, hvg=None, return_categories=False):
     if return_categories:
         return split, batch_categories
     return split
+
+def load_pyramid(store):
+    '''
+    Function to load pyramid.
+    From: https://www.youtube.com/watch?v=8TlAAZcJnvA
+    '''
+    # Open store (root group)
+    grp = zarr.open(store, mode='r')
+
+    # Read multiscale metadata
+    datasets = grp.attrs["multiscales"][0]["datasets"]
+
+    return [
+        da.from_zarr(store, component=d["path"])
+        for d in datasets
+    ]

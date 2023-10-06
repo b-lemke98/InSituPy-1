@@ -7,8 +7,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from dask_image.imread import imread
 import dask
-from .utils import textformat as tf
-from .utils import remove_last_line_from_csv
+from .utils.utils import textformat as tf
+from .utils.utils import remove_last_line_from_csv
 from parse import *
 from .images import resize_image, register_image, fit_image_to_size_limit, deconvolve_he, write_ome_tiff
 import cv2
@@ -39,13 +39,16 @@ class XeniumData:
     XeniumData object to read Xenium in situ data in a structured way.
     '''
     # import read functions
-    from .utils._read import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
+    from .utils.read import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
     
     # import analysis functions
-    from .utils._analyze import annotate
+    from .utils.annotations import annotate
     
     # import preprocessing functions
     from .utils.preprocessing import normalize, hvg, reduce_dimensions
+    
+    # import visualization functions
+    from .utils.visualize import interactive
     
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
@@ -144,8 +147,8 @@ class XeniumData:
         if save is not None:
             plt.savefig(save)
         plt.show()
-        
-        
+
+
     def register_images(self,
                         img_dir: Union[str, os.PathLike, Path],
                         img_suffix: str = ".ome.tif",
