@@ -147,8 +147,8 @@ class XeniumData:
         if save is not None:
             plt.savefig(save)
         plt.show()
-        
-        
+
+
     def register_images(self,
                         img_dir: Union[str, os.PathLike, Path],
                         img_suffix: str = ".ome.tif",
