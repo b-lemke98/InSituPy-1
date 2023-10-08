@@ -120,7 +120,7 @@ def scanorama(adata, batch, hvg=False, hvg_key='highly_variable', **kwargs):
     Code partially from: https://github.com/theislab/scib.
     '''
 
-    import scanorama        
+    import scanorama
 
     check_sanity(adata, batch, hvg, hvg_key)
 

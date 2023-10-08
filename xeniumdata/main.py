@@ -16,6 +16,7 @@ import cv2
 import gc
 import functools as ft
 import seaborn as sns
+from anndata import AnnData
 
 # make sure that image does not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
 SHRT_MAX = 2**15-1 # 32767
@@ -52,28 +53,36 @@ class XeniumData:
     from .utils.visualize import interactive
     
     def __init__(self, 
-                 path: Union[str, os.PathLike, Path],
+                 path: Optional[Union[str, os.PathLike, Path]],
                  metadata_filename: str = "experiment_modified.xenium",
                  transcript_filename: str = "transcripts.parquet",
                  pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{region_id}__{date}__{id}",
+                 matrix: Optional[AnnData] = None
                  ):
-        self.path = Path(path)
-        self.transcript_filename = transcript_filename
-        
-        # check for modified metadata_filename
-        metadata_files = [elem.name for elem in self.path.glob("*.xenium")]
-        if "experiment_modified.xenium" in metadata_files:
-            self.metadata_filename = "experiment_modified.xenium"
-        else:
-            self.metadata_filename = "experiment.xenium"
+        if matrix is None:
+            self.path = Path(path)
+            self.transcript_filename = transcript_filename
             
-        # read metadata
-        self.metadata = read_xenium_metadata(self.path, metadata_filename=self.metadata_filename)
-        
-        # parse folder name to get slide_id and region_id
-        p_parsed = parse(pattern_xenium_folder, self.path.stem)
-        self.slide_id = p_parsed.named["slide_id"]
-        self.region_id = p_parsed.named["region_id"]
+            # check for modified metadata_filename
+            metadata_files = [elem.name for elem in self.path.glob("*.xenium")]
+            if "experiment_modified.xenium" in metadata_files:
+                self.metadata_filename = "experiment_modified.xenium"
+            else:
+                self.metadata_filename = "experiment.xenium"
+                
+            # read metadata
+            self.metadata = read_xenium_metadata(self.path, metadata_filename=self.metadata_filename)
+            
+            # parse folder name to get slide_id and region_id
+            p_parsed = parse(pattern_xenium_folder, self.path.stem)
+            self.slide_id = p_parsed.named["slide_id"]
+            self.region_id = p_parsed.named["region_id"]
+        else:
+            self.matrix = matrix
+            self.slide_id = ""
+            self.region_id = ""
+            self.path = Path("unknown/unknown")
+            self.metadata_filename = ""
         
     def __repr__(self):
         repr = (
