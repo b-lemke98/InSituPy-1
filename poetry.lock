@@ -36,6 +36,20 @@ doc = ["IPython", "awkward (>=2.0.7)", "myst_parser", "nbsphinx", "scanpydoc[the
 test = ["awkward (>=2.3)", "boltons", "dask[array]", "joblib", "loompy (>=3.0.5)", "matplotlib", "openpyxl", "pytest (>=6.0)", "pytest-cov (>=2.10)", "pytest_memray", "scanpy", "scikit-learn", "zarr"]
 
 [[package]]
+name = "annoy"
+version = "1.17.0"
+description = "Approximate Nearest Neighbors in C++/Python optimized for memory usage and loading/saving to disk."
+optional = false
+python-versions = "*"
+files = [
+    {file = "annoy-1.17.0-cp39-cp39-win_amd64.whl", hash = "sha256:df1c8606fea2af9b77f2999fae4973d8554fe6f4fa011295ea884e3b32a67b32"},
+]
+
+[package.source]
+type = "file"
+url = "wheels/annoy-1.17.0-cp39-cp39-win_amd64.whl"
+
+[[package]]
 name = "app-model"
 version = "0.2.2"
 description = "Generic application schema implemented in python"
@@ -773,6 +787,16 @@ files = [
 tests = ["asttokens (>=2.1.0)", "coverage", "coverage-enable-subprocess", "ipython", "littleutils", "pytest", "rich"]
 
 [[package]]
+name = "fbpca"
+version = "1.0"
+description = "Fast computations of PCA/SVD/eigendecompositions via randomized methods"
+optional = false
+python-versions = "*"
+files = [
+    {file = "fbpca-1.0.tar.gz", hash = "sha256:150677642479663f317fdbb5e06dab3f98721cf7031bb4a84113d7a631c472d1"},
+]
+
+[[package]]
 name = "fiona"
 version = "1.9.4.post1"
 description = "Fiona reads and writes spatial data files"
@@ -941,6 +965,22 @@ packaging = "*"
 pandas = ">=1.4.0"
 pyproj = ">=3.3.0"
 shapely = ">=1.8.0"
+
+[[package]]
+name = "geosketch"
+version = "1.2"
+description = "Geometry-preserving random sampling"
+optional = false
+python-versions = "*"
+files = [
+    {file = "geosketch-1.2-py3-none-any.whl", hash = "sha256:8e91ba18493ddb32f1cf341cbd8ee17e077cf62b6e0b6ebcf5af8053a88da6d3"},
+    {file = "geosketch-1.2.tar.gz", hash = "sha256:bbfe97366b91c5927b6076d5a6738d9cfbe094efb5ac1117aab7a30b6081cc4e"},
+]
+
+[package.dependencies]
+fbpca = ">=1.0"
+numpy = ">=1.12.0"
+scikit-learn = ">=0.24"
 
 [[package]]
 name = "h5py"
@@ -1172,6 +1212,19 @@ files = [
 [package.extras]
 dev = ["black", "ipython", "mypy", "pdbpp", "pre-commit", "pydocstyle", "pytest", "pytest-cov", "rich", "ruff"]
 test = ["pytest (>=6.0)", "pytest-codspeed", "pytest-cov", "toolz"]
+
+[[package]]
+name = "intervaltree"
+version = "3.1.0"
+description = "Editable interval tree data structure for Python 2 and 3"
+optional = false
+python-versions = "*"
+files = [
+    {file = "intervaltree-3.1.0.tar.gz", hash = "sha256:902b1b88936918f9b2a19e0e5eb7ccb430ae45cde4f39ea4b36932920d33952d"},
+]
+
+[package.dependencies]
+sortedcontainers = ">=2.0,<3.0"
 
 [[package]]
 name = "ipykernel"
@@ -3321,6 +3374,27 @@ files = [
 ]
 
 [[package]]
+name = "scanorama"
+version = "1.7.4"
+description = "Panoramic stitching of heterogeneous single cell transcriptomic data"
+optional = false
+python-versions = "*"
+files = [
+    {file = "scanorama-1.7.4-py3-none-any.whl", hash = "sha256:b20c87e725a2ba42c318aefadcfc6ed08cf52ff5ae00f1c041072f8888c7a225"},
+    {file = "scanorama-1.7.4.tar.gz", hash = "sha256:67de100e63abc3028c7780d3a217e43e920a5781230bc6b6a51349d4605e005c"},
+]
+
+[package.dependencies]
+annoy = ">=1.11.5"
+fbpca = ">=1.0"
+geosketch = ">=1.0"
+intervaltree = ">=3.1.0"
+matplotlib = ">=2.0.2"
+numpy = ">=1.12.0"
+scikit-learn = ">=0.20rc1"
+scipy = ">=1.0.0"
+
+[[package]]
 name = "scanpy"
 version = "1.9.5"
 description = "Single-Cell Analysis in Python."
@@ -3657,6 +3731,17 @@ python-versions = "*"
 files = [
     {file = "snowballstemmer-2.2.0-py2.py3-none-any.whl", hash = "sha256:c8e1716e83cc398ae16824e5572ae04e0d9fc2c6b985fb0f900f5f0c96ecba1a"},
     {file = "snowballstemmer-2.2.0.tar.gz", hash = "sha256:09b16deb8547d3412ad7b590689584cd0fe25ec8db3be37788be3810cbf19cb1"},
+]
+
+[[package]]
+name = "sortedcontainers"
+version = "2.4.0"
+description = "Sorted Containers -- Sorted List, Sorted Dict, Sorted Set"
+optional = false
+python-versions = "*"
+files = [
+    {file = "sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0"},
+    {file = "sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88"},
 ]
 
 [[package]]
@@ -4283,4 +4368,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "ad6448dd3e6bda74297c3cea6f4a33086c143017de8db9e65f4f8c2f103f9468"
+content-hash = "d51549a81dcb688779781fc9d68e46528c47eb095c0e18f050a0df2603de233a"
