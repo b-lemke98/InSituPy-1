@@ -145,10 +145,9 @@ def register_image(image: Union[np.ndarray, da.Array],
 
         verboseprint("Number of matches used: {}".format(len(good_matches)))
 
-    # check to see if we should visualize the matched keypoints
+    # visualize the matched keypoints
     verboseprint("{}: Display matches...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-    matchedVis = cv2.drawMatches(image_scaled, kpsA, template_scaled, kpsB,
-                                    good_matches, None)
+    matchedVis = cv2.drawMatches(image_scaled, kpsA, template_scaled, kpsB, good_matches, None)
     
     # Get keypoints
     verboseprint("{}: Fetch keypoints...".format(

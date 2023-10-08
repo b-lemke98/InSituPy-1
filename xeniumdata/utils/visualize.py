@@ -5,9 +5,9 @@ import matplotlib
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from .utils import convert_to_list
 
-def interactive(self, 
-    cell_type_key: Optional[str] = "cell_type", 
-    mask: Optional[List[bool]] = None, 
+def interactive(self,
+    cell_type_key: Optional[str] = "cell_type",
+    mask: Optional[List[bool]] = None,
     annotation_labels: Optional[str] = None,
     show_cells: bool = True,
     cmap_cells="tab20",
@@ -27,10 +27,10 @@ def interactive(self,
     for i, img_name in enumerate(self.images.metadata.keys()):
         img = getattr(self.images, img_name)
         viewer.add_image(
-                img, 
+                img,
                 #channel_axis=channel_axis,
                 name=img_name,
-                #colormap=["gray", "blue", "green"], 
+                #colormap=["gray", "blue", "green"],
                 rgb=self.images.metadata[img_name]["rgb"],
                 contrast_limits=self.images.metadata[img_name]["contrast_limits"]
                 #scale=img_scale
@@ -81,18 +81,21 @@ def interactive(self,
     
         # coordinates are in µm. Convert to pixel
         #all_points /= self.metadata["pixel_size"] # "pixel_size" from experiment.xenium file
-    
-        # get clusters
-        clusters = list(subset.obs[cell_type_key].unique())
         
         if cell_type_key is not None:
+            # get clusters
+            clusters = list(subset.obs[cell_type_key].unique())
             colors = [rgb2hex(color_cycle[i]) for i in range(len(clusters))]
         else:
-            colors = ["gray"] * len(clusters)
+            clusters = [None]
+            colors = ["gray"]
     
         for i, c in enumerate(clusters):
-            # select points of this cluster
-            points = all_points[subset.obs[cell_type_key] == c]
+            if c is not None:
+                # select points of this cluster
+                points = all_points[subset.obs[cell_type_key] == c]
+            else:
+                points = all_points
 
             point_layer = viewer.add_points(points, 
                                             name=str(c),

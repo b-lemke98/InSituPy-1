@@ -46,7 +46,10 @@ def resize_image(img: NDArray,
 
     return img
 
-def fit_image_to_size_limit(image: NDArray, size_limit: int, return_scale_factor: bool = True):
+def fit_image_to_size_limit(image: NDArray, 
+                            size_limit: int, 
+                            return_scale_factor: bool = True
+                            ):
     # resize image if necessary (warpAffine has a size limit for the image that is transformed)
     orig_shape_image = image.shape
     xy_shape_image = orig_shape_image[:2]
@@ -83,4 +86,48 @@ def convert_to_8bit(img, save_mem=True, verbose=False):
             print("Image is already 8-bit. Not changed.", flush=True)
     return img
 
+def scale_to_max_width(image: np.ndarray, 
+                   max_width: int = 4000,
+                   use_square_area: bool = False,
+                   verbose: bool = True
+                   ):
+    '''
+    Function to scale image to a maximum width or square area.
+    '''
+    image_xy = image.shape[:2] # extract image shape assuming that the channels are in third dimension
+    num_dim = len(image.shape)
     
+    if num_dim == 3:
+        assert image.shape[-1] == 3, "Image has three dimensions but the third channel is not 3. No RGB?"
+    
+    if not use_square_area:
+        # scale to the longest side of the image. Not good for very elongated images.
+        if np.max(image_xy) > max_width:
+            new_shape = tuple([int(elem / np.max(image_xy) * max_width) for elem in image_xy])
+        else:
+            new_shape = image.shape
+            
+    else:
+        # use the square area of the maximum width as measure for rescaling. Better for elongated images.
+        max_square_area = max_width ** 2
+        
+        # calculate new dimensions based on the maximum square area
+        long_idx = np.argmax(image_xy)  # search for position of longest dimension
+        short_idx = np.argmin(image_xy)  # same for shortest
+        long_side = image_xy[long_idx]  # extract longest side
+        short_side = image_xy[short_idx]  # extract shortest
+        dim_ratio = short_side / long_side  # calculate ratio between the two sides.
+        new_long_side = int(np.sqrt(max_square_area / dim_ratio))  # calculate the length of the new longer side based on area
+        new_short_side = int(new_long_side * dim_ratio) # calculate length of new shorter side based on the longer one
+        
+        # create new shape
+        new_shape = [None, None]
+        new_shape[long_idx] = new_long_side
+        new_shape[short_idx] = new_short_side
+        new_shape = tuple(new_shape)
+                
+    # resizing - caution: order of dimensions is reversed in OpenCV compared to numpy
+    image_scaled = resize_image(img=image, dim=(new_shape[1], new_shape[0]))
+    print("Rescaled to following dimensions: {}".format(image_scaled.shape)) if verbose else None
+    
+    return image_scaled

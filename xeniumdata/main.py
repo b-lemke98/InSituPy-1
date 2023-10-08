@@ -11,10 +11,12 @@ from .utils.utils import textformat as tf
 from .utils.utils import remove_last_line_from_csv
 from parse import *
 from .images import resize_image, register_image, fit_image_to_size_limit, deconvolve_he, write_ome_tiff
+from .images.registration_class import ImageRegistration
 import cv2
 import gc
 import functools as ft
 import seaborn as sns
+from anndata import AnnData
 
 # make sure that image does not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
 SHRT_MAX = 2**15-1 # 32767
@@ -51,28 +53,36 @@ class XeniumData:
     from .utils.visualize import interactive
     
     def __init__(self, 
-                 path: Union[str, os.PathLike, Path],
+                 path: Optional[Union[str, os.PathLike, Path]],
                  metadata_filename: str = "experiment_modified.xenium",
                  transcript_filename: str = "transcripts.parquet",
                  pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{region_id}__{date}__{id}",
+                 matrix: Optional[AnnData] = None
                  ):
-        self.path = Path(path)
-        self.transcript_filename = transcript_filename
-        
-        # check for modified metadata_filename
-        metadata_files = [elem.name for elem in self.path.glob("*.xenium")]
-        if "experiment_modified.xenium" in metadata_files:
-            self.metadata_filename = "experiment_modified.xenium"
-        else:
-            self.metadata_filename = "experiment.xenium"
+        if matrix is None:
+            self.path = Path(path)
+            self.transcript_filename = transcript_filename
             
-        # read metadata
-        self.metadata = read_xenium_metadata(self.path, metadata_filename=self.metadata_filename)
-        
-        # parse folder name to get slide_id and region_id
-        p_parsed = parse(pattern_xenium_folder, self.path.stem)
-        self.slide_id = p_parsed.named["slide_id"]
-        self.region_id = p_parsed.named["region_id"]
+            # check for modified metadata_filename
+            metadata_files = [elem.name for elem in self.path.glob("*.xenium")]
+            if "experiment_modified.xenium" in metadata_files:
+                self.metadata_filename = "experiment_modified.xenium"
+            else:
+                self.metadata_filename = "experiment.xenium"
+                
+            # read metadata
+            self.metadata = read_xenium_metadata(self.path, metadata_filename=self.metadata_filename)
+            
+            # parse folder name to get slide_id and region_id
+            p_parsed = parse(pattern_xenium_folder, self.path.stem)
+            self.slide_id = p_parsed.named["slide_id"]
+            self.region_id = p_parsed.named["region_id"]
+        else:
+            self.matrix = matrix
+            self.slide_id = ""
+            self.region_id = ""
+            self.path = Path("unknown/unknown")
+            self.metadata_filename = ""
         
     def __repr__(self):
         repr = (
@@ -163,7 +173,7 @@ class XeniumData:
         self.img_dir = Path(img_dir)
         self.pattern_img_file = pattern_img_file
         
-        print("Processing path {}{}{}".format(tf.Bold, self.path, tf.ResetAll), flush=True)
+        print(f"Processing path {tf.Bold}{self.path}{tf.ResetAll}", flush=True)
 
         # get a list of image files
         img_files = sorted(self.img_dir.glob("*{}".format(img_suffix)))
@@ -173,12 +183,12 @@ class XeniumData:
         
         # make sure images corresponding to the Xenium data were found
         if len(corr_img_files) == 0:
-            print('\tNo image corresponding to the slide_id `{}` and the region_id `{}` were found.'.format(self.slide_id, self.region_id))
+            print(f'\tNo image corresponding to the slide_id `{self.slide_id}` and the region_id `{self.region_id}` were found.')
         else:
             if self.metadata_filename == "experiment_modified.xenium":
-                print("\tFound modified `{}` file. Information will be added to this file.".format(self.metadata_filename))
+                print(f"\tFound modified `{self.metadata_filename}` file. Information will be added to this file.")
             elif self.metadata_filename == "experiment.xenium":
-                print("\tOnly unmodified metadata file (`{}`) found. Information will be added to new file (`{}`).".format(self.metadata_filename, "experiment_modified.xenium"))
+                print(f"\tOnly unmodified metadata file (`{self.metadata_filename}`) found. Information will be added to new file (`experiment_modified.xenium`).")
             else:
                 raise AssertionError("\tNo metadata file was found.")
 
@@ -187,77 +197,70 @@ class XeniumData:
                 img_stem = img_file.stem.split(".")[0] # make sure to remove also suffices like .ome.tif
                 img_file_parsed = parse(pattern_img_file, img_stem)
                 img_name = img_file_parsed.named["image_name"]
-                print('\tProcessing {}"{}"{} image'.format(tf.Bold, img_name, tf.ResetAll), flush=True)
+                print(f'\tProcessing {tf.Bold}"{img_name}"{tf.ResetAll} image', flush=True)
                 
                 # load registered image (usually DAPI in case of Xenium)
-                relpath_template = self.metadata['images']['morphology_{}_filepath'.format(dapi_type)]
-                path_template = Path(os.path.normpath(os.path.join(self.path, relpath_template))) # get the absolute path to the image
+                relpath_template = self.metadata['images'][f'morphology_{dapi_type}_filepath']
+                #path_template = Path(os.path.normpath(os.path.join(self.path, relpath_template))) # get the absolute path to the image
 
                 print("\t\tLoading images...", flush=True)
                 
                 # read images
                 image = imread(img_file)[0] # e.g. HE image
                 self.read_images() # read DAPI image with XeniumData
-                template = self.images.DAPI # usually DAPI image
+                template = self.images.DAPI[0] # usually DAPI image. Use highest resolution from pyramid.
                 
-                # load into memory
-                image = image.compute()
-                if isinstance(template, dask.array.core.Array):
-                    template = template.compute()
-
-                # resize image if necessary (warpAffine has a size limit for the image that is transformed)
-                xy_shape_image = image.shape[:2]
-                if np.any([elem > SHRT_MAX for elem in xy_shape_image]):
-                    print(
-                        "\t\tWarning: Dimensions of image ({}) exceed C++ limit SHRT_MAX ({}). " \
-                        "Image dimensions are resized to meet requirements. This leads to a loss of quality.".format(image.shape, SHRT_MAX))
-                    
-                    # fit image
-                    image_resized, sf_image = fit_image_to_size_limit(image, size_limit=SHRT_MAX, return_scale_factor=True)
-                else:
-                    sf_image = 1
-                    image_resized = image
+                imreg_image = ImageRegistration(
+                    image=image,
+                    template=template,
+                    verbose=False
+                    )
+                imreg_image.load_and_fit_images()
 
                 print("\t\tRun color deconvolution", flush=True)
                 # deconvolve HE - performed on resized image to save memory
-                hema, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor), return_type="grayscale", convert=True)
+                hema, eo, dab = deconvolve_he(img=resize_image(image, 
+                                                               scale_factor=decon_scale_factor), 
+                                              return_type="grayscale", convert=True)
 
                 # bring back to original size
-                hema_upsized = resize_image(hema, scale_factor=1/decon_scale_factor)
+                hema = resize_image(hema, scale_factor=1/decon_scale_factor)
 
                 print("\t\tExtract common features from image and template", flush=True)
                 # perform registration to extract the common features ptsA and ptsB
-                _, H, matchedVis, ptsA, ptsB = register_image(image=hema_upsized, 
-                                                            template=template, 
-                                                            maxpx=4000, 
-                                                            perspective_transform=False, 
-                                                            verbose=False, 
-                                                            do_registration=False,
-                                                            return_features=True
-                                                            )
+                imreg_hema = ImageRegistration(
+                    image=hema,
+                    template=imreg_image.template,
+                    max_width=4000,
+                    convert_to_grayscale=False,
+                    perspective_transform=False
+                )
                 
-                # estimate affine transformation matrix
-                print("\t\tEstimate affine transformation matrix for original image", flush=True)
-                (H, mask) = cv2.estimateAffine2D(ptsA, ptsB)
-                
-                if sf_image != 1:
-                    print("\t\tEstimate affine transformation matrix for resized image", flush=True)
-                    ptsA *= sf_image # scale images features in case it was originally larger than the warpAffine limits
-                    (H_resized, mask) = cv2.estimateAffine2D(ptsA, ptsB)
-                else:
-                    H_resized = H
+                # run all steps to extract features and get transformation matrix
+                imreg_hema.load_and_fit_images()
+                imreg_hema.extract_features()
+                imreg_hema.calculate_transformation_matrix()
                 
                 # Use the transformation matrix to register the original HE image
+                # determine which image to be registered
+                # determine which image to be registered here
+                if hasattr(imreg_image, "image_resized"):
+                    _image = imreg_image.image_resized # use resized original image
+                    _T = imreg_hema.T_resized # use resized hematoxylin transformation matrix
+                else:
+                    _image = imreg_image.image # use original image
+                    _T = imreg_hema.T # use original hematoxylin transformation matrix
+                
                 print("\t\tDo registration", flush=True)
                 (h, w) = template.shape[:2]
-                registered = cv2.warpAffine(image_resized, H_resized, (w, h))
+                self.registered = cv2.warpAffine(_image, _T, (w, h))
 
                 # save as OME-TIFF
-                outfile = self.path / "registered_{}.ome.tif".format(img_name)
-                print("\t\tSave OME-TIFF to {}".format(outfile), flush=True)
+                outfile = self.path / f"registered_{img_name}.ome.tif"
+                print(f"\t\tSave OME-TIFF to {outfile}", flush=True)
                 write_ome_tiff(
                     file=outfile, 
-                    image=registered, 
+                    image=self.registered, 
                     axes="YXS", 
                     overwrite=True
                     )
@@ -265,31 +268,31 @@ class XeniumData:
                 # save registration QC files
                 reg_dir = self.path.parent / "registration"
                 reg_dir.mkdir(parents=True, exist_ok=True) # create folder for QC outputs
-                print("\t\tSave QC files to {}".format(reg_dir), flush=True)
+                print(f"\t\tSave QC files to {reg_dir}", flush=True)
                 
                 # save transformation matrix
-                H = np.vstack([H, [0,0,1]]) # add last line of affine transformation matrix
-                H_csv = reg_dir / "{}__{}__{}__H.csv".format(self.slide_id, self.region_id, img_name)
-                np.savetxt(H_csv, H, delimiter=",") # save as .csv file
+                T = np.vstack([_T, [0,0,1]]) # add last line of affine transformation matrix
+                T_csv = reg_dir / f"{self.slide_id}__{self.region_id}__{img_name}__H.csv"
+                np.savetxt(T_csv, T, delimiter=",") # save as .csv file
                 
                 # remove last line break from csv since this gives error when importing to Xenium Explorer
-                remove_last_line_from_csv(H_csv)
+                remove_last_line_from_csv(T_csv)
 
                 # save image showing the number of key points found in both images during registration
-                matchedVis_file = reg_dir / "{}__{}__{}__matchedvis.pdf".format(self.slide_id, self.region_id, img_name)
-                plt.imshow(matchedVis)
+                matchedVis_file = reg_dir / f"{self.slide_id}__{self.region_id}__{img_name}__matchedvis.pdf"
+                plt.imshow(imreg_hema.matchedVis)
                 plt.savefig(matchedVis_file, dpi=400)
                 plt.close()
 
                 # save metadata
-                self.metadata['images']['registered_{}_filepath'.format(img_name)] = os.path.relpath(outfile, self.path)
+                self.metadata['images'][f'registered_{img_name}_filepath'] = os.path.relpath(outfile, self.path)
                 metadata_json = json.dumps(self.metadata, indent=4)
                 metadata_mod_path = self.path / "experiment_modified.xenium"
-                print("\t\tSave metadata to {}".format(metadata_mod_path), flush=True)
+                print(f"\t\tSave metadata to {metadata_mod_path}", flush=True)
                 with open(metadata_mod_path, "w") as metafile:
                     metafile.write(metadata_json)
 
                 # free RAM
-                del image, template, registered, hema_upsized, hema, eo, dab
+                del imreg_image, imreg_hema, image, template, hema, eo, dab
                 gc.collect()
         
