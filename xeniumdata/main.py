@@ -10,8 +10,7 @@ import dask
 from .utils.utils import textformat as tf
 from .utils.utils import remove_last_line_from_csv
 from parse import *
-from .images import resize_image, register_image, fit_image_to_size_limit, deconvolve_he, write_ome_tiff
-from .images.registration_class import ImageRegistration
+from .images import resize_image, deconvolve_he, write_ome_tiff, ImageRegistration
 import cv2
 import gc
 import functools as ft
@@ -169,6 +168,7 @@ class XeniumData:
         '''
         Register images stored in XeniumData object.
         '''
+
         # add arguments to object
         self.img_dir = Path(img_dir)
         self.pattern_img_file = pattern_img_file

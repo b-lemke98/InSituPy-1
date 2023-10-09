@@ -2,219 +2,263 @@ import numpy as np
 import cv2
 from datetime import datetime
 import numpy as np
-from .manipulation import resize_image, convert_to_8bit
+from .manipulation import resize_image, convert_to_8bit, scale_to_max_width, fit_image_to_size_limit
+from .deconvolution import deconvolve_he
+from ..utils.utils import convert_to_list
 import dask.array as da
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 
 # limits in C (see https://www.geeksforgeeks.org/climits-limits-h-cc/)
-SHRT_MAX = 2**15-1 # 32767
-SHRT_MIN = -(2**15-1) # 32767
+SHRT_MAX = 2**15-1  # 32767
+SHRT_MIN = -(2**15-1)  # 32767
 
-def register_image(image: Union[np.ndarray, da.Array],
-                   template: Union[np.ndarray, da.Array], 
-                   maxFeatures: int = 500, 
-                   keepFraction=0.2, 
-                   maxpx: Optional[int] = None,
-                   method: Literal["sift", "surf"] = "sift", 
-                   ratio_test: bool = True, 
-                   flann: bool = True, 
-                   perspective_transform: bool = False, 
-                   do_registration: bool = True,
-                   return_grayscale: bool = True,
-                   return_features: bool = False,
-                   verbose: bool = True
-                   ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    
-    verboseprint = print if verbose else lambda *a, **k: None
-    
-    # load images into memory if they are dask arrays
-    if isinstance(image, da.Array):
-        verboseprint("Load image into memory...", flush=True)
-        image = image.compute() # load into memory
-    
-    if isinstance(template, da.Array):
-        verboseprint("Load template into memory...", flush=True)
-        template = template.compute() # load into memory
 
-    # check format
-    if len(image.shape) == 3:
-        verboseprint("Convert image to grayscale...")
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    if len(template.shape) == 3:
-        verboseprint("Convert template to grayscale...")
-        template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-
-    # scale_factor = 0.2
-    # if scale_factor < 1:
-    #     print("Scale images before registration by factor {}".format(scale_factor))
-    #     image_scaled = resize_image(img=image, scale_factor=scale_factor)
-    #     template_scaled = resize_image(img=template, scale_factor=scale_factor)
-    # else:
-    #     image_scaled = image
-    #     template_scaled = template
-
-    # dim = (4000,4000)
-    if maxpx is not None:
-        if np.max(image.shape) > maxpx:
-            shape_image = tuple([int(elem / np.max(image.shape) * maxpx) for elem in image.shape])
-        else:
-            shape_image = image.shape
+class ImageRegistration:
+    '''
+    Object to perform image registration.
+    '''
+    def __init__(self,
+                 image: Union[np.ndarray, da.Array],
+                 template: Union[np.ndarray, da.Array],
+                 max_width: Optional[int] = 4000,
+                 convert_to_grayscale: bool = False,
+                 perspective_transform: bool = False,
+                 feature_detection_method: Literal["sift", "surf"] = "sift",
+                 flann: bool = True,
+                 ratio_test: bool = True,
+                 keepFraction=0.2,
+                 maxFeatures: int = 500,
+                 verbose: bool = True,
+                 ):
         
-        if np.max(template.shape) > maxpx:        
-            shape_template = tuple([int(elem / np.max(template.shape) * maxpx) for elem in template.shape])
+        # check verbose mode
+        self.verboseprint = print if verbose else lambda *a, **k: None
+        
+        # # Loop through params and setattr v to self.k
+        # for k,v in locals().items():
+        #     if k!='self':
+        #         setattr(self, k, v)
+        self.image = image
+        self.template = template
+        self.max_width = max_width
+        self.convert_to_grayscale = convert_to_grayscale
+        self.perspective_transform = perspective_transform
+        self.feature_detection_method = feature_detection_method
+        self.flann = flann
+        self.ratio_test = ratio_test
+        self.keepFraction = keepFraction
+        self.maxFeatures = maxFeatures
+        self.verbose = verbose
+        
+    def load_and_fit_images(self):
+        
+        # load images into memory if they are dask arrays
+        if isinstance(self.image, da.Array):
+            self.verboseprint("\t\tLoad image into memory...", flush=True)
+            self.image = self.image.compute()  # load into memory
+        
+        if isinstance(self.template, da.Array):
+            self.verboseprint("\t\tLoad template into memory...", flush=True)
+            self.template = self.template.compute()  # load into memory
+            
+        if self.convert_to_grayscale:
+            # check format
+            if len(self.image.shape) == 3:
+                self.verboseprint("\t\tConvert image to grayscale...")
+                self.image = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+
+            if len(self.template.shape) == 3:
+                self.verboseprint("\t\tConvert template to grayscale...")
+                self.template = cv2.cvtColor(self.template, cv2.COLOR_BGR2GRAY)
+        
+        if self.max_width is not None:
+            self.verboseprint("\t\tRescale image and template to save memory.", flush=True)
+            self.image_scaled = scale_to_max_width(self.image, 
+                                                   max_width=self.max_width, 
+                                                   use_square_area=True,
+                                                   verbose=self.verbose
+                                                   )
+            self.template_scaled = scale_to_max_width(self.template, 
+                                                      max_width=self.max_width, 
+                                                      use_square_area=True,
+                                                      verbose=self.verbose
+                                                      )
         else:
-            shape_template = template.shape
+            self.image_scaled = self.image
+            self.template_scaled = self.template
             
-        # reverse order of shape to match opencv requirements
-        dim_image = (shape_image[1], shape_image[0])
-        dim_template = (shape_template[1], shape_template[0])
+        # convert and normalize images to 8bit for registration
+        self.verboseprint("\t\tConvert scaled images to 8 bit")
+        self.image_scaled = convert_to_8bit(self.image_scaled)
+        self.template_scaled = convert_to_8bit(self.template_scaled)
+        
+        # calculate scale factors for x and y dimension for image and template
+        self.x_sf_image = self.image_scaled.shape[0] / self.image.shape[0]
+        self.y_sf_image = self.image_scaled.shape[1] / self.image.shape[1]
+        self.x_sf_template = self.template_scaled.shape[0] / self.template.shape[0]
+        self.y_sf_template = self.template_scaled.shape[1] / self.template.shape[1]
+        
+        # resize image if necessary (warpAffine has a size limit for the image that is transformed)
+        if np.any([elem > SHRT_MAX for elem in self.image.shape[:2]]):
+            self.verboseprint(
+                "\t\tWarning: Dimensions of image ({}) exceed C++ limit SHRT_MAX ({}). " \
+                "Image dimensions are resized to meet requirements. " \
+                "This leads to a loss of quality.".format(self.image.shape, SHRT_MAX))
             
-        verboseprint("Rescale image to following dimensions: {}".format(shape_image))
-        verboseprint("Rescale template to following dimensions: {}".format(shape_template))
-        image_scaled = resize_image(img=image, dim=dim_image)
-        template_scaled = resize_image(img=template, dim=dim_template)
-        verboseprint("Dim of image: {}".format(image_scaled.shape))
-        verboseprint("Dim of template: {}".format(template_scaled.shape))
-    else:
-        image_scaled = image
-        template_scaled = template
-
-    # convert and normalize images to 8bit for registration
-    verboseprint("Convert scaled images to 8 bit")
-    image_scaled = convert_to_8bit(image_scaled)
-    template_scaled = convert_to_8bit(template_scaled)
-
-    verboseprint("{}: Get features...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-    # Get features
-    if method == "sift":
-        verboseprint("     Method: SIFT...")
-        # sift
-        sift = cv2.SIFT_create()
-
-        (kpsA, descsA) = sift.detectAndCompute(image_scaled, None)
-        (kpsB, descsB) = sift.detectAndCompute(template_scaled, None)
-
-    elif method == "surf":
-        verboseprint("     Method: SURF...")
-        surf = cv2.xfeatures2d.SURF_create(400)
-
-        (kpsA, descsA) = surf.detectAndCompute(image_scaled, None)
-        (kpsB, descsB) = surf.detectAndCompute(template_scaled, None)
-
-    else:
-        verboseprint("Unknown method. Aborted.")
-        return
-
-    if flann:
-        verboseprint("{}: Compute matches...".format(
-            f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-        # FLANN parameters
-        FLANN_INDEX_KDTREE = 1
-        index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-        search_params = dict(checks=50)   # or pass empty dictionary
-
-        # runn Flann matcher
-        flann = cv2.FlannBasedMatcher(index_params, search_params)
-        matches = flann.knnMatch(descsA, descsB, k=2)
-
-    else:
-        verboseprint("{}: Compute matches...".format(
-            f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-        # feature matching
-        #bf = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
-        bf = cv2.BFMatcher()
-        matches = bf.knnMatch(descsA, descsB, k=2)
-
-    if ratio_test:
-        verboseprint("{}: Filter matches...".format(
-            f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-        # store all the good matches as per Lowe's ratio test.
-        good_matches = []
-        for m, n in matches:
-            if m.distance < 0.7*n.distance:
-                good_matches.append(m)
-    else:
-        verboseprint("{}: Filter matches...".format(
-            f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-        # sort the matches by their distance (the smaller the distance, the "more similar" the features are)
-        matches = sorted(matches, key=lambda x: x.distance)
-        # keep only the top matches
-        keep = int(len(matches) * keepFraction)
-        good_matches = matches[:keep]
-
-        verboseprint("Number of matches used: {}".format(len(good_matches)))
-
-    # visualize the matched keypoints
-    verboseprint("{}: Display matches...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-    matchedVis = cv2.drawMatches(image_scaled, kpsA, template_scaled, kpsB, good_matches, None)
-    
-    # Get keypoints
-    verboseprint("{}: Fetch keypoints...".format(
-        f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-    # allocate memory for the keypoints (x, y)-coordinates of the top matches
-    ptsA = np.zeros((len(good_matches), 2), dtype="float")
-    ptsB = np.zeros((len(good_matches), 2), dtype="float")
-    # loop over the top matches
-    for (i, m) in enumerate(good_matches):
-        # indicate that the two keypoints in the respective images map to each other
-        ptsA[i] = kpsA[m.queryIdx].pt
-        ptsB[i] = kpsB[m.trainIdx].pt
-
-    # calculate scale factors for x and y dimension for image and template
-    x_sf_image = shape_image[0] / image.shape[0]
-    y_sf_image = shape_image[1] / image.shape[1]
-    x_sf_template = shape_template[0] / template.shape[0]
-    y_sf_template = shape_template[1] / template.shape[1]
-
-    # apply scale factors to points - separately for each dimension
-    ptsA[:, 0] = ptsA[:, 0] / x_sf_image
-    ptsA[:, 1] = ptsA[:, 1] / y_sf_image
-    ptsB[:, 0] = ptsB[:, 0] / x_sf_template
-    ptsB[:, 1] = ptsB[:, 1] / y_sf_template
-
-    # # apply scale_factor to points
-    # ptsA /= scale_factor
-    # ptsB /= scale_factor
-
-    if perspective_transform:
-        # compute the homography matrix between the two sets of matched
-        # points
-        verboseprint("{}: Compute homography matrix...".format(
-            f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-        (H, mask) = cv2.findHomography(ptsA, ptsB, method=cv2.RANSAC)
-    else:
-        verboseprint("{}: Estimate 2D affine transformation matrix...".format(
-            f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-        (H, mask) = cv2.estimateAffine2D(ptsA, ptsB)
-
-    # use the homography matrix to register the images
-    (h, w) = template.shape[:2]
-    if do_registration:
-        if perspective_transform:
-            # warping
-            verboseprint("{}: Register image by perspective transformation...".format(
-                f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-            
-            image = convert_to_8bit(image)
-            registered = cv2.warpPerspective(image, H, (w, h))
+            # fit image
+            self.image_resized, self.resize_factor_image = fit_image_to_size_limit(self.image, size_limit=SHRT_MAX, return_scale_factor=True)
         else:
-            verboseprint("{}: Register image by affine transformation...".format(
+            self.resize_factor_image = 1
+        
+    def extract_features(self):
+        '''
+        Function to extract paired features from image and template.
+        '''
+        
+        self.verboseprint("\t\t{}: Get features...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+        # Get features
+        if self.feature_detection_method == "sift":
+            self.verboseprint("\t\t\tMethod: SIFT...")
+            # sift
+            sift = cv2.SIFT_create()
+
+            (kpsA, descsA) = sift.detectAndCompute(self.image_scaled, None)
+            (kpsB, descsB) = sift.detectAndCompute(self.template_scaled, None)
+
+        elif self.feature_detection_method == "surf":
+            self.verboseprint("\t\t\tMethod: SURF...")
+            surf = cv2.xfeatures2d.SURF_create(400)
+
+            (kpsA, descsA) = surf.detectAndCompute(self.image_scaled, None)
+            (kpsB, descsB) = surf.detectAndCompute(self.template_scaled, None)
+
+        else:
+            self.verboseprint("\t\t\tUnknown method. Aborted.")
+            return
+
+        if self.flann:
+            self.verboseprint("\t\t{}: Compute matches...".format(
                 f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+            # FLANN parameters
+            FLANN_INDEX_KDTREE = 1
+            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+            search_params = dict(checks=50)   # or pass empty dictionary
+
+            # runn Flann matcher
+            fl = cv2.FlannBasedMatcher(index_params, search_params)
+            matches = fl.knnMatch(descsA, descsB, k=2)
+
+        else:
+            self.verboseprint("\t\t{}: Compute matches...".format(
+                f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+            # feature matching
+            #bf = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
+            bf = cv2.BFMatcher()
+            matches = bf.knnMatch(descsA, descsB, k=2)
+
+        if self.ratio_test:
+            self.verboseprint("\t\t{}: Filter matches...".format(
+                f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+            # store all the good matches as per Lowe's ratio test.
+            good_matches = []
+            for m, n in matches:
+                if m.distance < 0.7*n.distance:
+                    good_matches.append(m)
+        else:
+            self.verboseprint("\t\t{}: Filter matches...".format(
+                f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+            # sort the matches by their distance (the smaller the distance, the "more similar" the features are)
+            matches = sorted(matches, key=lambda x: x.distance)
+            # keep only the top matches
+            keep = int(len(matches) * self.keepFraction)
+            good_matches = matches[:keep][:self.maxFeatures]
+
+            self.verboseprint("\t\t\tNumber of matches used: {}".format(len(good_matches)))
+
+        # check to see if we should visualize the matched keypoints
+        self.verboseprint("\t\t{}: Display matches...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+        self.matchedVis = cv2.drawMatches(self.image_scaled, kpsA, self.template_scaled, kpsB,
+                                        good_matches, None)
+        
+        # Get keypoints
+        self.verboseprint("\t\t{}: Fetch keypoints...".format(
+            f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+        # allocate memory for the keypoints (x, y)-coordinates of the top matches
+        self.ptsA = np.zeros((len(good_matches), 2), dtype="float")
+        self.ptsB = np.zeros((len(good_matches), 2), dtype="float")
+        # loop over the top matches
+        for (i, m) in enumerate(good_matches):
+            # indicate that the two keypoints in the respective images map to each other
+            self.ptsA[i] = kpsA[m.queryIdx].pt
+            self.ptsB[i] = kpsB[m.trainIdx].pt
             
-            image = convert_to_8bit(image)
-            registered = cv2.warpAffine(image, H, (w, h))
+        # apply scale factors to points - separately for each dimension
+        self.ptsA[:, 0] = self.ptsA[:, 0] / self.x_sf_image
+        self.ptsA[:, 1] = self.ptsA[:, 1] / self.y_sf_image
+        self.ptsB[:, 0] = self.ptsB[:, 0] / self.x_sf_template
+        self.ptsB[:, 1] = self.ptsB[:, 1] / self.y_sf_template
+        
+    def calculate_transformation_matrix(self):
+        '''
+        Function to calculate the transformation matrix.
+        '''
+        
+        if self.perspective_transform:
+            # compute the homography matrix between the two sets of matched
+            # points
+            self.verboseprint(f"\t\t{datetime.now():%Y-%m-%d %H:%M:%S}: Compute homography matrix...")
+            (self.T, mask) = cv2.findHomography(self.ptsA, self.ptsB, method=cv2.RANSAC)
+        else:
+            self.verboseprint(f"\t\t{datetime.now():%Y-%m-%d %H:%M:%S}: Estimate 2D affine transformation matrix...")
+            (self.T, mask) = cv2.estimateAffine2D(self.ptsA, self.ptsB)
+            
+        if self.resize_factor_image != 1:
+            if self.perspective_transform:
+                self.verboseprint("\t\tEstimate perspective transformation matrix for resized image", flush=True)
+                self.ptsA *= self.resize_factor_image # scale images features in case it was originally larger than the warpAffine limits
+                (self.T_resized, mask) = cv2.findHomography(self.ptsA, self.ptsB, method=cv2.RANSAC)
+            else:
+                self.verboseprint("\t\tEstimate affine transformation matrix for resized image", flush=True)
+                self.ptsA *= self.resize_factor_image # scale images features in case it was originally larger than the warpAffine limits
+                (self.T_resized, mask) = cv2.estimateAffine2D(self.ptsA, self.ptsB)
+            
+    def register_images(self):
+        '''
+        Function running the registration including following steps:
+            1. Feature extraction
+            2. Calculation of transformation matrix
+            3. Registration of images based on transformation matrix
+        '''
+        # determine which image to be registered here
+        if hasattr(self, "image_resized"):
+            _image = self.image_resized
+            _T = self.T_resized
+        else:
+            _image = self.image
+            _T = self.T
 
-        if return_grayscale:
-            if len(registered.shape) == 3:
-                verboseprint("Convert registered image to grayscale...")
-                registered = cv2.cvtColor(registered, cv2.COLOR_BGR2GRAY)
-    else:
-        registered = None
+        # determine the kind of transformation
+        warp_func, warp_name = (cv2.warpPerspective, "perspective") if self.perspective_transform else (cv2.warpAffine, "affine")
 
-    # return the registered image
-    if return_features:
-        return registered, H, matchedVis, ptsA, ptsB
-    else:
-        return registered, H, matchedVis
+        # use the transformation matrix to register the images
+        (h, w) = self.template.shape[:2]
+        # warping
+        self.verboseprint(f"\t\t{datetime.now():%Y-%m-%d %H:%M:%S}: Register image by {warp_name} transformation...")
+        
+        #self.image_resized = convert_to_8bit(self.image_resized)
+        self.registered = warp_func(_image, _T, (w, h))
+
+    def run_registration(self):
+        # load and scale images
+        self.load_and_fit_images()
+        
+        # run feature extraction
+        self.extract_features()
+        
+        # calculate transformation matrix
+        self.calculate_transformation_matrix()
+        
+        # perform registration
+        self.register_images()
+
 
