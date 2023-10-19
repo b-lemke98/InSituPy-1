@@ -6,7 +6,7 @@ from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from .utils import convert_to_list
 
 def interactive(self,
-    cell_type_key: Optional[str] = "cell_type",
+    cell_type_key: Optional[str] = None,
     mask: Optional[List[bool]] = None,
     annotation_labels: Optional[str] = None,
     show_cells: bool = True,
@@ -21,12 +21,12 @@ def interactive(self,
         subset = self.matrix[self.matrix.obs[mask]]
     
     # create viewer
-    viewer = napari.Viewer()
+    self.viewer = napari.Viewer()
     
     # add images
     for i, img_name in enumerate(self.images.metadata.keys()):
         img = getattr(self.images, img_name)
-        viewer.add_image(
+        self.viewer.add_image(
                 img,
                 #channel_axis=channel_axis,
                 name=img_name,
@@ -57,7 +57,7 @@ def interactive(self,
                 shape_array = np.array([shape.exterior.coords.xy[1].tolist(), shape.exterior.coords.xy[0].tolist()]).T
                 #shape_arrays = [np.array([c.exterior.coords.xy[1].tolist(), c.exterior.coords.xy[0].tolist()]).T for c in shape]
         
-                viewer.add_shapes(shape_array, 
+                self.viewer.add_shapes(shape_array, 
                                 name=annot_name, 
                                 shape_type='polygon', 
                                 edge_width=50,
@@ -77,7 +77,7 @@ def interactive(self,
     
     if show_cells:
         # get point coordinates
-        all_points = np.flip(subset.obsm["spatial"].copy(), axis=1) # switch x and y
+        all_points = np.flip(subset.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
     
         # coordinates are in µm. Convert to pixel
         #all_points /= self.metadata["pixel_size"] # "pixel_size" from experiment.xenium file
@@ -97,7 +97,7 @@ def interactive(self,
             else:
                 points = all_points
 
-            point_layer = viewer.add_points(points, 
+            point_layer = self.viewer.add_points(points, 
                                             name=str(c),
                                             #properties=point_properties,
                                             symbol='o',
@@ -109,3 +109,4 @@ def interactive(self,
                                             )
     
     napari.run()
+    return self.viewer

@@ -36,6 +36,7 @@ def read_matrix(self,
     coord_cols = ["x_centroid", "y_centroid"]
     self.matrix.obsm["spatial"] = self.matrix.obs[coord_cols].values
     self.matrix.obsm["spatial"] /= pixel_size
+    self.matrix.obs.drop(coord_cols, axis=1, inplace=True)
     
 def read_images(self,
                 dapi_type: str = "focus"
@@ -59,8 +60,12 @@ def read_transcripts(self):
     # read transcripts
     self.transcripts = pd.read_parquet(self.path / self.transcript_filename)
     
+    # convert coordinates into pixel coordinates
+    coord_cols = ["x_location", "y_location", "z_location"]
+    self.transcripts[coord_cols] = self.transcripts[coord_cols].apply(lambda x: x / self.metadata["pixel_size"])
+        
 def read_boundaries(self):
-    self.boundaries = BoundariesData(path=self.path)
+    self.boundaries = BoundariesData(path=self.path, pixel_size=self.metadata["pixel_size"])
     
 def read_annotations(self,
                         annot_path: Union[str, os.PathLike, Path] = "../annotations",

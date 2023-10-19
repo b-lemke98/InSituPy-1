@@ -51,6 +51,9 @@ class XeniumData:
     # import visualization functions
     from .utils.visualize import interactive
     
+    # import crop function
+    from .utils.crop import crop
+    
     def __init__(self, 
                  path: Optional[Union[str, os.PathLike, Path]],
                  metadata_filename: str = "experiment_modified.xenium",

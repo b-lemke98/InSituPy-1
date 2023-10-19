@@ -2,7 +2,9 @@ from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from pathlib import Path
 import os
 import pandas as pd
-#from dask_image.imread import imread
+import geopandas as gpd
+import numpy as np
+from shapely import Polygon
 from tifffile import imread
 from .utils import textformat as tf
 from .utils import convert_to_list, load_pyramid
@@ -54,7 +56,7 @@ class ImageData:
                  ):
         
         self.files = img_files
-        
+        self.names = []
         self.metadata = {}
         for n, f in zip(img_names, self.files):
             # load images
@@ -62,7 +64,7 @@ class ImageData:
             pyramid = load_pyramid(store)
             
             # set attribute
-            setattr(self, n, pyramid) 
+            setattr(self, n, pyramid)
             
             # add metadata
             self.metadata[n] = {}
@@ -104,6 +106,34 @@ class ImageData:
             img_loaded = getattr(self, n).compute()
             setattr(self, n, img_loaded)
             
+    def crop(self,
+             xlim: Tuple[int, int],
+             ylim: Tuple[int, int]
+             ):
+        names = list(self.metadata.keys())
+        for n in names:
+            # extract the image pyramid
+            pyramid = getattr(self, n)
+            
+            # get scale factors between the different pyramid levels
+            scale_factors = [1] + [pyramid[i].shape[0] / pyramid[i+1].shape[0] for i in range(len(pyramid)-1)]
+            
+            cropped_pyramid = []
+            xlim_scaled = xlim
+            ylim_scaled = ylim
+            for img, sf in zip(pyramid, scale_factors):
+                # do cropping while taking the scale factor into account
+                # scale the x and y limits
+                xlim_scaled = (int(xlim_scaled[0] / sf), int(xlim_scaled[1] / sf))
+                ylim_scaled = (int(ylim_scaled[0] / sf), int(ylim_scaled[1] / sf))
+                
+                # do the cropping
+                cropped_pyramid.append(img[ylim_scaled[0]:ylim_scaled[1], xlim_scaled[0]:xlim_scaled[1]])
+                
+            # add cropped pyramid to object
+            setattr(self, n, cropped_pyramid)
+        
+            
 class BoundariesData:
     '''
     Object to read and load boundaries of cells and nuclei.
@@ -111,18 +141,76 @@ class BoundariesData:
     def __init__(self, 
                  path: Union[str, os.PathLike, Path], 
                  cell_boundaries_file: str = "cell_boundaries.parquet",
-                 nucleus_boundaries_file: str = "nucleus_boundaries.parquet"
+                 nucleus_boundaries_file: str = "nucleus_boundaries.parquet",
+                 pixel_size: Optional[float] = None
                  ):
         # generate paths
-        cellbound_path = path / "cell_boundaries.parquet"
-        nucbound_path = path / "nucleus_boundaries.parquet"
+        cellbound_path = path / cell_boundaries_file
+        nucbound_path = path / nucleus_boundaries_file
         
-        # load data and add to object
-        setattr(self, "cells", pd.read_parquet(cellbound_path))
-        setattr(self, "nuclei", pd.read_parquet(nucbound_path))
+        # load dataframe
+        celldf = pd.read_parquet(cellbound_path)
+        nucdf = pd.read_parquet(nucbound_path)
+        
+        # decode cell id strings
+        celldf["cell_id"] = celldf["cell_id"].str.decode("utf-8")
+        nucdf["cell_id"] = nucdf["cell_id"].str.decode("utf-8")
+        
+        if pixel_size is not None:
+            # convert coordinates into pixel coordinates
+            coord_cols = ["vertex_x", "vertex_y"]
+            celldf[coord_cols] = celldf[coord_cols].apply(lambda x: x / pixel_size)
+            nucdf[coord_cols] = nucdf[coord_cols].apply(lambda x: x / pixel_size)
+        
+        # add to object
+        setattr(self, "cells", celldf)
+        setattr(self, "nuclei", nucdf)
         
     def __repr__(self):
         repr_strings = [f"{tf.Bold+a+tf.ResetAll}" for a in ["cells", "nuclei"]]
         s = "\n".join(repr_strings)
         repr = f"{tf.Purple+tf.Bold}boundaries{tf.ResetAll}\n{s}"
         return repr
+    
+    def sync_to_matrix(self,
+                       cell_ids: List[str],
+                       xlim: Tuple[int, int],
+                       ylim: Tuple[int, int]
+                       ):
+        '''
+        Synchronize the BoundariesData object to match the cells in self.matrix.
+        '''
+        # make sure cell ids are a list
+        cell_ids = convert_to_list(cell_ids)
+        
+        for n in ["cells", "nuclei"]:
+            # get dataframe
+            df = getattr(self, n)
+            
+            # filter dataframe
+            df.loc[df["cell_id"].isin(cell_ids), :]
+            
+            # re-center to 0
+            df["vertex_x"] -= xlim[0]
+            df["vertex_y"] -= ylim[0]
+            
+            # add to object
+            setattr(self, n, df)
+            
+                
+    def convert_to_geopandas(self):
+        for n in ["cells", "nuclei"]:
+            print(f"Converting `{n}` to GeoPandas DataFrame with shapely objects.")
+            # retrief dataframe with boundary coordinates
+            df = getattr(self, n)
+            
+            # convert xy coordinates into shapely Point objects
+            df["geometry"] = gpd.points_from_xy(df["vertex_x"], df["vertex_y"])
+            del df["vertex_x"], df["vertex_y"]
+
+            # convert points into polygon objects per cell id
+            df = df.groupby("cell_id")['geometry'].apply(lambda x: Polygon(x.tolist()))
+            df.index = df.index.str.decode('utf-8') # convert byte strings in index
+            
+            # add to object
+            setattr(self, n, pd.DataFrame(df))
