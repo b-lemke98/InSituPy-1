@@ -81,9 +81,9 @@ class ImageData:
             
             # get image contrast limits
             if self.metadata[n]["rgb"]:
-                self.metadata[n]["contrast_limits"] = [0, 255]
+                self.metadata[n]["contrast_limits"] = (0, 255)
             else:
-                self.metadata[n]["contrast_limits"] = [0, int(pyramid[0].max())]
+                self.metadata[n]["contrast_limits"] = (0, int(pyramid[0].max()))
             
     def __repr__(self):
         repr_strings = [f"{tf.Bold}{n}:{tf.ResetAll}\t{metadata['shape']}" for n,metadata in self.metadata.items()]
@@ -129,6 +129,11 @@ class ImageData:
                 
                 # do the cropping
                 cropped_pyramid.append(img[ylim_scaled[0]:ylim_scaled[1], xlim_scaled[0]:xlim_scaled[1]])
+                
+            # save cropping in metadata
+            self.metadata[n]["cropping_xlim"] = xlim
+            self.metadata[n]["cropping_ylim"] = ylim
+            self.metadata[n]["shape"] = cropped_pyramid[0].shape
                 
             # add cropped pyramid to object
             setattr(self, n, cropped_pyramid)
