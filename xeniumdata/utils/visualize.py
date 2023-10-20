@@ -19,14 +19,10 @@ def interactive(self,
         subset = self.matrix
     else:
         subset = self.matrix[self.matrix.obs[mask]]
-        
-    print('blubb1')
-    
+            
     # create viewer
     self.viewer = napari.Viewer()
-    
-    print('blubb2')
-    
+        
     # add images
     for i, img_name in enumerate(self.images.metadata.keys()):
         img = getattr(self.images, img_name)
@@ -39,8 +35,6 @@ def interactive(self,
                 contrast_limits=self.images.metadata[img_name]["contrast_limits"]
                 #scale=img_scale
             )
-        
-    print('b3')
     
     # get colorcycle for region annotations
     cmap_annot = matplotlib.colormaps[cmap_annotations]

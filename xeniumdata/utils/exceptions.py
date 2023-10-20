@@ -35,5 +35,16 @@ class WrongNapariLayerTypeError(Exception):
     """
 
     def __init__(self, found, wanted):
-        self.message = f"\nNapari layer has wrong format ({found}) instead of {wanted}\n"
+        self.message = f"\nNapari layer has wrong format ({found}) instead of {wanted}"
+        super().__init__(self.message)
+
+class NotOneElementError(Exception):
+    """Exception raised if list contains not exactly one element.
+
+    Attributes:
+        list: List which does not contain one element.
+    """
+
+    def __init__(self, l):
+        self.message = f"List was expected to contain one element but contained {len(l)}"
         super().__init__(self.message)

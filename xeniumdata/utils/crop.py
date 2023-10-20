@@ -1,7 +1,7 @@
 import napari
 import numpy as np
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
-from .exceptions import XeniumDataRepeatedCropError, WrongNapariLayerTypeError
+from .exceptions import XeniumDataRepeatedCropError, WrongNapariLayerTypeError, NotOneElementError
 
 def crop(self, 
          shape_layer: Optional[str] = None,
@@ -27,10 +27,15 @@ def crop(self,
         crop_shape = self.viewer.layers[shape_layer]
         
         # check the structure of the shape object
-        assert len(crop_shape.data) == 1, "More than one region was selected. Abort."
+        if len(crop_shape.data) != 1:
+            raise NotOneElementError(crop_shape.data)
+        
+        # select the shape from list
         crop_window = crop_shape.data[0]
-        if not isinstance(crop_shape.dtype(), napari.layers.Shapes):
-            raise WrongNapariLayerTypeError(found=crop_shape, wanted=napari.layers.Shapes)
+        
+        # check the type of the element
+        if not isinstance(crop_shape, napari.layers.Shapes):
+            raise WrongNapariLayerTypeError(found=type(crop_shape), wanted=napari.layers.Shapes)
         
         # extract x and y limits from the shape (assuming a rectangle)
         xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
