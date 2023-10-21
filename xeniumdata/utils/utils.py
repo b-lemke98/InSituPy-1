@@ -1,6 +1,7 @@
 import anndata
 import dask.array as da
 import zarr
+from pandas.api.types import is_numeric_dtype, is_string_dtype
 
 class textformat:
     '''
@@ -89,9 +90,29 @@ def remove_last_line_from_csv(filename):
     with open(filename, 'w') as myFile:    
         myFile.writelines(lines)
         
-def decode_robust(s):
+def decode_robust(s, encoding="utf-8"):
     try:
-        return s.decode("utf-8")
+        return s.decode(encoding)
+    except (UnicodeDecodeError, AttributeError):
+        return s
+    
+def decode_robust_series(s, encoding="utf-8"):
+    '''
+    Function to decode a pandas series in a robust fashion with different checks.
+    This circumvents the return of NaNs and makes a decision in case of different errors.
+    '''
+    if is_numeric_dtype(s):
+        return s
+    if is_string_dtype(s):
+        return s
+    try:
+        decoded = s.str.decode(encoding)
+        if decoded.isna().all():
+            return decoded
+        elif decoded.isna().any():
+            namask = decoded.isna()
+            decoded[namask] = s[namask]
+        return decoded
     except (UnicodeDecodeError, AttributeError):
         return s
     

@@ -7,7 +7,7 @@ import numpy as np
 from shapely import Polygon
 from tifffile import imread
 from .utils import textformat as tf
-from .utils import convert_to_list, load_pyramid
+from .utils import convert_to_list, load_pyramid, decode_robust_series
 from parse import *
 
 class AnnotationData:
@@ -158,8 +158,8 @@ class BoundariesData:
         nucdf = pd.read_parquet(nucbound_path)
         
         # decode cell id strings
-        celldf["cell_id"] = celldf["cell_id"].str.decode("utf-8")
-        nucdf["cell_id"] = nucdf["cell_id"].str.decode("utf-8")
+        celldf["cell_id"] = decode_robust_series(celldf["cell_id"])
+        nucdf["cell_id"] = decode_robust_series(nucdf["cell_id"])
         
         if pixel_size is not None:
             # convert coordinates into pixel coordinates
@@ -215,7 +215,7 @@ class BoundariesData:
 
             # convert points into polygon objects per cell id
             df = df.groupby("cell_id")['geometry'].apply(lambda x: Polygon(x.tolist()))
-            df.index = df.index.str.decode('utf-8') # convert byte strings in index
+            df.index = decode_robust_series(df.index)  # convert byte strings in index
             
             # add to object
             setattr(self, n, pd.DataFrame(df))

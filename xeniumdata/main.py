@@ -58,7 +58,7 @@ class XeniumData:
                  path: Optional[Union[str, os.PathLike, Path]],
                  metadata_filename: str = "experiment_modified.xenium",
                  transcript_filename: str = "transcripts.parquet",
-                 pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{region_id}__{date}__{id}",
+                 pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{region_id}",
                  matrix: Optional[AnnData] = None
                  ):
         if matrix is None:
@@ -76,7 +76,8 @@ class XeniumData:
             self.metadata = read_xenium_metadata(self.path, metadata_filename=self.metadata_filename)
             
             # parse folder name to get slide_id and region_id
-            p_parsed = parse(pattern_xenium_folder, self.path.stem)
+            name_stub = "__".join(self.path.stem.split("__")[:3])
+            p_parsed = parse(pattern_xenium_folder, name_stub)
             self.slide_id = p_parsed.named["slide_id"]
             self.region_id = p_parsed.named["region_id"]
         else:

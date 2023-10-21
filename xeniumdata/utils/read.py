@@ -3,10 +3,11 @@ from pathlib import Path
 import os
 import scanpy as sc
 import pandas as pd
-from .utils import decode_robust
+from .utils import decode_robust, decode_robust_series
 from .annotations import read_qupath_annotation
 from parse import *
 from .data import ImageData, BoundariesData, AnnotationData
+from pandas.api.types import is_numeric_dtype
 
 def read_matrix(self, 
                 read_cells: bool = True
@@ -27,7 +28,12 @@ def read_matrix(self,
         
         # transform cell ids from bytes to str
         cells = cells.set_index("cell_id")
-        cells.index = [decode_robust(elem) for elem in cells.index]
+
+        # make sure that the indices are decoded strings
+        if is_numeric_dtype(cells.index):
+            cells.index = cells.index.astype(str)
+        else:
+            cells.index = decode_robust_series(cells.index)
         
         # add information to anndata observations
         self.matrix.obs = pd.merge(left=self.matrix.obs, right=cells, left_index=True, right_index=True)
@@ -92,6 +98,12 @@ def read_annotations(self,
 def read_all(self, verbose: bool = True):
     read_funcs = [elem for elem in dir(self) if elem.startswith("read_")]
     read_funcs = [elem for elem in read_funcs if elem != "read_all"]
+    
+    # check if there is an annotations folder
+    if len(list(self.path.parent.glob("annotations"))) == 0:
+        read_funcs.remove("read_annotations")
+        print("No folder named `annotations` found. Function `read_annotations()` was skipped.")
+        
     for f in read_funcs:
         if verbose: 
             print(f"Running {f}()")
