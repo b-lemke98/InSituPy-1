@@ -8,6 +8,7 @@ from .annotations import read_qupath_annotation
 from parse import *
 from .data import ImageData, BoundariesData, AnnotationData
 from pandas.api.types import is_numeric_dtype
+import warnings
 
 def read_matrix(self, 
                 read_cells: bool = True
@@ -17,8 +18,10 @@ def read_matrix(self,
     cf_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
     cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
 
-    # read matrix data
-    self.matrix = sc.read_10x_h5(cf_h5_path)
+    with warnings.catch_warnings():
+        warnings.simplefilter(action='ignore', category=FutureWarning)
+        # read matrix data
+        self.matrix = sc.read_10x_h5(cf_h5_path)
     
     if read_cells:
         # read cell information
@@ -66,11 +69,15 @@ def read_transcripts(self):
     # read transcripts
     self.transcripts = pd.read_parquet(self.path / self.transcript_filename)
     
+    # decode columns
+    self.transcripts = self.transcripts.apply(lambda x: decode_robust_series(x), axis=0)
+    
     # convert coordinates into pixel coordinates
     coord_cols = ["x_location", "y_location", "z_location"]
     self.transcripts[coord_cols] = self.transcripts[coord_cols].apply(lambda x: x / self.metadata["pixel_size"])
         
 def read_boundaries(self):
+    # read boundaries data
     self.boundaries = BoundariesData(path=self.path, pixel_size=self.metadata["pixel_size"])
     
 def read_annotations(self,
@@ -102,11 +109,11 @@ def read_all(self, verbose: bool = True):
     # check if there is an annotations folder
     if len(list(self.path.parent.glob("annotations"))) == 0:
         read_funcs.remove("read_annotations")
-        print("No folder named `annotations` found. Function `read_annotations()` was skipped.")
+        print("No folder named `annotations` found. Function `read_annotations()` was skipped.", flush=True)
         
     for f in read_funcs:
         if verbose: 
-            print(f"Running {f}()")
+            print(f"Running {f}()", flush=True)
         func = getattr(self, f)
         func()
         

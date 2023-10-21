@@ -157,9 +157,9 @@ class BoundariesData:
         celldf = pd.read_parquet(cellbound_path)
         nucdf = pd.read_parquet(nucbound_path)
         
-        # decode cell id strings
-        celldf["cell_id"] = decode_robust_series(celldf["cell_id"])
-        nucdf["cell_id"] = decode_robust_series(nucdf["cell_id"])
+        # decode columns
+        celldf = celldf.apply(lambda x: decode_robust_series(x), axis=0)
+        nucdf = nucdf.apply(lambda x: decode_robust_series(x), axis=0)
         
         if pixel_size is not None:
             # convert coordinates into pixel coordinates
