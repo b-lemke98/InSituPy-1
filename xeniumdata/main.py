@@ -166,7 +166,7 @@ class XeniumData:
                         img_dir: Union[str, os.PathLike, Path],
                         img_suffix: str = ".ome.tif",
                         dapi_type: str = "focus",
-                        pattern_img_file: str = "{slide_id}__{region_id}__{image_name}",
+                        pattern_img_file: str = "{slide_id}__{region_id}__{image_name}__{image_type}",
                         decon_scale_factor: float = 0.2
                         ):
         '''
