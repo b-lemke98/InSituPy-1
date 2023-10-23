@@ -20,6 +20,10 @@ class ImageRegistration:
     def __init__(self,
                  image: Union[np.ndarray, da.Array],
                  template: Union[np.ndarray, da.Array],
+                 axes_image: str = "YXS", ## channel axes - other examples: 'TCYXS'. S for RGB channels.
+                 axes_template: str = "YX",  # channel axes of template. Normally it is just a grayscale image - therefore YX.
+                #  channel_axis_image: int = -1,  # position of the channel axis in image
+                #  channel_axis_template: int = None,  # position of channel axis in template. Usually None for DAPI.
                  max_width: Optional[int] = 4000,
                  convert_to_grayscale: bool = False,
                  perspective_transform: bool = False,
@@ -41,6 +45,10 @@ class ImageRegistration:
         #         setattr(self, k, v)
         self.image = image
         self.template = template
+        self.axes_image = axes_image
+        self.axes_template = axes_template
+        # self.channel_axis_image = channel_axis_image
+        # self.channel_axis_template = channel_axis_template
         self.max_width = max_width
         self.convert_to_grayscale = convert_to_grayscale
         self.perspective_transform = perspective_transform
@@ -52,7 +60,7 @@ class ImageRegistration:
         self.maxFeatures = maxFeatures
         self.verbose = verbose
         
-    def load_and_fit_images(self):
+    def load_and_scale_images(self):
         
         # load images into memory if they are dask arrays
         if isinstance(self.image, da.Array):
@@ -78,11 +86,13 @@ class ImageRegistration:
             self.image_scaled = scale_to_max_width(self.image, 
                                                    max_width=self.max_width, 
                                                    use_square_area=True,
+                                                   axes=self.axes_image,
                                                    verbose=self.verbose
                                                    )
             self.template_scaled = scale_to_max_width(self.template, 
                                                       max_width=self.max_width, 
                                                       use_square_area=True,
+                                                      axes=self.axes_template,
                                                       verbose=self.verbose
                                                       )
         else:
@@ -267,7 +277,7 @@ class ImageRegistration:
 
     def run_registration(self):
         # load and scale images
-        self.load_and_fit_images()
+        self.load_and_scale_images()
         
         # run feature extraction
         self.extract_features()

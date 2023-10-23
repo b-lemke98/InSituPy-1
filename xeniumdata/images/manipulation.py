@@ -9,6 +9,7 @@ import dask.array as da
 import numpy as np
 import cv2
 import numpy as np
+from .format import ImageAxes
 
 def resize_image(img: NDArray, 
                  dim: Tuple[int, int] = None, 
@@ -87,18 +88,27 @@ def convert_to_8bit(img, save_mem=True, verbose=False):
     return img
 
 def scale_to_max_width(image: np.ndarray, 
-                   max_width: int = 4000,
-                   use_square_area: bool = False,
-                   verbose: bool = True
-                   ):
+                       axes: str,  # description of axes, e.g. YXS for RGB, CYX for IF, TYXS for time-series RGB
+                       max_width: int = 4000,
+                       use_square_area: bool = False,
+                       #channel_axis: int = 2,
+                       verbose: bool = True
+                       ):
     '''
     Function to scale image to a maximum width or square area.
     '''
-    image_xy = image.shape[:2] # extract image shape assuming that the channels are in third dimension
-    num_dim = len(image.shape)
+    image_axes = ImageAxes(pattern=axes)
+    if image_axes.C is not None:
+        image_xy = tuple([image.shape[i] for i in range(3) if i != 0])  # extract image shape based on channel axis
+    else:
+        # if the channel_axis is None, the image does not have a channel axis, meaning it is a grayscale image
+        image_xy = image.shape
+        
+    #image_xy = image.shape[:2] # extract image shape assuming that the channels are in third dimension
+    #num_dim = len(image.shape)
     
-    if num_dim == 3:
-        assert image.shape[-1] == 3, "Image has three dimensions but the third channel is not 3. No RGB?"
+    # if num_dim == 3:
+    #     assert image.shape[-1] == 3, "Image has three dimensions but the third channel is not 3. No RGB?"
     
     if not use_square_area:
         # scale to the longest side of the image. Not good for very elongated images.
@@ -127,7 +137,7 @@ def scale_to_max_width(image: np.ndarray,
         new_shape = tuple(new_shape)
                 
     # resizing - caution: order of dimensions is reversed in OpenCV compared to numpy
-    image_scaled = resize_image(img=image, dim=(new_shape[1], new_shape[0]))
+    image_scaled = resize_image(img=image, dim=(new_shape[1], new_shape[0]), channel_axis=channel_axis)
     print("Rescaled to following dimensions: {}".format(image_scaled.shape)) if verbose else None
     
     return image_scaled
