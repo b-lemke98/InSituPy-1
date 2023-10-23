@@ -247,7 +247,6 @@ class XeniumData:
                 
                 # Use the transformation matrix to register the original HE image
                 # determine which image to be registered
-                # determine which image to be registered here
                 if hasattr(imreg_image, "image_resized"):
                     _image = imreg_image.image_resized # use resized original image
                     _T = imreg_hema.T_resized # use resized hematoxylin transformation matrix
@@ -256,6 +255,9 @@ class XeniumData:
                     _T = imreg_hema.T # use original hematoxylin transformation matrix
                 
                 print("\t\tDo registration", flush=True)
+                if imreg_hema.flip_axis is not None:
+                    print(f"\t\tImage is flipped {'vertically' if imreg_hema.flip_axis == 0 else 'horizontally'}", flush=True)
+                    _image = np.flip(_image, axis=imreg_hema.flip_axis)
                 (h, w) = template.shape[:2]
                 self.registered = cv2.warpAffine(_image, _T, (w, h))
 

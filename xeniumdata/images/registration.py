@@ -26,7 +26,8 @@ class ImageRegistration:
                  feature_detection_method: Literal["sift", "surf"] = "sift",
                  flann: bool = True,
                  ratio_test: bool = True,
-                 keepFraction=0.2,
+                 keepFraction: float = 0.2,
+                 min_good_matches: int = 20,  # minimum number of good feature matches
                  maxFeatures: int = 500,
                  verbose: bool = True,
                  ):
@@ -47,6 +48,7 @@ class ImageRegistration:
         self.flann = flann
         self.ratio_test = ratio_test
         self.keepFraction = keepFraction
+        self.min_good_matches = min_good_matches
         self.maxFeatures = maxFeatures
         self.verbose = verbose
         
@@ -116,64 +118,79 @@ class ImageRegistration:
         '''
         
         self.verboseprint("\t\t{}: Get features...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-        # Get features
-        if self.feature_detection_method == "sift":
-            self.verboseprint("\t\t\tMethod: SIFT...")
-            # sift
-            sift = cv2.SIFT_create()
+        
+        # Test different flip transformations starting with no flip, then vertical, then horizontal.
+        for flip_axis in [None, 0, 1]:
+            if flip_axis is not None:
+                # flip image
+                print(f"\t\t{'Vertical' if flip_axis == 0 else 'Horizontal'} flip is tested.", flush=True)
+                self.image_scaled = np.flip(self.image_scaled, axis=flip_axis)
+                
+            # Get features
+            if self.feature_detection_method == "sift":
+                self.verboseprint("\t\t\tMethod: SIFT...")
+                # sift
+                sift = cv2.SIFT_create()
 
-            (kpsA, descsA) = sift.detectAndCompute(self.image_scaled, None)
-            (kpsB, descsB) = sift.detectAndCompute(self.template_scaled, None)
+                (kpsA, descsA) = sift.detectAndCompute(self.image_scaled, None)
+                (kpsB, descsB) = sift.detectAndCompute(self.template_scaled, None)
 
-        elif self.feature_detection_method == "surf":
-            self.verboseprint("\t\t\tMethod: SURF...")
-            surf = cv2.xfeatures2d.SURF_create(400)
+            elif self.feature_detection_method == "surf":
+                self.verboseprint("\t\t\tMethod: SURF...")
+                surf = cv2.xfeatures2d.SURF_create(400)
 
-            (kpsA, descsA) = surf.detectAndCompute(self.image_scaled, None)
-            (kpsB, descsB) = surf.detectAndCompute(self.template_scaled, None)
+                (kpsA, descsA) = surf.detectAndCompute(self.image_scaled, None)
+                (kpsB, descsB) = surf.detectAndCompute(self.template_scaled, None)
 
-        else:
-            self.verboseprint("\t\t\tUnknown method. Aborted.")
-            return
+            else:
+                self.verboseprint("\t\t\tUnknown method. Aborted.")
+                return
 
-        if self.flann:
-            self.verboseprint("\t\t{}: Compute matches...".format(
-                f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-            # FLANN parameters
-            FLANN_INDEX_KDTREE = 1
-            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-            search_params = dict(checks=50)   # or pass empty dictionary
+            if self.flann:
+                self.verboseprint("\t\t{}: Compute matches...".format(
+                    f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+                # FLANN parameters
+                FLANN_INDEX_KDTREE = 1
+                index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+                search_params = dict(checks=50)   # or pass empty dictionary
 
-            # runn Flann matcher
-            fl = cv2.FlannBasedMatcher(index_params, search_params)
-            matches = fl.knnMatch(descsA, descsB, k=2)
+                # runn Flann matcher
+                fl = cv2.FlannBasedMatcher(index_params, search_params)
+                matches = fl.knnMatch(descsA, descsB, k=2)
 
-        else:
-            self.verboseprint("\t\t{}: Compute matches...".format(
-                f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-            # feature matching
-            #bf = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
-            bf = cv2.BFMatcher()
-            matches = bf.knnMatch(descsA, descsB, k=2)
+            else:
+                self.verboseprint("\t\t{}: Compute matches...".format(
+                    f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+                # feature matching
+                #bf = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
+                bf = cv2.BFMatcher()
+                matches = bf.knnMatch(descsA, descsB, k=2)
 
-        if self.ratio_test:
-            self.verboseprint("\t\t{}: Filter matches...".format(
-                f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-            # store all the good matches as per Lowe's ratio test.
-            good_matches = []
-            for m, n in matches:
-                if m.distance < 0.7*n.distance:
-                    good_matches.append(m)
-        else:
-            self.verboseprint("\t\t{}: Filter matches...".format(
-                f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
-            # sort the matches by their distance (the smaller the distance, the "more similar" the features are)
-            matches = sorted(matches, key=lambda x: x.distance)
-            # keep only the top matches
-            keep = int(len(matches) * self.keepFraction)
-            good_matches = matches[:keep][:self.maxFeatures]
+            if self.ratio_test:
+                self.verboseprint("\t\t{}: Filter matches...".format(
+                    f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+                # store all the good matches as per Lowe's ratio test.
+                good_matches = []
+                for m, n in matches:
+                    if m.distance < 0.7*n.distance:
+                        good_matches.append(m)
+            else:
+                self.verboseprint("\t\t{}: Filter matches...".format(
+                    f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
+                # sort the matches by their distance (the smaller the distance, the "more similar" the features are)
+                matches = sorted(matches, key=lambda x: x.distance)
+                # keep only the top matches
+                keep = int(len(matches) * self.keepFraction)
+                good_matches = matches[:keep][:self.maxFeatures]
 
-            self.verboseprint("\t\t\tNumber of matches used: {}".format(len(good_matches)))
+                self.verboseprint("\t\t\tNumber of matches used: {}".format(len(good_matches)))
+                
+            # check if a sufficient number of good matches was found
+            if len(good_matches) >= self.min_good_matches:
+                self.flip_axis = flip_axis
+                break
+            else:
+                print(f"\t\t\tNumber of good matches ({len(good_matches)}) below threshold ({self.min_good_matches}). Flipping is tested.")
 
         # check to see if we should visualize the matched keypoints
         self.verboseprint("\t\t{}: Display matches...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
