@@ -26,6 +26,20 @@ class XeniumDataRepeatedCropError(Exception):
             f"ylim -> {ylim}" 
         super().__init__(self.message)
         
+class XeniumDataMissingObject(Exception):
+    """Exception raised if a certain object is not available in the XeniumData object.
+    Maybe it has to be read first
+
+    Attributes:
+        name: Name of object that is searched for.
+    """
+
+    def __init__(self, name):
+        self.name = name
+        self.message = f"\nXeniumData object does not contain object `{name}`.\n" \
+            f"Consider running `.read_{name}()` first."
+        super().__init__(self.message)
+        
 class WrongNapariLayerTypeError(Exception):
     """Exception raised if current layer has not the right format.
 
