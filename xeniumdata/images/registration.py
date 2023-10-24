@@ -4,9 +4,17 @@ from datetime import datetime
 import numpy as np
 from .manipulation import resize_image, convert_to_8bit, scale_to_max_width, fit_image_to_size_limit
 from .deconvolution import deconvolve_he
-from ..utils.utils import convert_to_list
+from ..utils.utils import convert_to_list, remove_last_line_from_csv
 import dask.array as da
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
+from .io import write_ome_tiff
+import matplotlib.pyplot as plt
+import json
+import os
+import gc
+from pathlib import Path
+from ..utils.exceptions import NotEnoughFeatureMatchesError
+
 
 # limits in C (see https://www.geeksforgeeks.org/climits-limits-h-cc/)
 SHRT_MAX = 2**15-1  # 32767
@@ -84,15 +92,15 @@ class ImageRegistration:
         if self.max_width is not None:
             self.verboseprint("\t\tRescale image and template to save memory.", flush=True)
             self.image_scaled = scale_to_max_width(self.image, 
+                                                   axes=self.axes_image,
                                                    max_width=self.max_width, 
                                                    use_square_area=True,
-                                                   axes=self.axes_image,
                                                    verbose=self.verbose
                                                    )
             self.template_scaled = scale_to_max_width(self.template, 
+                                                      axes=self.axes_template,
                                                       max_width=self.max_width, 
                                                       use_square_area=True,
-                                                      axes=self.axes_template,
                                                       verbose=self.verbose
                                                       )
         else:
@@ -105,10 +113,11 @@ class ImageRegistration:
         self.template_scaled = convert_to_8bit(self.template_scaled)
         
         # calculate scale factors for x and y dimension for image and template
-        self.x_sf_image = self.image_scaled.shape[0] / self.image.shape[0]
-        self.y_sf_image = self.image_scaled.shape[1] / self.image.shape[1]
-        self.x_sf_template = self.template_scaled.shape[0] / self.template.shape[0]
-        self.y_sf_template = self.template_scaled.shape[1] / self.template.shape[1]
+        # TODO: Do we really nead to do this separately for both axes?
+        self.x_sf_image = self.image_scaled.shape[1] / self.image.shape[1]
+        self.y_sf_image = self.image_scaled.shape[0] / self.image.shape[0]
+        self.x_sf_template = self.template_scaled.shape[1] / self.template.shape[1]
+        self.y_sf_template = self.template_scaled.shape[0] / self.template.shape[0]
         
         # resize image if necessary (warpAffine has a size limit for the image that is transformed)
         if np.any([elem > SHRT_MAX for elem in self.image.shape[:2]]):
@@ -130,11 +139,14 @@ class ImageRegistration:
         self.verboseprint("\t\t{}: Get features...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
         
         # Test different flip transformations starting with no flip, then vertical, then horizontal.
+        matches_list = [] # list to collect number of matches
         for flip_axis in [None, 0, 1]:
+            flipped = False
             if flip_axis is not None:
                 # flip image
                 print(f"\t\t{'Vertical' if flip_axis == 0 else 'Horizontal'} flip is tested.", flush=True)
                 self.image_scaled = np.flip(self.image_scaled, axis=flip_axis)
+                flipped = True # set flipped flag to True
                 
             # Get features
             if self.feature_detection_method == "sift":
@@ -196,11 +208,20 @@ class ImageRegistration:
                 self.verboseprint("\t\t\tNumber of matches used: {}".format(len(good_matches)))
                 
             # check if a sufficient number of good matches was found
+            matches_list.append(len(good_matches))
             if len(good_matches) >= self.min_good_matches:
+                print(f"\t\t\tSufficient number of good matches found ({len(good_matches)}).")
                 self.flip_axis = flip_axis
                 break
             else:
                 print(f"\t\t\tNumber of good matches ({len(good_matches)}) below threshold ({self.min_good_matches}). Flipping is tested.")
+                if flipped:
+                    # flip back
+                    print("Flip back.", flush=True)
+                    self.image_scaled = np.flip(self.image_scaled, axis=flip_axis)
+        
+        if not hasattr(self, "flip_axis"):
+            raise NotEnoughFeatureMatchesError(number=np.max(matches_list), threshold=self.min_good_matches)
 
         # check to see if we should visualize the matched keypoints
         self.verboseprint("\t\t{}: Display matches...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
@@ -249,23 +270,22 @@ class ImageRegistration:
                 self.ptsA *= self.resize_factor_image # scale images features in case it was originally larger than the warpAffine limits
                 (self.T_resized, mask) = cv2.estimateAffine2D(self.ptsA, self.ptsB)
             
-    def register_images(self):
-        '''
-        Function running the registration including following steps:
-            1. Feature extraction
-            2. Calculation of transformation matrix
-            3. Registration of images based on transformation matrix
-        '''
+    def perform_registration(self):
+
         # determine which image to be registered here
         if hasattr(self, "image_resized"):
-            _image = self.image_resized
-            _T = self.T_resized
+            self.image_to_register = self.image_resized
+            self.T_to_register = self.T_resized
         else:
-            _image = self.image
-            _T = self.T
+            self.image_to_register = self.image
+            self.T_to_register = self.T
 
         # determine the kind of transformation
         warp_func, warp_name = (cv2.warpPerspective, "perspective") if self.perspective_transform else (cv2.warpAffine, "affine")
+        
+        if self.flip_axis is not None:
+            print(f"\t\tImage is flipped {'vertically' if self.flip_axis == 0 else 'horizontally'}", flush=True)
+            self.image_to_register = np.flip(self.image_to_register, axis=self.flip_axis)
 
         # use the transformation matrix to register the images
         (h, w) = self.template.shape[:2]
@@ -273,9 +293,16 @@ class ImageRegistration:
         self.verboseprint(f"\t\t{datetime.now():%Y-%m-%d %H:%M:%S}: Register image by {warp_name} transformation...")
         
         #self.image_resized = convert_to_8bit(self.image_resized)
-        self.registered = warp_func(_image, _T, (w, h))
+        self.registered = warp_func(self.image_to_register, self.T_to_register, (w, h))
 
-    def run_registration(self):
+    def register_images(self):
+        '''
+        Function running the registration including following steps:
+            1. Loading of images
+            2. Feature extraction
+            3. Calculation of transformation matrix
+            4. Registration of images based on transformation matrix
+        '''
         # load and scale images
         self.load_and_scale_images()
         
@@ -287,5 +314,52 @@ class ImageRegistration:
         
         # perform registration
         self.register_images()
+        
+    def save(self,
+             path: Union[str, os.PathLike, Path],
+             filename: str,
+             axes: str,  # string describing the channel axes, e.g. YXS or CYX
+             photometric: Literal['rgb', 'minisblack', 'maxisblack'] = 'rgb', # before I had rgb here. Xenium doc says minisblack
+             registered: Optional[np.ndarray] = None,  # registered image
+             _T: Optional[np.ndarray] = None,  # transformation matrix
+             matchedVis: Optional[np.ndarray] = None  # image showing the matched visualization
+             ):
+        # Optionally the registered image, transformation matrix and matchedVis can be added externally. Otherwise they are taken from self.
+        if registered is None:
+            registered = self.registered
+        if _T is None:
+            _T = self.T_to_register
+        if matchedVis is None:
+            matchedVis = self.matchedVis
+            
+        # save registered image as OME-TIFF
+        regimg_dir = path.parent / "registered_images"
+        regimg_dir.mkdir(parents=True, exist_ok=True) # create folder for registered images
+        self.outfile = regimg_dir / f"{filename}__registered.ome.tif"
+        print(f"\t\tSave OME-TIFF to {self.outfile}", flush=True)
+        write_ome_tiff(
+            file=self.outfile, 
+            image=registered, 
+            axes=axes, 
+            photometric=photometric, 
+            overwrite=True
+            )
 
+        # save registration QC files
+        reg_dir = path.parent / "registration_qc"
+        reg_dir.mkdir(parents=True, exist_ok=True) # create folder for QC outputs
+        print(f"\t\tSave QC files to {reg_dir}", flush=True)
 
+        # save transformation matrix
+        T = np.vstack([_T, [0,0,1]]) # add last line of affine transformation matrix
+        T_csv = reg_dir / f"{filename}__H.csv"
+        np.savetxt(T_csv, T, delimiter=",") # save as .csv file
+
+        # remove last line break from csv since this gives error when importing to Xenium Explorer
+        remove_last_line_from_csv(T_csv)
+
+        # save image showing the number of key points found in both images during registration
+        matchedVis_file = reg_dir / f"{filename}__matchedvis.pdf"
+        plt.imshow(matchedVis)
+        plt.savefig(matchedVis_file, dpi=400)
+        plt.close()

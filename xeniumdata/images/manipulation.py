@@ -14,13 +14,17 @@ from .format import ImageAxes
 def resize_image(img: NDArray, 
                  dim: Tuple[int, int] = None, 
                  scale_factor: float = None, 
-                 channel_axis: int = -1
+                 axes = "YXS"
                  ):
     '''
     Resize image by scale_factor
     '''
-    if channel_axis != -1:
-        # move channel axis to last position
+    # read and interpret the image axes pattern
+    image_axes = ImageAxes(pattern=axes)
+    channel_axis = image_axes.C
+    
+    if (channel_axis is not None) & (channel_axis != len(img.shape)-1):
+        # move channel axis to last position if it is not there already
         img = np.moveaxis(img, channel_axis, -1)
         
     assert img.dtype in [np.dtype('uint16'), np.dtype('uint8')], \
@@ -41,17 +45,23 @@ def resize_image(img: NDArray,
     # do resizing
     img = cv2.resize(img, dim)
         
-    if channel_axis != -1:
+    if (channel_axis is not None) & (channel_axis != -1):
         # move channel axis back to original position
         img = np.moveaxis(img, -1, channel_axis)
 
     return img
 
 def fit_image_to_size_limit(image: NDArray, 
+                            axes: str,  # description of axes, e.g. YXS for RGB, CYX for IF, TYXS for time-series RGB
                             size_limit: int, 
                             return_scale_factor: bool = True
                             ):
-    # resize image if necessary (warpAffine has a size limit for the image that is transformed)
+    '''
+    Function to resize image if necessary (warpAffine has a size limit for the image that is transformed).
+    '''
+    # get information about channels
+    image_axes = ImageAxes(pattern=axes)
+    
     orig_shape_image = image.shape
     xy_shape_image = orig_shape_image[:2]
     
@@ -98,11 +108,12 @@ def scale_to_max_width(image: np.ndarray,
     Function to scale image to a maximum width or square area.
     '''
     image_axes = ImageAxes(pattern=axes)
-    if image_axes.C is not None:
-        image_xy = tuple([image.shape[i] for i in range(3) if i != 0])  # extract image shape based on channel axis
-    else:
-        # if the channel_axis is None, the image does not have a channel axis, meaning it is a grayscale image
-        image_xy = image.shape
+    image_yx = (image.shape[image_axes.Y], image.shape[image_axes.X])
+    # if image_axes.C is not None:
+    #     image_xy = tuple([image.shape[i] for i in range(3) if i != 0])  # extract image shape based on channel axis
+    # else:
+    #     # if the channel_axis is None, the image does not have a channel axis, meaning it is a grayscale image
+    #     image_xy = image.shape
         
     #image_xy = image.shape[:2] # extract image shape assuming that the channels are in third dimension
     #num_dim = len(image.shape)
@@ -112,8 +123,8 @@ def scale_to_max_width(image: np.ndarray,
     
     if not use_square_area:
         # scale to the longest side of the image. Not good for very elongated images.
-        if np.max(image_xy) > max_width:
-            new_shape = tuple([int(elem / np.max(image_xy) * max_width) for elem in image_xy])
+        if np.max(image_yx) > max_width:
+            new_shape = tuple([int(elem / np.max(image_yx) * max_width) for elem in image_yx])
         else:
             new_shape = image.shape
             
@@ -122,10 +133,10 @@ def scale_to_max_width(image: np.ndarray,
         max_square_area = max_width ** 2
         
         # calculate new dimensions based on the maximum square area
-        long_idx = np.argmax(image_xy)  # search for position of longest dimension
-        short_idx = np.argmin(image_xy)  # same for shortest
-        long_side = image_xy[long_idx]  # extract longest side
-        short_side = image_xy[short_idx]  # extract shortest
+        long_idx = np.argmax(image_yx)  # search for position of longest dimension
+        short_idx = np.argmin(image_yx)  # same for shortest
+        long_side = image_yx[long_idx]  # extract longest side
+        short_side = image_yx[short_idx]  # extract shortest
         dim_ratio = short_side / long_side  # calculate ratio between the two sides.
         new_long_side = int(np.sqrt(max_square_area / dim_ratio))  # calculate the length of the new longer side based on area
         new_short_side = int(new_long_side * dim_ratio) # calculate length of new shorter side based on the longer one
@@ -137,7 +148,7 @@ def scale_to_max_width(image: np.ndarray,
         new_shape = tuple(new_shape)
                 
     # resizing - caution: order of dimensions is reversed in OpenCV compared to numpy
-    image_scaled = resize_image(img=image, dim=(new_shape[1], new_shape[0]), channel_axis=channel_axis)
+    image_scaled = resize_image(img=image, dim=(new_shape[1], new_shape[0]), axes=axes)
     print("Rescaled to following dimensions: {}".format(image_scaled.shape)) if verbose else None
     
     return image_scaled

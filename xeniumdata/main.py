@@ -10,7 +10,7 @@ import dask
 from .utils.utils import textformat as tf
 from .utils.utils import remove_last_line_from_csv
 from parse import *
-from .images import resize_image, deconvolve_he, write_ome_tiff, ImageRegistration
+from .images import resize_image, deconvolve_he, ImageRegistration
 import cv2
 import gc
 import functools as ft
@@ -53,10 +53,10 @@ class XeniumData:
     from .utils.visualize import interactive
     
     # import crop function
-    from .utils.crop import crop
+    from .utils.crop import crop    
     
     def __init__(self, 
-                 path: Optional[Union[str, os.PathLike, Path]],
+                 path: Union[str, os.PathLike, Path],
                  metadata_filename: str = "experiment_modified.xenium",
                  transcript_filename: str = "transcripts.parquet",
                  pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{region_id}",
@@ -72,6 +72,9 @@ class XeniumData:
                 self.metadata_filename = "experiment_modified.xenium"
             else:
                 self.metadata_filename = "experiment.xenium"
+                
+            # all changes are saved to the modified .xenium json
+            self.metadata_save_path = self.path / "experiment_modified.xenium"
                 
             # read metadata
             self.metadata = read_xenium_metadata(self.path, metadata_filename=self.metadata_filename)
@@ -161,14 +164,30 @@ class XeniumData:
         if save is not None:
             plt.savefig(save)
         plt.show()
+        
+        
+    def save_metadata(self,
+                      metadata_path: Union[str, os.PathLike, Path] = None
+                      ):
+        # if there is no specific path given, the metadata is written to the default path for modified metadata
+        if metadata_path is None:
+            metadata_path = self.metadata_save_path
+            
+        # write to json file
+        metadata_json = json.dumps(self.metadata, indent=4)
+        print(f"\t\tSave metadata to {metadata_path}", flush=True)
+        with open(metadata_path, "w") as metafile:
+            metafile.write(metadata_json)
 
 
     def register_images(self,
                         img_dir: Union[str, os.PathLike, Path],
                         img_suffix: str = ".ome.tif",
-                        pattern_img_file: str = "{slide_id}__{region_id}__{image_name}__{image_type}",
+                        pattern_img_file: str = "{slide_id}__{region_id}__{image_names}__{image_type}",
                         decon_scale_factor: float = 0.2,
-                        dapi_channel: int = None
+                        image_name_sep: str = "_",  # string separating the image names in the file name
+                        nuclei_name: str = "DAPI",  # name used for the nuclei image
+                        #dapi_channel: int = None
                         ):
         '''
         Register images stored in XeniumData object.
@@ -201,61 +220,94 @@ class XeniumData:
                 # parse name of current image
                 img_stem = img_file.stem.split(".")[0] # make sure to remove also suffices like .ome.tif
                 img_file_parsed = parse(pattern_img_file, img_stem)
-                image_name = img_file_parsed.named["image_name"]
+                self.image_names = img_file_parsed.named["image_names"].split(image_name_sep)
                 image_type = img_file_parsed.named["image_type"] # check which image type it has (`histo` or `IF`)
                 
-                img_type_options = ["histo", "IF"]
-                if image_type not in img_type_options:
-                    raise UnknownOptionError(image_type, available=img_type_options)
+                # determine the structure of the image axes and check other things
+                axes_template = "YX"
+                if image_type == "histo":
+                    axes_image = "YXS"
+                    
+                    # make sure that there is only one image name given
+                    if len(self.image_names) > 1:
+                        raise ValueError(f"More than one image name retrieved ({self.image_names})")
+                    elif len(self.image_names) == 0:
+                        raise ValueError(f"No image name found in file {img_file}")
+                    else:
+                        # in case of histo images only one image name should be given
+                        self.image_names = self.image_names[0]
+                    
+                elif image_type == "IF":
+                    axes_image = "CYX"
+                else:
+                    raise UnknownOptionError(image_type, available=["histo", "IF"])
                 
-                print(f'\tProcessing {tf.Bold}"{image_name}"{tf.ResetAll} {image_type} image', flush=True)
-                # load registered image (usually DAPI in case of Xenium)
-                #relpath_template = self.metadata['images'][f'morphology_{dapi_type}_filepath']
-                #path_template = Path(os.path.normpath(os.path.join(self.path, relpath_template))) # get the absolute path to the image
+                print(f'\tProcessing {tf.Bold}"{self.image_names}"{tf.ResetAll} {image_type} image', flush=True)
 
                 # read images
                 print("\t\tLoading images...", flush=True)
                 image = imread(img_file) # e.g. HE image
                 
-                # sometimes images are read with a leading time dimension. If this is the case, it is removed here.
+                # sometimes images are read with an empty time dimension in the first axis. 
+                # If this is the case, it is removed here.
                 if len(image.shape) == 4:
                     image = image[0]
                     
                 # read images in XeniumData object
                 self.read_images()
-                template = self.images.DAPI[0] # usually DAPI image. Use highest resolution from pyramid.
+                template = self.images.DAPI[0] # usually DAPI image. Use highest resolution of pyramid.
                 
-                # setup image registration object - is important to load and scale the images
+                # Setup image registration object - is important to load and scale the images.
+                # The reason for this are limits in C++, not allowing to perform certain OpenCV functions on big images.
                 imreg_complete = ImageRegistration(
                     image=image,
                     template=template,
+                    axes_image=axes_image,
+                    axes_template=axes_template,
                     verbose=False
                     )
                 imreg_complete.load_and_scale_images()
-
+                
+                # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
+                axes_selected = "YX" 
                 if image_type == "histo":
                     print("\t\tRun color deconvolution", flush=True)
                     # deconvolve HE - performed on resized image to save memory
-                    selected, eo, dab = deconvolve_he(img=resize_image(image, 
-                                                                scale_factor=decon_scale_factor), 
+                    selected, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor, axes=axes_selected), 
                                                 return_type="grayscale", convert=True)
 
                     # bring back to original size
-                    selected = resize_image(selected, scale_factor=1/decon_scale_factor)
+                    selected = resize_image(selected, scale_factor=1/decon_scale_factor, axes=axes_selected)
+                    
+                    # set nuclei_channel and nuclei_axis to None
+                    nuclei_channel = channel_axis = None
                 else:
-                    print(f"\t\tSelect DAPI image from IF image (channel: {dapi_channel})", flush=True)
-                    # select DAPI channel from IF image
-                    if dapi_channel is None:
-                        raise TypeError("Argument `dapi_channel` should be an integer and not NoneType.")
+                    # image_type is "IF" then
+                    # get index of nuclei channel
+                    nuclei_channel = self.image_names.index(nuclei_name)
+                    channel_axis = axes_image.find("C")
+                    
+                    if channel_axis == -1:
+                        raise ValueError(f"No channel indicator `C` found in image axes ({axes_image})")
+                    
+                    print(f"\t\tSelect image with nuclei from IF image (channel: {nuclei_channel})", flush=True)
+                    # select nuclei channel from IF image
+                    if nuclei_channel is None:
+                        raise TypeError("Argument `nuclei_channel` should be an integer and not NoneType.")
                     
                     # select dapi channel for registration
-                    selected = image[dapi_channel]
+                    selected = np.take(image, nuclei_channel, channel_axis)
+                    #selected = image[nuclei_channel]
+                
+                
 
                 print("\t\tExtract common features from image and template", flush=True)
                 # perform registration to extract the common features ptsA and ptsB
                 imreg_selected = ImageRegistration(
                     image=selected,
                     template=imreg_complete.template,
+                    axes_image=axes_selected,
+                    axes_template=axes_template,
                     max_width=4000,
                     convert_to_grayscale=False,
                     perspective_transform=False
@@ -266,60 +318,85 @@ class XeniumData:
                 imreg_selected.extract_features()
                 imreg_selected.calculate_transformation_matrix()
                 
-                # Use the transformation matrix to register the original HE image
-                # determine which image to be registered
-                if hasattr(imreg_complete, "image_resized"):
-                    _image = imreg_complete.image_resized # use resized original image
-                    _T = imreg_selected.T_resized # use resized transformation matrix generated with selected image
-                else:
-                    _image = imreg_complete.image # use original image
-                    _T = imreg_selected.T # use original transformation matrix generated with selected image
+                # Use the transformation matrix to register image to the template
+                # First, determine if the image was resized before performing the steps above (necessary due to C++ limits in OpenCV)
+                # Then, add the correct image to the ImageRegistration object that is used for registration
+                # if hasattr(imreg_complete, "image_resized"):
+                #     imreg_selected.image_resized = imreg_complete.image_resized  # use resized original image
+                #     # _image = imreg_complete.image_resized # use resized original image
+                #     # _T = imreg_selected.T_resized # use resized transformation matrix generated with selected image
+                # else:
+                #     assert not hasattr(imreg_selected, "image_resized")
+                #     imreg_selected.image = imreg_complete.image  # use original image
+                    # _image = imreg_complete.image # use original image
+                    # _T = imreg_selected.T # use original transformation matrix generated with selected image
                 
-                print("\t\tDo registration", flush=True)
-                if imreg_selected.flip_axis is not None:
-                    print(f"\t\tImage is flipped {'vertically' if imreg_selected.flip_axis == 0 else 'horizontally'}", flush=True)
-                    _image = np.flip(_image, axis=imreg_selected.flip_axis)
-                (h, w) = template.shape[:2]
-                self.registered = cv2.warpAffine(_image, _T, (w, h))
-
-                # save as OME-TIFF
-                outfile = self.path / f"registered_{image_name}.ome.tif"
-                print(f"\t\tSave OME-TIFF to {outfile}", flush=True)
-                write_ome_tiff(
-                    file=outfile, 
-                    image=self.registered, 
-                    axes="YXS", 
-                    overwrite=True
-                    )
-
-                # save registration QC files
-                reg_dir = self.path.parent / "registration"
-                reg_dir.mkdir(parents=True, exist_ok=True) # create folder for QC outputs
-                print(f"\t\tSave QC files to {reg_dir}", flush=True)
+                # print("\t\tDo registration", flush=True)
+                # if imreg_selected.flip_axis is not None:
+                #     print(f"\t\tImage is flipped {'vertically' if imreg_selected.flip_axis == 0 else 'horizontally'}", flush=True)
+                #     _image = np.flip(_image, axis=imreg_selected.flip_axis)
+                # (h, w) = template.shape[:2]
                 
-                # save transformation matrix
-                T = np.vstack([_T, [0,0,1]]) # add last line of affine transformation matrix
-                T_csv = reg_dir / f"{self.slide_id}__{self.region_id}__{image_name}__H.csv"
-                np.savetxt(T_csv, T, delimiter=",") # save as .csv file
-                
-                # remove last line break from csv since this gives error when importing to Xenium Explorer
-                remove_last_line_from_csv(T_csv)
-
-                # save image showing the number of key points found in both images during registration
-                matchedVis_file = reg_dir / f"{self.slide_id}__{self.region_id}__{image_name}__matchedvis.pdf"
-                plt.imshow(imreg_selected.matchedVis)
-                plt.savefig(matchedVis_file, dpi=400)
-                plt.close()
-
-                # save metadata
-                self.metadata['images'][f'registered_{image_name}_filepath'] = os.path.relpath(outfile, self.path)
-                metadata_json = json.dumps(self.metadata, indent=4)
+                # setup path for metadata
                 metadata_mod_path = self.path / "experiment_modified.xenium"
-                print(f"\t\tSave metadata to {metadata_mod_path}", flush=True)
-                with open(metadata_mod_path, "w") as metafile:
-                    metafile.write(metadata_json)
+                if image_type == "histo":
+                    # in case of histo RGB images, the channels are in the third axis and OpenCV can transform them
+                    #registered = cv2.warpAffine(_image, _T, (w, h))
+                    
+                    if hasattr(imreg_complete, "image_resized"):
+                        imreg_selected.image_resized = imreg_complete.image_resized  # use resized original image
+                    else:
+                        assert not hasattr(imreg_selected, "image_resized")
+                        imreg_selected.image = imreg_complete.image  # use original image
+                    
+                    # perform registration
+                    imreg_selected.perform_registration()
+                        
+                    # save files
+                    imreg_selected.save(path=self.path,
+                                        filename=f"{self.slide_id}__{self.region_id}__{self.image_names}",
+                                        axes=axes_image,
+                                        photometric='rgb'
+                                        )
+                    
+                    # save metadata
+                    self.metadata['images'][f'registered_{self.image_names}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path)
+                    self.save_metadata()
+                        
+                    del imreg_complete, imreg_selected, image, template, selected, eo, dab
+                else:
+                    # image_type is IF
+                    # In case of IF images the channels are normally in the first axis and each channel is registered separately
+                    # Further, each channel is then saved separately as grayscale image.
+                    
+                    # iterate over channels
+                    for i, n in enumerate(self.image_names):
+                        # skip the DAPI image
+                        if n == nuclei_name:
+                            break
+                        
+                        if hasattr(imreg_complete, "image_resized"):
+                            # select one channel from resized original image
+                            imreg_selected.image_resized = np.take(imreg_complete.image_resized, i, channel_axis)
+                        else:
+                            assert not hasattr(imreg_selected, "image_resized")
+                            # select one channel from non-resized original image
+                            imreg_selected.image = np.take(imreg_complete.image, i, channel_axis)
+                            
+                        # perform registration
+                        imreg_selected.perform_registration()
+                        
+                        # save files
+                        imreg_selected.save(path=self.path,
+                                        filename=f"{self.slide_id}__{self.region_id}__{n}",
+                                        axes='YX',
+                                        photometric='minisblack'
+                                        )
+                        
+                        # save metadata
+                        self.metadata['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path)
+                        self.save_metadata()
 
-                # free RAM
-                del imreg_complete, imreg_selected, image, template, selected, eo, dab
+                    # free RAM
+                    del imreg_complete, imreg_selected, image, template, selected
                 gc.collect()
-        

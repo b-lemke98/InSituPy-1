@@ -41,11 +41,11 @@ def write_ome_tiff(
         else:
             raise FileExistsError("Input file exists already ({}).\nFor overwriting it, select `overwrite=True`".format(file))
         
-    # get id of channel axis
-    if not "S" in axes:
-        channel_axis = axes.find("C")
-    else:
-        channel_axis = -1
+    # # get id of channel axis
+    # if not "S" in axes:
+    #     channel_axis = axes.find("C")
+    # else:
+    #     channel_axis = -1
 
     #fn = filename + ".ome.tif"
     with tf.TiffWriter(file, bigtiff=True) as tif:
@@ -77,7 +77,7 @@ def write_ome_tiff(
         for i in range(subresolutions):
             scale /= subres_steps
             #downsample = img_resize(image,scale),
-            image = resize_image(image, scale_factor=1/subres_steps, channel_axis=channel_axis)
+            image = resize_image(image, scale_factor=1/subres_steps, axes=axes)
             tif.write(
                 #np.moveaxis(downsample, channel_axis, 0),
                 image,

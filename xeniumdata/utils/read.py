@@ -48,19 +48,31 @@ def read_matrix(self,
     self.matrix.obs.drop(coord_cols, axis=1, inplace=True)
     
 def read_images(self,
-                dapi_type: str = "focus"
+                dapi_type: str = "focus",
+                pattern_img_file: str = "{slide_id}__{region_id}__{image_name}__registered"
                 ):
     # get available image keys in metadata
-    dapi_key = f"morphology_{dapi_type}_filepath"
     img_keys = [elem for elem in self.metadata["images"] if elem.startswith("registered")]
-    img_keys = [dapi_key] + img_keys
     
     # get image files from keys
     img_files = [self.metadata["images"][k] for k in img_keys]
             
     # extract image names
-    self.img_names = [elem.split(".")[0].split("_")[1] for elem in img_files[1:]]
+    self.img_names = []
+    for img_file in img_files:
+        stem = Path(img_file).name.split(".")[0] # get stem of .ome.tif file
+        
+        # parse name
+        img_file_parsed = parse(pattern_img_file, stem)
+        self.img_names.append(img_file_parsed.named["image_name"])
+    
+    #self.img_names = [elem.split(".")[0].split("_")[1] for elem in img_files[1:]]
+    
+    # add information about dapi
+    dapi_key = f"morphology_{dapi_type}_filepath"
     self.img_names = ["DAPI"] + self.img_names
+    img_files = [self.metadata["images"][dapi_key]] + img_files
+    img_keys = [dapi_key] + img_keys
     
     # load image
     self.images = ImageData(self.path, img_files, self.img_names)

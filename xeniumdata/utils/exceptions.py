@@ -107,3 +107,21 @@ class FileNotFoundError(Exception):
                  ):
         self.message = f"{name} file was not found. Searched for file name {filename} in following directory:\n{directory}"
         super().__init__(self.message)
+        
+        
+class NotEnoughFeatureMatchesError(Exception):
+    """Exception raised if not enough feature matches were found.
+
+    Args:
+        number: 
+            Number of feature matches that were found.
+        threshold: 
+            Threshold of number of feature matches.
+    """
+
+    def __init__(self, 
+                 number: str, 
+                 threshold: str
+                 ):
+        self.message = f"A maximum of {number} matched features were found. This was below the threshold of {threshold}."
+        super().__init__(self.message)
