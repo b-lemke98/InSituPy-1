@@ -123,8 +123,9 @@ class ImageRegistration:
                 self.image, size_limit=SHRT_MAX, return_scale_factor=True, axes=self.axes_image
                 )
         else:
+            self.image_resized = None
             self.resize_factor_image = 1
-        
+            
     def extract_features(self):
         '''
         Function to extract paired features from image and template.
@@ -267,12 +268,12 @@ class ImageRegistration:
     def perform_registration(self):
 
         # determine which image to be registered here
-        if hasattr(self, "image_resized"):
-            self.image_to_register = self.image_resized
-            self.T_to_register = self.T_resized
-        else:
+        if self.image_resized is None:
             self.image_to_register = self.image
             self.T_to_register = self.T
+        else:
+            self.image_to_register = self.image_resized
+            self.T_to_register = self.T_resized
 
         # determine the kind of transformation
         warp_func, warp_name = (cv2.warpPerspective, "perspective") if self.perspective_transform else (cv2.warpAffine, "affine")

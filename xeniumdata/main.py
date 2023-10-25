@@ -268,28 +268,17 @@ class XeniumData:
                 self.read_images(names="nuclei")
                 template = self.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
                 
-                # Setup image registration object - is important to load and scale the images.
-                # The reason for this are limits in C++, not allowing to perform certain OpenCV functions on big images.
-                imreg_complete = ImageRegistration(
-                    image=image,
-                    template=template,
-                    axes_image=axes_image,
-                    axes_template=axes_template,
-                    verbose=False
-                    )
-                imreg_complete.load_and_scale_images()
-                
                 # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
                 axes_selected = "YX" 
                 if image_type == "histo":
                     print("\t\tRun color deconvolution", flush=True)
                     # deconvolve HE - performed on resized image to save memory
                     # TODO: Scale to max width instead of using a fixed scale factor before deconvolution (`scale_to_max_width`)
-                    selected, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor, axes=axes_selected), 
+                    nuclei_img, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor, axes=axes_selected), 
                                                 return_type="grayscale", convert=True)
 
                     # bring back to original size
-                    selected = resize_image(selected, scale_factor=1/decon_scale_factor, axes=axes_selected)
+                    nuclei_img = resize_image(nuclei_img, scale_factor=1/decon_scale_factor, axes=axes_selected)
                     
                     # set nuclei_channel and nuclei_axis to None
                     nuclei_channel = channel_axis = None
@@ -308,15 +297,26 @@ class XeniumData:
                         raise TypeError("Argument `nuclei_channel` should be an integer and not NoneType.")
                     
                     # select dapi channel for registration
-                    selected = np.take(image, nuclei_channel, channel_axis)
+                    nuclei_img = np.take(image, nuclei_channel, channel_axis)
                     #selected = image[nuclei_channel]
+                    
+                # Setup image registration objects - is important to load and scale the images.
+                # The reason for this are limits in C++, not allowing to perform certain OpenCV functions on big images.
                 
-                
+                # First: Setup the ImageRegistration object for the whole image (before deconvolution in histo images and multi-channel in IF)
+                imreg_complete = ImageRegistration(
+                    image=image,
+                    template=template,
+                    axes_image=axes_image,
+                    axes_template=axes_template,
+                    verbose=False
+                    )
+                # load and scale the whole image
+                imreg_complete.load_and_scale_images()
 
-                print("\t\tExtract common features from image and template", flush=True)
-                # perform registration to extract the common features ptsA and ptsB
+                # setup ImageRegistration object with the nucleus image (either from deconvolution or just selected from IF image)
                 imreg_selected = ImageRegistration(
-                    image=selected,
+                    image=nuclei_img,
                     template=imreg_complete.template,
                     axes_image=axes_selected,
                     axes_template=axes_template,
@@ -327,18 +327,18 @@ class XeniumData:
                 
                 # run all steps to extract features and get transformation matrix
                 imreg_selected.load_and_scale_images()
+                
+                print("\t\tExtract common features from image and template", flush=True)
+                # perform registration to extract the common features ptsA and ptsB
                 imreg_selected.extract_features()
                 imreg_selected.calculate_transformation_matrix()
                 
-                # setup path for metadata
-                metadata_mod_path = self.path / "experiment_modified.xenium"
                 if image_type == "histo":
-                    # in case of histo RGB images, the channels are in the third axis and OpenCV can transform them                    
-                    if hasattr(imreg_complete, "image_resized"):
-                        imreg_selected.image_resized = imreg_complete.image_resized  # use resized original image
-                    else:
-                        assert not hasattr(imreg_selected, "image_resized")
+                    # in case of histo RGB images, the channels are in the third axis and OpenCV can transform them
+                    if imreg_complete.image_resized is None:
                         imreg_selected.image = imreg_complete.image  # use original image
+                    else:
+                        imreg_selected.image_resized = imreg_complete.image_resized  # use resized original image
                     
                     # perform registration
                     imreg_selected.perform_registration()
@@ -354,7 +354,7 @@ class XeniumData:
                     self.metadata['images'][f'registered_{self.image_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path)
                     self.save_metadata()
                         
-                    del imreg_complete, imreg_selected, image, template, selected, eo, dab
+                    del imreg_complete, imreg_selected, image, template, nuclei_img, eo, dab
                 else:
                     # image_type is IF
                     # In case of IF images the channels are normally in the first axis and each channel is registered separately
@@ -366,13 +366,12 @@ class XeniumData:
                         if n == nuclei_name:
                             break
                         
-                        if hasattr(imreg_complete, "image_resized"):
-                            # select one channel from resized original image
-                            imreg_selected.image_resized = np.take(imreg_complete.image_resized, i, channel_axis)
-                        else:
-                            assert not hasattr(imreg_selected, "image_resized")
+                        if imreg_complete.image_resized is None:
                             # select one channel from non-resized original image
                             imreg_selected.image = np.take(imreg_complete.image, i, channel_axis)
+                        else:
+                            # select one channel from resized original image
+                            imreg_selected.image_resized = np.take(imreg_complete.image_resized, i, channel_axis)
                             
                         # perform registration
                         imreg_selected.perform_registration()
@@ -389,5 +388,5 @@ class XeniumData:
                         self.save_metadata()
 
                     # free RAM
-                    del imreg_complete, imreg_selected, image, template, selected
+                    del imreg_complete, imreg_selected, image, template, nuclei_img
                 gc.collect()
