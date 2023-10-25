@@ -30,8 +30,6 @@ class ImageRegistration:
                  template: Union[np.ndarray, da.Array],
                  axes_image: str = "YXS", ## channel axes - other examples: 'TCYXS'. S for RGB channels.
                  axes_template: str = "YX",  # channel axes of template. Normally it is just a grayscale image - therefore YX.
-                #  channel_axis_image: int = -1,  # position of the channel axis in image
-                #  channel_axis_template: int = None,  # position of channel axis in template. Usually None for DAPI.
                  max_width: Optional[int] = 4000,
                  convert_to_grayscale: bool = False,
                  perspective_transform: bool = False,
@@ -46,17 +44,12 @@ class ImageRegistration:
         
         # check verbose mode
         self.verboseprint = print if verbose else lambda *a, **k: None
-        
-        # # Loop through params and setattr v to self.k
-        # for k,v in locals().items():
-        #     if k!='self':
-        #         setattr(self, k, v)
+
+        # add arguments to object
         self.image = image
         self.template = template
         self.axes_image = axes_image
         self.axes_template = axes_template
-        # self.channel_axis_image = channel_axis_image
-        # self.channel_axis_template = channel_axis_template
         self.max_width = max_width
         self.convert_to_grayscale = convert_to_grayscale
         self.perspective_transform = perspective_transform

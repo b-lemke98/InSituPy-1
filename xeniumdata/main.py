@@ -250,9 +250,6 @@ class XeniumData:
                     
                     if len(self.image_names) == 0:
                         raise ValueError(f"No image name found in file {img_file}")
-                    # else:
-                    #     # in case of histo images only one image name should be given
-                    #     self.image_names = self.image_names[0]
                     
                 elif image_type == "IF":
                     axes_image = "CYX"
@@ -335,31 +332,10 @@ class XeniumData:
                 imreg_selected.extract_features()
                 imreg_selected.calculate_transformation_matrix()
                 
-                # Use the transformation matrix to register image to the template
-                # First, determine if the image was resized before performing the steps above (necessary due to C++ limits in OpenCV)
-                # Then, add the correct image to the ImageRegistration object that is used for registration
-                # if hasattr(imreg_complete, "image_resized"):
-                #     imreg_selected.image_resized = imreg_complete.image_resized  # use resized original image
-                #     # _image = imreg_complete.image_resized # use resized original image
-                #     # _T = imreg_selected.T_resized # use resized transformation matrix generated with selected image
-                # else:
-                #     assert not hasattr(imreg_selected, "image_resized")
-                #     imreg_selected.image = imreg_complete.image  # use original image
-                    # _image = imreg_complete.image # use original image
-                    # _T = imreg_selected.T # use original transformation matrix generated with selected image
-                
-                # print("\t\tDo registration", flush=True)
-                # if imreg_selected.flip_axis is not None:
-                #     print(f"\t\tImage is flipped {'vertically' if imreg_selected.flip_axis == 0 else 'horizontally'}", flush=True)
-                #     _image = np.flip(_image, axis=imreg_selected.flip_axis)
-                # (h, w) = template.shape[:2]
-                
                 # setup path for metadata
                 metadata_mod_path = self.path / "experiment_modified.xenium"
                 if image_type == "histo":
-                    # in case of histo RGB images, the channels are in the third axis and OpenCV can transform them
-                    #registered = cv2.warpAffine(_image, _T, (w, h))
-                    
+                    # in case of histo RGB images, the channels are in the third axis and OpenCV can transform them                    
                     if hasattr(imreg_complete, "image_resized"):
                         imreg_selected.image_resized = imreg_complete.image_resized  # use resized original image
                     else:

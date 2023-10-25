@@ -43,7 +43,6 @@ class AnnotationData:
         self.n_annotations.append(len(dataframe))
         self.classes.append(dataframe.name.unique())
         self.analyzed.append("")
-        #self.n_classes.append(len(dataframe.name.unique()))
 
 class ImageData:
     '''

@@ -59,9 +59,7 @@ def fit_image_to_size_limit(image: NDArray,
     '''
     Function to resize image if necessary (warpAffine has a size limit for the image that is transformed).
     '''
-    # get information about channels
-    #image_axes = ImageAxes(pattern=axes)
-    
+    # retrieve image dimensions
     orig_shape_image = image.shape
     xy_shape_image = orig_shape_image[:2]
     
@@ -110,17 +108,6 @@ def scale_to_max_width(image: np.ndarray,
     '''
     image_axes = ImageAxes(pattern=axes)
     image_yx = (image.shape[image_axes.Y], image.shape[image_axes.X])
-    # if image_axes.C is not None:
-    #     image_xy = tuple([image.shape[i] for i in range(3) if i != 0])  # extract image shape based on channel axis
-    # else:
-    #     # if the channel_axis is None, the image does not have a channel axis, meaning it is a grayscale image
-    #     image_xy = image.shape
-        
-    #image_xy = image.shape[:2] # extract image shape assuming that the channels are in third dimension
-    #num_dim = len(image.shape)
-    
-    # if num_dim == 3:
-    #     assert image.shape[-1] == 3, "Image has three dimensions but the third channel is not 3. No RGB?"
     
     if not use_square_area:
         # scale to the longest side of the image. Not good for very elongated images.
