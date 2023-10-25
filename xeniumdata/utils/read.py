@@ -48,7 +48,7 @@ def read_matrix(self,
     self.matrix.obs.drop(coord_cols, axis=1, inplace=True)
     
 def read_images(self,
-                names: Union["all", "nuclei", str] = "all", # here a specific image can be chosen
+                names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
                 dapi_type: str = "focus"
                 ):
 
