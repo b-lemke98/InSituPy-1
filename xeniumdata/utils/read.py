@@ -55,6 +55,7 @@ def read_images(self,
 
     if names == "nuclei":
         img_keys = [f"morphology_{dapi_type}_filepath"]
+        img_names = ["nuclei"]
     else:
         # get available keys for registered images in metadata
         img_keys = [elem for elem in self.metadata["images"] if elem.startswith("registered")]
