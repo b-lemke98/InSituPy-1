@@ -4,7 +4,6 @@ import os
 import scanpy as sc
 import pandas as pd
 from .utils import decode_robust, decode_robust_series, convert_to_list
-from .utils import decode_robust, decode_robust_series, convert_to_list
 from .annotations import read_qupath_annotation
 from parse import *
 from .data import ImageData, BoundariesData, AnnotationData
@@ -50,32 +49,9 @@ def read_matrix(self,
     
 def read_images(self,
                 names: Union["all", "nuclei", str] = "all", # here a specific image can be chosen
-                names: Union["all", "nuclei", str] = "all", # here a specific image can be chosen
                 dapi_type: str = "focus",
                 pattern_img_file: str = "{slide_id}__{region_id}__{image_name}__registered"
                 ):
-
-    if names == "nuclei":
-        img_keys = [f"morphology_{dapi_type}_filepath"]
-    else:
-        # get available keys for registered images in metadata
-        img_keys = [elem for elem in self.metadata["images"] if elem.startswith("registered")]
-        
-        # extract image names from keys and add nuclei
-        img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
-        
-        # add dapi image key
-        img_keys = [f"morphology_{dapi_type}_filepath"] + img_keys
-        
-        if names != "all":
-            # make sure keys is a list
-            names = convert_to_list(names)
-            # select the specified keys
-            mask = [elem in names for elem in img_names]
-            img_keys = [elem for m, elem in zip(mask, img_keys) if m]
-            img_names = [elem for m, elem in zip(mask, img_names) if m]
-            
-    # get path of image files
 
     if names == "nuclei":
         img_keys = [f"morphology_{dapi_type}_filepath"]
