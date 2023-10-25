@@ -49,8 +49,7 @@ def read_matrix(self,
     
 def read_images(self,
                 names: Union["all", "nuclei", str] = "all", # here a specific image can be chosen
-                dapi_type: str = "focus",
-                pattern_img_file: str = "{slide_id}__{region_id}__{image_name}__registered"
+                dapi_type: str = "focus"
                 ):
 
     if names == "nuclei":
