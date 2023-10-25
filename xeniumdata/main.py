@@ -139,6 +139,14 @@ class XeniumData:
             )
         return repr
     
+    def copy(self):
+        '''
+        Function to generate a deep copy of the XeniumData object.
+        '''
+        from copy import deepcopy
+        
+        return deepcopy(self)
+    
     def plot_dimred(self, save: Optional[str] = None):
         '''
         Read dimensionality reduction plots.
