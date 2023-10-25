@@ -247,18 +247,19 @@ class XeniumData:
                     # make sure that there is only one image name given
                     if len(self.image_names) > 1:
                         raise ValueError(f"More than one image name retrieved ({self.image_names})")
-                    elif len(self.image_names) == 0:
+                    
+                    if len(self.image_names) == 0:
                         raise ValueError(f"No image name found in file {img_file}")
-                    else:
-                        # in case of histo images only one image name should be given
-                        self.image_names = self.image_names[0]
+                    # else:
+                    #     # in case of histo images only one image name should be given
+                    #     self.image_names = self.image_names[0]
                     
                 elif image_type == "IF":
                     axes_image = "CYX"
                 else:
                     raise UnknownOptionError(image_type, available=["histo", "IF"])
                 
-                print(f'\tProcessing {tf.Bold}{self.image_names}{tf.ResetAll} {image_type} image', flush=True)
+                print(f'\tProcessing following {image_type} images: {tf.Bold}{", ".join(self.image_names)}{tf.ResetAll}', flush=True)
 
                 # read images
                 print("\t\tLoading images...", flush=True)
@@ -270,8 +271,8 @@ class XeniumData:
                     image = image[0]
                     
                 # read images in XeniumData object
-                self.read_images()
-                template = self.images.DAPI[0] # usually DAPI image. Use highest resolution of pyramid.
+                self.read_images(names="nuclei")
+                template = self.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
                 
                 # Setup image registration object - is important to load and scale the images.
                 # The reason for this are limits in C++, not allowing to perform certain OpenCV functions on big images.
@@ -370,13 +371,13 @@ class XeniumData:
                         
                     # save files
                     imreg_selected.save(path=self.path,
-                                        filename=f"{self.slide_id}__{self.region_id}__{self.image_names}",
+                                        filename=f"{self.slide_id}__{self.region_id}__{self.image_names[0]}",
                                         axes=axes_image,
                                         photometric='rgb'
                                         )
                     
                     # save metadata
-                    self.metadata['images'][f'registered_{self.image_names}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path)
+                    self.metadata['images'][f'registered_{self.image_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path)
                     self.save_metadata()
                         
                     del imreg_complete, imreg_selected, image, template, selected, eo, dab
