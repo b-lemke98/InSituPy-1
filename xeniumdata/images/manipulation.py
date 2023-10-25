@@ -60,7 +60,7 @@ def fit_image_to_size_limit(image: NDArray,
     Function to resize image if necessary (warpAffine has a size limit for the image that is transformed).
     '''
     # get information about channels
-    image_axes = ImageAxes(pattern=axes)
+    #image_axes = ImageAxes(pattern=axes)
     
     orig_shape_image = image.shape
     xy_shape_image = orig_shape_image[:2]
@@ -74,7 +74,7 @@ def fit_image_to_size_limit(image: NDArray,
     new_shape = tuple(new_shape)
 
     # resize image
-    resized_image = resize_image(image, dim=(new_shape[1], new_shape[0]))
+    resized_image = resize_image(image, dim=(new_shape[1], new_shape[0]), axes=axes)
     
     if return_scale_factor:
         return resized_image, sf_image
@@ -102,7 +102,8 @@ def scale_to_max_width(image: np.ndarray,
                        max_width: int = 4000,
                        use_square_area: bool = False,
                        #channel_axis: int = 2,
-                       verbose: bool = True
+                       verbose: bool = True,
+                       print_spacer: str = ""
                        ):
     '''
     Function to scale image to a maximum width or square area.
@@ -149,6 +150,6 @@ def scale_to_max_width(image: np.ndarray,
                 
     # resizing - caution: order of dimensions is reversed in OpenCV compared to numpy
     image_scaled = resize_image(img=image, dim=(new_shape[1], new_shape[0]), axes=axes)
-    print("Rescaled to following dimensions: {}".format(image_scaled.shape)) if verbose else None
+    print(f"{print_spacer}Rescaled to following dimensions: {image_scaled.shape}") if verbose else None
     
     return image_scaled

@@ -6,12 +6,12 @@ from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from .utils import convert_to_list
 from .exceptions import XeniumDataMissingObject
 
-def interactive(self,
+def show(self,
     cell_type_key: Optional[str] = None,
     mask: Optional[List[bool]] = None,
     annotation_labels: Optional[str] = None,
     show_images: bool = True,
-    show_cells: bool = True,
+    show_cells: bool = False,
     cmap_cells="tab20",
     cmap_annotations="Dark2"
     ):

@@ -50,7 +50,7 @@ class XeniumData:
     from .utils.preprocessing import normalize, hvg, reduce_dimensions
     
     # import visualization functions
-    from .utils.visualize import interactive
+    from .utils.visualize import show
     
     # import crop function
     from .utils.crop import crop    
@@ -65,6 +65,10 @@ class XeniumData:
         if matrix is None:
             self.path = Path(path)
             self.transcript_filename = transcript_filename
+            
+            # check if path exists
+            if not self.path.is_dir():
+                raise FileNotFoundError(f"No such directory found: {str(self.path)}")
             
             # check for modified metadata_filename
             metadata_files = [elem.name for elem in self.path.glob("*.xenium")]
@@ -197,8 +201,12 @@ class XeniumData:
         self.img_dir = Path(img_dir)
         self.pattern_img_file = pattern_img_file
         
-        print(f"Processing path {tf.Bold}{self.path}{tf.ResetAll}", flush=True)
-
+        # check if image path exists
+        if not self.img_dir.is_dir():
+            raise FileNotFoundError(f"No such directory found: {str(self.img_dir)}")
+        
+        print(f"Processing region {tf.Bold}{self.region_id}{tf.ResetAll} of slide {tf.Bold}{self.slide_id}{tf.ResetAll}", flush=True)        
+        
         # get a list of image files
         img_files = sorted(self.img_dir.glob("*{}".format(img_suffix)))
         
@@ -207,7 +215,7 @@ class XeniumData:
         
         # make sure images corresponding to the Xenium data were found
         if len(corr_img_files) == 0:
-            print(f'\tNo image corresponding to the slide_id `{self.slide_id}` and the region_id `{self.region_id}` were found.')
+            print(f'\tNo image corresponding to slide`{self.slide_id}` and region `{self.region_id}` were found.')
         else:
             if self.metadata_filename == "experiment_modified.xenium":
                 print(f"\tFound modified `{self.metadata_filename}` file. Information will be added to this file.")
@@ -242,7 +250,7 @@ class XeniumData:
                 else:
                     raise UnknownOptionError(image_type, available=["histo", "IF"])
                 
-                print(f'\tProcessing {tf.Bold}"{self.image_names}"{tf.ResetAll} {image_type} image', flush=True)
+                print(f'\tProcessing {tf.Bold}{self.image_names}{tf.ResetAll} {image_type} image', flush=True)
 
                 # read images
                 print("\t\tLoading images...", flush=True)

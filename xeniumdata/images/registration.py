@@ -95,13 +95,15 @@ class ImageRegistration:
                                                    axes=self.axes_image,
                                                    max_width=self.max_width, 
                                                    use_square_area=True,
-                                                   verbose=self.verbose
+                                                   verbose=self.verbose,
+                                                   print_spacer="\t\t\t"
                                                    )
             self.template_scaled = scale_to_max_width(self.template, 
                                                       axes=self.axes_template,
                                                       max_width=self.max_width, 
                                                       use_square_area=True,
-                                                      verbose=self.verbose
+                                                      verbose=self.verbose,
+                                                      print_spacer="\t\t\t"
                                                       )
         else:
             self.image_scaled = self.image
@@ -127,7 +129,9 @@ class ImageRegistration:
                 "This leads to a loss of quality.".format(self.image.shape, SHRT_MAX))
             
             # fit image
-            self.image_resized, self.resize_factor_image = fit_image_to_size_limit(self.image, size_limit=SHRT_MAX, return_scale_factor=True)
+            self.image_resized, self.resize_factor_image = fit_image_to_size_limit(
+                self.image, size_limit=SHRT_MAX, return_scale_factor=True, axes=self.axes_image
+                )
         else:
             self.resize_factor_image = 1
         
@@ -352,8 +356,13 @@ class ImageRegistration:
 
         # save transformation matrix
         T = np.vstack([_T, [0,0,1]]) # add last line of affine transformation matrix
-        T_csv = reg_dir / f"{filename}__H.csv"
+        T_csv = reg_dir / f"{filename}__T.csv"
         np.savetxt(T_csv, T, delimiter=",") # save as .csv file
+        
+        if self.resize_factor_image != 1:
+            T = np.vstack([self.T, [0,0,1]]) # add last line of affine transformation matrix
+            T_csv = reg_dir / f"{filename}__T_original.csv"
+            np.savetxt(T_csv, T, delimiter=",") # save as .csv file
 
         # remove last line break from csv since this gives error when importing to Xenium Explorer
         remove_last_line_from_csv(T_csv)
