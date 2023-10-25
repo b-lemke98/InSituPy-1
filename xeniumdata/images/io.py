@@ -1,5 +1,4 @@
 import tifffile as tf
-import sys
 import numpy as np
 import cv2
 from pathlib import Path

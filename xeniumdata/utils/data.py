@@ -3,7 +3,6 @@ from pathlib import Path
 import os
 import pandas as pd
 import geopandas as gpd
-import numpy as np
 from shapely import Polygon
 from tifffile import imread
 from .utils import textformat as tf

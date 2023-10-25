@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 import scanpy as sc
 import pandas as pd
-from .utils import decode_robust, decode_robust_series, convert_to_list
+from .utils import decode_robust_series, convert_to_list
 from .annotations import read_qupath_annotation
 from parse import *
 from .data import ImageData, BoundariesData, AnnotationData
