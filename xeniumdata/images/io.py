@@ -1,5 +1,4 @@
 import tifffile as tf
-import sys
 import numpy as np
 import cv2
 from pathlib import Path
@@ -40,14 +39,7 @@ def write_ome_tiff(
             file.unlink() # delete file
         else:
             raise FileExistsError("Input file exists already ({}).\nFor overwriting it, select `overwrite=True`".format(file))
-        
-    # get id of channel axis
-    if not "S" in axes:
-        channel_axis = axes.find("C")
-    else:
-        channel_axis = -1
 
-    #fn = filename + ".ome.tif"
     with tf.TiffWriter(file, bigtiff=True) as tif:
         metadata={**metadata,
                   **{
@@ -65,7 +57,6 @@ def write_ome_tiff(
             resolutionunit='CENTIMETER'
         )
         tif.write(
-            #np.moveaxis(image, channel_axis, 0),
             image,
             subifds=subresolutions,
             resolution=(1e4 / pixelsize, 1e4 / pixelsize),
@@ -76,10 +67,8 @@ def write_ome_tiff(
         scale = 1
         for i in range(subresolutions):
             scale /= subres_steps
-            #downsample = img_resize(image,scale),
-            image = resize_image(image, scale_factor=1/subres_steps, channel_axis=channel_axis)
+            image = resize_image(image, scale_factor=1/subres_steps, axes=axes)
             tif.write(
-                #np.moveaxis(downsample, channel_axis, 0),
                 image,
                 subfiletype=1,
                 resolution=(1e4 / scale / pixelsize,1e4 / scale / pixelsize),

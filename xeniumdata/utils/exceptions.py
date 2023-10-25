@@ -2,6 +2,10 @@ class ModuleNotFoundOnWindows(ModuleNotFoundError):
     '''
     Code from https://github.com/theislab/scib/blob/main/scib/exceptions.py
     Information about structure: https://careerkarma.com/blog/python-super/
+    
+    Args:
+        exception:
+            Exception returned by OS.
     '''
 
     def __init__(self, exception):
@@ -13,9 +17,11 @@ class XeniumDataRepeatedCropError(Exception):
     """Exception raised if it is attempted to crop a
     XeniumData object multiple times with the same cropping window.
 
-    Attributes:
-        xlim: Limits on x-axis.
-        ylim: Limits on y-axis.
+    Args:
+        xlim: 
+            Limits on x-axis.
+        ylim: 
+            Limits on y-axis.
     """
 
     def __init__(self, xlim, ylim):
@@ -30,8 +36,9 @@ class XeniumDataMissingObject(Exception):
     """Exception raised if a certain object is not available in the XeniumData object.
     Maybe it has to be read first
 
-    Attributes:
-        name: Name of object that is searched for.
+    Args:
+        name: 
+            Name of object that is searched for.
     """
 
     def __init__(self, name):
@@ -43,9 +50,11 @@ class XeniumDataMissingObject(Exception):
 class WrongNapariLayerTypeError(Exception):
     """Exception raised if current layer has not the right format.
 
-    Attributes:
-        found: Napari layer type found.
-        wanted: Napari layer type wanted.
+    Args:
+        found: 
+            Napari layer type found.
+        wanted: 
+            Napari layer type wanted.
     """
 
     def __init__(self, found, wanted):
@@ -55,10 +64,62 @@ class WrongNapariLayerTypeError(Exception):
 class NotOneElementError(Exception):
     """Exception raised if list contains not exactly one element.
 
-    Attributes:
+    Args:
         list: List which does not contain one element.
     """
 
     def __init__(self, l):
         self.message = f"List was expected to contain one element but contained {len(l)}"
+        super().__init__(self.message)
+        
+class UnknownOptionError(Exception):
+    """Exception raised if a certain option is not found in a list of possible options.
+
+    Args:
+        name: 
+            Name of object that is searched for.
+        available: 
+            List of available options.
+    """
+
+    def __init__(self, name, available):
+        self.message = f"Option {name} is not available. Following parameters are allowed: {', '.join(available)}"
+        super().__init__(self.message)
+        
+class FileNotFoundError(Exception):
+    """Exception raised if a certain file is not found.
+
+    Args:
+        name: 
+            General name of the file (e.g. metadata)
+        filename: 
+            File name of the file that was not found (e.g. experiment.xenium)
+        directory: 
+            Directory in which the file was searched.
+    """
+
+    def __init__(self, 
+                 name: str, 
+                 filename: str,
+                 directory: str
+                 ):
+        self.message = f"{name} file was not found. Searched for file name {filename} in following directory:\n{directory}"
+        super().__init__(self.message)
+        
+        
+class NotEnoughFeatureMatchesError(Exception):
+    """Exception raised if not enough feature matches were found.
+
+    Args:
+        number: 
+            Number of feature matches that were found.
+        threshold: 
+            Threshold of number of feature matches.
+    """
+
+    def __init__(self, 
+                 number: str, 
+                 threshold: str
+                 ):
+        self.message = f"A maximum of {number} matched features were found. This was below the threshold of {threshold}."
         super().__init__(self.message)

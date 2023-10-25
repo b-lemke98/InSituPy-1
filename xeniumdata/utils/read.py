@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 import scanpy as sc
 import pandas as pd
-from .utils import decode_robust, decode_robust_series
+from .utils import decode_robust_series, convert_to_list
 from .annotations import read_qupath_annotation
 from parse import *
 from .data import ImageData, BoundariesData, AnnotationData
@@ -48,22 +48,37 @@ def read_matrix(self,
     self.matrix.obs.drop(coord_cols, axis=1, inplace=True)
     
 def read_images(self,
+                names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
                 dapi_type: str = "focus"
                 ):
-    # get available image keys in metadata
-    dapi_key = f"morphology_{dapi_type}_filepath"
-    img_keys = [elem for elem in self.metadata["images"] if elem.startswith("registered")]
-    img_keys = [dapi_key] + img_keys
-    
-    # get image files from keys
-    img_files = [self.metadata["images"][k] for k in img_keys]
+
+    if names == "nuclei":
+        img_keys = [f"morphology_{dapi_type}_filepath"]
+        img_names = ["nuclei"]
+    else:
+        # get available keys for registered images in metadata
+        img_keys = [elem for elem in self.metadata["images"] if elem.startswith("registered")]
+        
+        # extract image names from keys and add nuclei
+        img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
+        
+        # add dapi image key
+        img_keys = [f"morphology_{dapi_type}_filepath"] + img_keys
+        
+        if names != "all":
+            # make sure keys is a list
+            names = convert_to_list(names)
+            # select the specified keys
+            mask = [elem in names for elem in img_names]
+            img_keys = [elem for m, elem in zip(mask, img_keys) if m]
+            img_names = [elem for m, elem in zip(mask, img_names) if m]
             
-    # extract image names
-    self.img_names = [elem.split(".")[0].split("_")[1] for elem in img_files[1:]]
-    self.img_names = ["DAPI"] + self.img_names
+    # get path of image files
+    img_files = [self.metadata["images"][k] for k in img_keys]
+        
+    # load image into ImageData object
+    self.images = ImageData(self.path, img_files, img_names)
     
-    # load image
-    self.images = ImageData(self.path, img_files, self.img_names)
     
 def read_transcripts(self):
     # read transcripts
