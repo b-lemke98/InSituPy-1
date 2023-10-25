@@ -328,11 +328,20 @@ class ImageRegistration:
              _T: Optional[np.ndarray] = None,  # transformation matrix
              matchedVis: Optional[np.ndarray] = None  # image showing the matched visualization
              ):
-        # Optionally the registered image, transformation matrix and matchedVis can be added externally. Otherwise they are taken from self.
+        # Optionally the registered image, transformation matrix and matchedVis can be added externally. 
+        # Otherwise they are retrieved from self.
         if registered is None:
             registered = self.registered
+            
         if _T is None:
-            _T = self.T_to_register
+            if self.resize_factor_image == 1:
+                # if the image was not resized the transformation matrix to save is identical to the one used for registration
+                T_to_save = self.T_to_register
+            else:
+                # if the image WAS resized the transformation matrix to save is not identical to the one used for registration
+                # instead the transformation matrix before resizing needs to be used
+                T_to_save = self.T
+
         if matchedVis is None:
             matchedVis = self.matchedVis
             
@@ -355,14 +364,9 @@ class ImageRegistration:
         print(f"\t\tSave QC files to {reg_dir}", flush=True)
 
         # save transformation matrix
-        T = np.vstack([_T, [0,0,1]]) # add last line of affine transformation matrix
+        T_to_save = np.vstack([T_to_save, [0,0,1]]) # add last line of affine transformation matrix
         T_csv = reg_dir / f"{filename}__T.csv"
-        np.savetxt(T_csv, T, delimiter=",") # save as .csv file
-        
-        if self.resize_factor_image != 1:
-            T = np.vstack([self.T, [0,0,1]]) # add last line of affine transformation matrix
-            T_csv = reg_dir / f"{filename}__T_original.csv"
-            np.savetxt(T_csv, T, delimiter=",") # save as .csv file
+        np.savetxt(T_csv, T_to_save, delimiter=",") # save as .csv file
 
         # remove last line break from csv since this gives error when importing to Xenium Explorer
         remove_last_line_from_csv(T_csv)
