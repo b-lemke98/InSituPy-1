@@ -284,6 +284,7 @@ class XeniumData:
                 if image_type == "histo":
                     print("\t\tRun color deconvolution", flush=True)
                     # deconvolve HE - performed on resized image to save memory
+                    # TODO: Scale to max width instead of using a fixed scale factor before deconvolution (`scale_to_max_width`)
                     selected, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor, axes=axes_selected), 
                                                 return_type="grayscale", convert=True)
 

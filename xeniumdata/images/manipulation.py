@@ -97,7 +97,6 @@ def scale_to_max_width(image: np.ndarray,
                        axes: str,  # description of axes, e.g. YXS for RGB, CYX for IF, TYXS for time-series RGB
                        max_width: int = 4000,
                        use_square_area: bool = False,
-                       #channel_axis: int = 2,
                        verbose: bool = True,
                        print_spacer: str = ""
                        ):
