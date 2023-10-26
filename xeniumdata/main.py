@@ -142,6 +142,9 @@ class XeniumData:
         '''
         from copy import deepcopy
         
+        if hasattr(self, "viewer"):
+            del self.viewer
+        
         return deepcopy(self)
     
     def plot_dimred(self, save: Optional[str] = None):
