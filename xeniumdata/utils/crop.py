@@ -6,11 +6,20 @@ from .exceptions import XeniumDataRepeatedCropError, WrongNapariLayerTypeError, 
 def crop(self, 
          shape_layer: Optional[str] = None,
          xlim: Optional[Tuple[int, int]] = None,
-         ylim: Optional[Tuple[int, int]] = None
+         ylim: Optional[Tuple[int, int]] = None,
+         inplace: bool = False
          ):
     '''
     Function to crop the XeniumData object.
     '''
+    # check if the changes are supposed to be made in place or not
+    if inplace:
+        _self = self
+    else:
+        viewer_copy = self.viewer.copy() # copy viewer to transfer it to new object for cropping
+        _self = self.copy()
+        _self.viewer = viewer_copy
+        
     # assert that either shape_layer is given or xlim/ylim
     assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
     
@@ -24,7 +33,7 @@ def crop(self,
     
     if use_shape:
         # extract shape layer for cropping from napari viewer
-        crop_shape = self.viewer.layers[shape_layer]
+        crop_shape = _self.viewer.layers[shape_layer]
         
         # check the structure of the shape object
         if len(crop_shape.data) != 1:
@@ -42,47 +51,51 @@ def crop(self,
         ylim = (crop_window[:, 0].min(), crop_window[:, 0].max())
         
     # if the object was previously cropped, check if the current window is identical with the previous one
-    ###>> to be done
-    if np.all([elem in self.metadata.keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
+    if np.all([elem in _self.metadata.keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
         # test whether the limits are identical
-        if (xlim == self.metadata["cropping_xlim"]) & (ylim == self.metadata["cropping_ylim"]):
+        if (xlim == _self.metadata["cropping_xlim"]) & (ylim == _self.metadata["cropping_ylim"]):
             raise XeniumDataRepeatedCropError(xlim, ylim)
     
-    # infer mask from cell coordinates
-    cell_coords = self.matrix.obsm['spatial'].copy()
-    xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
-    ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
-    mask = xmask & ymask
-    
-    # select 
-    self.matrix = self.matrix[mask, :].copy()
-    
-    # move origin again to 0 by subtracting the lower limits from the coordinates
-    cell_coords = self.matrix.obsm['spatial'].copy()
-    cell_coords[:, 0] -= xlim[0]
-    cell_coords[:, 1] -= ylim[0]
-    self.matrix.obsm['spatial'] = cell_coords
+    if hasattr(_self, "matrix"):
+        # infer mask from cell coordinates
+        cell_coords = _self.matrix.obsm['spatial'].copy()
+        xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
+        ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
+        mask = xmask & ymask
+        
+        # select 
+        _self.matrix = _self.matrix[mask, :].copy()
+        
+        # move origin again to 0 by subtracting the lower limits from the coordinates
+        cell_coords = _self.matrix.obsm['spatial'].copy()
+        cell_coords[:, 0] -= xlim[0]
+        cell_coords[:, 1] -= ylim[0]
+        _self.matrix.obsm['spatial'] = cell_coords
     
     # synchronize other data modalities to match the anndata matrix
-    if hasattr(self, "boundaries"):
-        self.boundaries.sync_to_matrix(cell_ids=self.matrix.obs_names, xlim=xlim, ylim=ylim)
+    if hasattr(_self, "boundaries"):
+        _self.boundaries.sync_to_matrix(cell_ids=_self.matrix.obs_names, xlim=xlim, ylim=ylim)
         
-    if hasattr(self, "transcripts"):
+    if hasattr(_self, "transcripts"):
         # infer mask for selection
-        xmask = (self.transcripts["x_location"] >= xlim[0]) & (self.transcripts["x_location"] <= xlim[1])
-        ymask = (self.transcripts["y_location"] >= ylim[0]) & (self.transcripts["y_location"] <= ylim[1])
+        xmask = (_self.transcripts["x_location"] >= xlim[0]) & (_self.transcripts["x_location"] <= xlim[1])
+        ymask = (_self.transcripts["y_location"] >= ylim[0]) & (_self.transcripts["y_location"] <= ylim[1])
         mask = xmask & ymask
         
         # select
-        self.transcripts = self.transcripts.loc[mask, :].copy()
+        _self.transcripts = _self.transcripts.loc[mask, :].copy()
         
         # move origin again to 0 by subtracting the lower limits from the coordinates
-        self.transcripts["x_location"] -= xlim[0]
-        self.transcripts["y_location"] -= ylim[0]
+        _self.transcripts["x_location"] -= xlim[0]
+        _self.transcripts["y_location"] -= ylim[0]
         
-    if hasattr(self, "images"):
-        self.images.crop(xlim=xlim, ylim=ylim)
+    if hasattr(_self, "images"):
+        _self.images.crop(xlim=xlim, ylim=ylim)
     
     # add information about cropping to metadata
-    self.metadata["cropping_xlim"] = xlim
-    self.metadata["cropping_ylim"] = ylim
+    _self.metadata["cropping_xlim"] = xlim
+    _self.metadata["cropping_ylim"] = ylim
+    
+    if not inplace:
+        del _self.viewer # delete viewer
+        return _self
