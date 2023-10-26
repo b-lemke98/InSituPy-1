@@ -16,9 +16,11 @@ def crop(self,
     if inplace:
         _self = self
     else:
-        viewer_copy = self.viewer.copy() # copy viewer to transfer it to new object for cropping
+        if hasattr(self, "viewer"):
+            viewer_copy = self.viewer.copy() # copy viewer to transfer it to new object for cropping
         _self = self.copy()
-        _self.viewer = viewer_copy
+        if hasattr(self, "viewer"):
+            _self.viewer = viewer_copy
         
     # assert that either shape_layer is given or xlim/ylim
     assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
@@ -97,5 +99,6 @@ def crop(self,
     _self.metadata["cropping_ylim"] = ylim
     
     if not inplace:
-        del _self.viewer # delete viewer
+        if hasattr(self, "viewer"):
+            del _self.viewer # delete viewer
         return _self
