@@ -54,7 +54,6 @@ class XeniumData:
     
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
-                 metadata_filename: str = "experiment_modified.xenium",
                  transcript_filename: str = "transcripts.parquet",
                  pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{region_id}",
                  matrix: Optional[AnnData] = None
