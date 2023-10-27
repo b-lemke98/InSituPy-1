@@ -315,6 +315,7 @@ class ImageRegistration:
              filename: str,
              axes: str,  # string describing the channel axes, e.g. YXS or CYX
              photometric: Literal['rgb', 'minisblack', 'maxisblack'] = 'rgb', # before I had rgb here. Xenium doc says minisblack
+             ome_metadata: dict = {},
              registered: Optional[np.ndarray] = None,  # registered image
              _T: Optional[np.ndarray] = None,  # transformation matrix
              matchedVis: Optional[np.ndarray] = None  # image showing the matched visualization
@@ -346,7 +347,8 @@ class ImageRegistration:
             image=registered, 
             axes=axes, 
             photometric=photometric, 
-            overwrite=True
+            overwrite=True,
+            metadata=ome_metadata
             )
 
         # save registration QC files

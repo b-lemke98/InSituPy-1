@@ -18,8 +18,9 @@ def write_ome_tiff(
     metadata: dict = {},
     subresolutions = 7, 
     subres_steps: int = 2,
-    pixelsize: Optional[float] = 0.2125, # defaults to Xenium settings.
-    pixelunit: Optional[str] = "µm", # usually µm
+    pixelsize: Optional[float] = 1, # defaults to Xenium settings.
+    pixelunit: Optional[str] = None, # usually µm
+    significant_bits: Optional[int] = 8,
     photometric: Literal['rgb', 'minisblack', 'maxisblack'] = 'rgb', # before I had rgb here. Xenium doc says minisblack
     tile: tuple = (1024, 1024), # 1024 pixel is optimal for Xenium Explorer
     compression: Literal['jpeg', 'LZW', 'jpeg2000', None] = 'jpeg2000', # jpeg2000 is used in Xenium documentation
@@ -39,22 +40,48 @@ def write_ome_tiff(
             file.unlink() # delete file
         else:
             raise FileExistsError("Input file exists already ({}).\nFor overwriting it, select `overwrite=True`".format(file))
+        
+    # create metadata
+    if pixelsize != 1:        
+        metadata = {
+            **metadata,
+            **{
+                'PhysicalSizeX': pixelsize,
+                'PhysicalSizeY': pixelsize
+            }
+        }
+    if pixelunit is not None:
+        metadata = {
+            **metadata,
+            **{
+                'PhysicalSizeXUnit': pixelunit,
+                'PhysicalSizeYUnit': pixelunit
+            }
+        }
+    if (significant_bits is not None) & ("SignificantBits" not in metadata.keys()):
+        metadata = {
+            **metadata,
+            **{
+                'SignificantBits': significant_bits
+            }
+        }
+    
 
     with tf.TiffWriter(file, bigtiff=True) as tif:
-        metadata={**metadata,
-                  **{
-                      'SignificantBits': 8,
-                      'PhysicalSizeX': pixelsize,
-                      'PhysicalSizeXUnit': pixelunit,
-                      'PhysicalSizeY': pixelsize,
-                      'PhysicalSizeYUnit': pixelunit,
-                  }
-        }
+        # metadata={**metadata,
+        #           **{
+        #               'SignificantBits': 8,
+        #               'PhysicalSizeX': pixelsize,
+        #               'PhysicalSizeXUnit': pixelunit,
+        #               'PhysicalSizeY': pixelsize,
+        #               'PhysicalSizeYUnit': pixelunit,
+        #           }
+        # }
         options = dict(
             photometric=photometric,
             tile=tile,
             compression=compression,
-            resolutionunit='CENTIMETER'
+            resolutionunit='CENTIMETER',
         )
         tif.write(
             image,

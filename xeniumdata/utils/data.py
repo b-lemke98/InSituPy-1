@@ -4,10 +4,11 @@ import os
 import pandas as pd
 import geopandas as gpd
 from shapely import Polygon
-from tifffile import imread
+from tifffile import imread, TiffFile
 from .utils import textformat as tf
 from .utils import convert_to_list, load_pyramid, decode_robust_series
 from parse import *
+import xmltodict
 
 class AnnotationData:
     '''
@@ -53,21 +54,30 @@ class ImageData:
                  img_names: List[str], 
                  ):
         
-        self.files = img_files
         self.names = []
         self.metadata = {}
-        for n, f in zip(img_names, self.files):
+        self.ome_metadata = {}
+        for n, f in zip(img_names, img_files):
+            # read ome metadata
+            with TiffFile(path / f) as tif:
+                meta = tif.ome_metadata # read OME metadata
+                axes = tif.series[0].axes # get axes
+            self.ome_metadata[n] = xmltodict.parse(meta, attr_prefix="") # convert XML to dict
+            
             # load images
             store = imread(path / f, aszarr=True)
             pyramid = load_pyramid(store)
             
-            # set attribute
+            # set attribute and add names to object
             setattr(self, n, pyramid)
+            self.names.append(n)
             
             # add metadata
             self.metadata[n] = {}
+            self.metadata[n]["file"] = f # store file information
             self.metadata[n]["shape"] = pyramid[0].shape # store shape
             self.metadata[n]["subresolutions"] = len(pyramid) - 1 # store number of subresolutions of pyramid
+            self.metadata[n]["axes"] = axes
             
             # check whether the image is RGB or not
             if len(pyramid[0].shape) == 3:

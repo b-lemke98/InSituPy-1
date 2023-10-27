@@ -50,7 +50,10 @@ class XeniumData:
     from .utils.visualize import show
     
     # import crop function
-    from .utils.crop import crop    
+    from .utils.crop import crop
+    
+    # import save function
+    from .utils.io import save
     
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
@@ -199,6 +202,7 @@ class XeniumData:
                         decon_scale_factor: float = 0.2,
                         image_name_sep: str = "_",  # string separating the image names in the file name
                         nuclei_name: str = "DAPI",  # name used for the nuclei image
+                        physicalsize: str = 'µm',
                         #dapi_channel: int = None
                         ):
         '''
@@ -270,6 +274,12 @@ class XeniumData:
                 # read images in XeniumData object
                 self.read_images(names="nuclei")
                 template = self.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
+                
+                # extract OME metadata
+                ome_metadata_template = self.images.ome_metadata["nuclei"]
+                # extract pixel size for x and y from metadata
+                pixelsizes = {key: ome_metadata_template['OME']['Image']['Pixels'][key] for key in ['PhysicalSizeX', 'PhysicalSizeY']}
+                
                 
                 # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
                 axes_selected = "YX" 
@@ -345,12 +355,22 @@ class XeniumData:
                     
                     # perform registration
                     imreg_selected.perform_registration()
+                    
+                    # generate OME metadata for saving
+                    metadata = {
+                        **{'SignificantBits': 8,
+                           'PhysicalSizeXUnit': 'µm',
+                           'PhysicalSizeYUnit': 'µm'
+                         },
+                        **pixelsizes
+                    }
                         
                     # save files
                     imreg_selected.save(path=self.path,
                                         filename=f"{self.slide_id}__{self.region_id}__{self.image_names[0]}",
                                         axes=axes_image,
-                                        photometric='rgb'
+                                        photometric='rgb',
+                                        ome_metadata=metadata
                                         )
                     
                     # save metadata
