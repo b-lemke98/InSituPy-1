@@ -62,3 +62,10 @@ def save(self,
             bounddf.to_parquet(bound_path / f"{n}.parquet")
             
     # save annotations
+    if hasattr(self, "annotations"):
+        annot_path = (path / "annotations")
+        annot_path.mkdir(parents=True, exist_ok=True) # create directory
+        
+        for n in self.annotations.labels:
+            annotdf = getattr(self.annotations, n)        
+            annotdf.to_parquet(annot_path / f"{n}.parquet")
