@@ -236,9 +236,15 @@ def save(self,
     if zip:
         shutil.make_archive(path, 'zip', path, verbose=False)
         
-    # write to json file
+    # write InSituData metadata to json file
     metadata_path = path / "insitu.data"
     metadata_json = json.dumps(metadata, indent=4)
+    with open(metadata_path, "w") as metafile:
+        metafile.write(metadata_json)
+        
+    # write Xenium metadata to json file
+    metadata_path = path / "xenium.json"
+    metadata_json = json.dumps(self.metadata, indent=4)
     with open(metadata_path, "w") as metafile:
         metafile.write(metadata_json)
         
