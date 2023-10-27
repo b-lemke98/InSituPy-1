@@ -1,11 +1,13 @@
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from pathlib import Path
 import os
+import shutil
 from ..images.io import write_ome_tiff
  
 def save(self,
          path: Union[str, os.PathLike, Path],
-         overwrite: bool = False
+         overwrite: bool = False,
+         zip: bool = False
          ):
     '''
     Function to save the XeniumData object.
@@ -13,8 +15,19 @@ def save(self,
     Args:
         path: Path to save the data to.
     '''
-    # create output directory if it does not exist yet
+    # check if the path already exists    
     path = Path(path)
+    if path.exists():
+        if overwrite:
+            shutil.rmtree(path) # delete directory
+            if zip:
+                zippath = path.with_suffix(".zip")
+                if zippath.exists():
+                    zippath.unlink() # remove zip file
+        else:
+            raise FileExistsError("Output file exists already ({}).\nFor overwriting it, select `overwrite=True`".format(path))
+    
+    # create output directory if it does not exist yet
     path.mkdir(parents=True, exist_ok=True)
     
     # save images
@@ -69,3 +82,7 @@ def save(self,
         for n in self.annotations.labels:
             annotdf = getattr(self.annotations, n)        
             annotdf.to_parquet(annot_path / f"{n}.parquet")
+            
+    # Optionally: zip the resulting directory
+    if zip:
+        shutil.make_archive(path, 'zip', path, verbose=False)

@@ -39,7 +39,7 @@ def write_ome_tiff(
         if overwrite:
             file.unlink() # delete file
         else:
-            raise FileExistsError("Input file exists already ({}).\nFor overwriting it, select `overwrite=True`".format(file))
+            raise FileExistsError("Output file exists already ({}).\nFor overwriting it, select `overwrite=True`".format(file))
         
     # create metadata
     if pixelsize != 1:        
