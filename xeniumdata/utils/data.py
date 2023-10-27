@@ -56,13 +56,7 @@ class ImageData:
         
         self.names = []
         self.metadata = {}
-        self.ome_metadata = {}
         for n, f in zip(img_names, img_files):
-            # read ome metadata
-            with TiffFile(path / f) as tif:
-                meta = tif.ome_metadata # read OME metadata
-                axes = tif.series[0].axes # get axes
-            self.ome_metadata[n] = xmltodict.parse(meta, attr_prefix="") # convert XML to dict
             
             # load images
             store = imread(path / f, aszarr=True)
@@ -77,7 +71,16 @@ class ImageData:
             self.metadata[n]["file"] = f # store file information
             self.metadata[n]["shape"] = pyramid[0].shape # store shape
             self.metadata[n]["subresolutions"] = len(pyramid) - 1 # store number of subresolutions of pyramid
+            
+            # read ome metadata
+            with TiffFile(path / f) as tif:
+                axes = tif.series[0].axes # get axes
+                ome_meta = tif.ome_metadata # read OME metadata
+                
             self.metadata[n]["axes"] = axes
+            self.metadata[n]["OME"] = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
+            
+            
             
             # check whether the image is RGB or not
             if len(pyramid[0].shape) == 3:

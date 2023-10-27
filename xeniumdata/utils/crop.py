@@ -2,6 +2,7 @@ import napari
 import numpy as np
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from .exceptions import XeniumDataRepeatedCropError, WrongNapariLayerTypeError, NotOneElementError
+from shapely import Polygon, affinity
 
 def crop(self, 
          shape_layer: Optional[str] = None,
@@ -94,11 +95,37 @@ def crop(self,
     if hasattr(_self, "images"):
         _self.images.crop(xlim=xlim, ylim=ylim)
     
+
+    
+    if hasattr(_self, "annotations"):
+        limit_poly = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
+        
+        for i, n in enumerate(_self.annotations.labels):
+            annotdf = getattr(_self.annotations, n)
+            
+            # select annotations that intersect with the selected area
+            mask = [limit_poly.intersects(elem) for elem in annotdf["geometry"]]
+            annotdf = annotdf.loc[mask, :].copy()
+            
+            # move origin to zero after cropping
+            annotdf["geometry"] = annotdf["geometry"].apply(affinity.translate, xoff=-xlim[0], yoff=-ylim[0])
+            
+            # add new dataframe back to annotations object
+            setattr(_self.annotations, n, annotdf)
+            
+            # update metadata
+            _self.annotations.labels[i] = n
+            _self.annotations.n_annotations[i] = len(annotdf)
+            _self.annotations.classes[i] = annotdf.name.unique()
+            
+            
     # add information about cropping to metadata
     _self.metadata["cropping_xlim"] = xlim
     _self.metadata["cropping_ylim"] = ylim
+            
     
     if not inplace:
         if hasattr(self, "viewer"):
             del _self.viewer # delete viewer
-        return _self
+        return _self    
+            

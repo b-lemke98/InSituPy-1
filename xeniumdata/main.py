@@ -276,10 +276,9 @@ class XeniumData:
                 template = self.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
                 
                 # extract OME metadata
-                ome_metadata_template = self.images.ome_metadata["nuclei"]
+                ome_metadata_template = self.images.metadata["nuclei"]["OME"]
                 # extract pixel size for x and y from metadata
-                pixelsizes = {key: ome_metadata_template['OME']['Image']['Pixels'][key] for key in ['PhysicalSizeX', 'PhysicalSizeY']}
-                
+                pixelsizes = {key: ome_metadata_template['Image']['Pixels'][key] for key in ['PhysicalSizeX', 'PhysicalSizeY']}
                 
                 # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
                 axes_selected = "YX" 
