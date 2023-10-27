@@ -37,8 +37,8 @@ class XeniumData:
     '''
     XeniumData object to read Xenium in situ data in a structured way.
     '''
-    # import read functions
-    from .utils.read import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
+    # import read and write functions
+    from .io.io import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts, save
     
     # import analysis functions
     from .utils.annotations import annotate
@@ -51,9 +51,6 @@ class XeniumData:
     
     # import crop function
     from .utils.crop import crop
-    
-    # import save function
-    from .utils.io import save
     
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
