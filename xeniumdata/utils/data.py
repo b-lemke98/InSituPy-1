@@ -9,6 +9,7 @@ from .utils import textformat as tf
 from .utils import convert_to_list, load_pyramid, decode_robust_series
 from parse import *
 import xmltodict
+import warnings
 
 class AnnotationData:
     '''
@@ -53,7 +54,11 @@ class ImageData:
                  img_files: List[str], 
                  img_names: List[str], 
                  ):
+        # convert arguments to lists
+        img_files = convert_to_list(img_files)
+        img_names = convert_to_list(img_names)
         
+        # iterate through files and load them
         self.names = []
         self.metadata = {}
         for n, f in zip(img_names, img_files):
@@ -80,8 +85,6 @@ class ImageData:
             self.metadata[n]["axes"] = axes
             self.metadata[n]["OME"] = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
             
-            
-            
             # check whether the image is RGB or not
             if len(pyramid[0].shape) == 3:
                 self.metadata[n]["rgb"] = True
@@ -94,7 +97,8 @@ class ImageData:
             if self.metadata[n]["rgb"]:
                 self.metadata[n]["contrast_limits"] = (0, 255)
             else:
-                self.metadata[n]["contrast_limits"] = (0, int(pyramid[0].max()))
+                self.metadata[n]["contrast_limits"] = (0, int(pyramid[0].max()))                
+        
             
     def __repr__(self):
         repr_strings = [f"{tf.Bold}{n}:{tf.ResetAll}\t{metadata['shape']}" for n,metadata in self.metadata.items()]

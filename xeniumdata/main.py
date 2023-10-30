@@ -163,7 +163,7 @@ class XeniumData:
         cluster_data = pd.read_csv(cluster_file)
         
         # merge dimred data with clustering data
-        data = ft.Reduce(lambda left, right: pd.merge(left, right, on='Barcode'), [umap_data, pca_data.iloc[:, :3], cluster_data])
+        data = ft.reduce(lambda left, right: pd.merge(left, right, on='Barcode'), [umap_data, pca_data.iloc[:, :3], cluster_data])
         data["Cluster"] = data["Cluster"].astype('category')
                         
         # plot

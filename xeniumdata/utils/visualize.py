@@ -5,6 +5,7 @@ import matplotlib
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from .utils import convert_to_list
 from .exceptions import XeniumDataMissingObject
+from ..palettes import CustomPalettes
 
 def show(self,
     cell_type_key: Optional[str] = None,
@@ -12,13 +13,23 @@ def show(self,
     annotation_labels: Optional[str] = None,
     show_images: bool = True,
     show_cells: bool = False,
-    cmap_cells="tab20",
+    scalebar: bool = True,
+    pixel_size: float = None, # if none, extract from metadata
+    unit: str = "µm",
+    #cmap_cells="tab20",
     cmap_annotations="Dark2"
     ):
             
     # create viewer
     self.viewer = napari.Viewer()
-        
+    
+    
+    if (pixel_size is None) & (scalebar):
+        # extract pixel_size
+        pixel_size = float(self.metadata["pixel_size"])
+    else:
+        pixel_size = 1
+                
     if show_images:
         # add images
         if not hasattr(self, "images"):
@@ -32,24 +43,28 @@ def show(self,
                     name=img_name,
                     #colormap=["gray", "blue", "green"],
                     rgb=self.images.metadata[img_name]["rgb"],
-                    contrast_limits=self.images.metadata[img_name]["contrast_limits"]
-                    #scale=img_scale
+                    contrast_limits=self.images.metadata[img_name]["contrast_limits"],
+                    scale=(pixel_size, pixel_size)
                 )
     
     # optionally: add cells as points
-    if show_cells:
+    if show_cells or cell_type_key is not None:
         if not hasattr(self, "matrix"):
             raise XeniumDataMissingObject("matrix")
         
-        # get color cycle for points
-        colormap = matplotlib.colormaps[cmap_cells]
+        # get color cycle for cells
+        palettes = CustomPalettes()
+        colormap = getattr(palettes, "tab20_mod")
+        
+        # # get color cycle for points
+        # colormap = matplotlib.colormaps[cmap_cells]
 
-        # split by high intensity and low intensity colors in tab20
-        cmap1 = colormap.colors[::2]
-        cmap2 = colormap.colors[1::2]
+        # # split by high intensity and low intensity colors in tab20
+        # cmap1 = colormap.colors[::2]
+        # cmap2 = colormap.colors[1::2]
 
-        # concatenate color cycle
-        color_cycle = cmap1[:7] + cmap1[8:] + cmap2[:7] + cmap2[8:]
+        # # concatenate color cycle
+        # color_cycle = cmap1[:7] + cmap1[8:] + cmap2[:7] + cmap2[8:]
         
         # subset adata
         if mask is None:
@@ -66,30 +81,35 @@ def show(self,
         if cell_type_key is not None:
             # get clusters
             clusters = list(subset.obs[cell_type_key].unique())
-            colors = [rgb2hex(color_cycle[i]) for i in range(len(clusters))]
+            #colors = [rgb2hex(color_cycle[i]) for i in range(len(clusters))]
         else:
             clusters = [None]
             colors = ["gray"]
-    
-        for i, c in enumerate(clusters):
+
+        i = 0
+        for c in clusters:
             if c is not None:
                 # select points of this cluster
-                points = all_points[subset.obs[cell_type_key] == c]
+                points = all_points[subset.obs[cell_type_key] == c] * pixel_size
             else:
-                points = all_points
+                points = all_points * pixel_size
+                
+            if i > (len(colormap.colors) -1):
+                i -= (len(colormap.colors) -1)
 
             point_layer = self.viewer.add_points(points, 
                                             name=str(c),
                                             #properties=point_properties,
                                             symbol='o',
-                                            size=30,
-                                            face_color=colors[i],
+                                            size=30 * pixel_size,
+                                            face_color=colormap.colors[i],
                                             opacity=1,
                                             visible=True, 
                                             edge_width=0
                                             )
-    
-    
+            # counter
+            i += 1
+
     
     if annotation_labels is not None:
         # get colorcycle for region annotations
@@ -120,9 +140,10 @@ def show(self,
                                 face_color='transparent'
                                 )
     
-    
-    
-
+    if scalebar:
+        # add scale bar
+        self.viewer.scale_bar.visible = True
+        self.viewer.scale_bar.unit = unit
     
     napari.run()
     return self.viewer
