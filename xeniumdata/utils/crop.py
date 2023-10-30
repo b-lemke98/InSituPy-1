@@ -14,14 +14,17 @@ def crop(self,
     Function to crop the XeniumData object.
     '''
     # check if the changes are supposed to be made in place or not
+    with_viewer = False
     if inplace:
         _self = self
     else:
         if hasattr(self, "viewer"):
+            with_viewer = True
             viewer_copy = self.viewer.copy() # copy viewer to transfer it to new object for cropping
         _self = self.copy()
-        if hasattr(self, "viewer"):
+        if with_viewer:
             _self.viewer = viewer_copy
+            print(viewer_copy)
         
     # assert that either shape_layer is given or xlim/ylim
     assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
