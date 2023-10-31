@@ -6,17 +6,16 @@ from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from .utils import convert_to_list
 from .exceptions import XeniumDataMissingObject
 from ..palettes import CustomPalettes
+from scipy.sparse import issparse
 
 def show(self,
-    cell_type_key: Optional[str] = None,
-    mask: Optional[List[bool]] = None,
+    keys: Optional[str] = None,
     annotation_labels: Optional[str] = None,
     show_images: bool = True,
     show_cells: bool = False,
     scalebar: bool = True,
     pixel_size: float = None, # if none, extract from metadata
     unit: str = "µm",
-    #cmap_cells="tab20",
     cmap_annotations="Dark2"
     ):
             
@@ -48,67 +47,58 @@ def show(self,
                 )
     
     # optionally: add cells as points
-    if show_cells or cell_type_key is not None:
+    if show_cells or keys is not None:
         if not hasattr(self, "matrix"):
             raise XeniumDataMissingObject("matrix")
         
-        # get color cycle for cells
-        palettes = CustomPalettes()
-        colormap = getattr(palettes, "tab20_mod")
-        
-        # # get color cycle for points
-        # colormap = matplotlib.colormaps[cmap_cells]
-
-        # # split by high intensity and low intensity colors in tab20
-        # cmap1 = colormap.colors[::2]
-        # cmap2 = colormap.colors[1::2]
-
-        # # concatenate color cycle
-        # color_cycle = cmap1[:7] + cmap1[8:] + cmap2[:7] + cmap2[8:]
-        
-        # subset adata
-        if mask is None:
-            subset = self.matrix
-        else:
-            subset = self.matrix[self.matrix.obs[mask]]
+        # convert keys to list
+        keys = convert_to_list(keys)
         
         # get point coordinates
-        all_points = np.flip(subset.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
-    
-        # coordinates are in µm. Convert to pixel
-        #all_points /= self.metadata["pixel_size"] # "pixel_size" from experiment.xenium file
+        points = np.flip(self.matrix.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
         
-        if cell_type_key is not None:
-            # get clusters
-            clusters = list(subset.obs[cell_type_key].unique())
-            #colors = [rgb2hex(color_cycle[i]) for i in range(len(clusters))]
+        # get expression matrix
+        if issparse(self.matrix.X):
+            X = self.matrix.X.toarray()
         else:
-            clusters = [None]
-            colors = ["gray"]
+            X = self.matrix.X
 
-        i = 0
-        for c in clusters:
-            if c is not None:
-                # select points of this cluster
-                points = all_points[subset.obs[cell_type_key] == c] * pixel_size
-            else:
-                points = all_points * pixel_size
+        point_layers = {}
+        for k in keys:
+            # get expression values
+            if k in self.matrix.obs.columns:
+                expr = self.matrix.obs[k].values
                 
-            if i > (len(colormap.colors) -1):
-                i -= (len(colormap.colors) -1)
+                # get color cycle for categorical data
+                palettes = CustomPalettes()
+                color_cycle = getattr(palettes, "tab20_mod").colors
+                color_map = None
+                climits = None
+            else:
+                geneid = self.matrix.var_names.get_loc(k)
+                expr = X[:, geneid]
+                color_map = "viridis"
+                color_cycle = None
+                climits = [0, np.percentile(expr, 95)]
+            
+            point_properties = {
+                "expr": expr,
+                #"confidence": subset.X.toarray()[:, 1]
+            }
 
-            point_layer = self.viewer.add_points(points, 
-                                            name=str(c),
-                                            #properties=point_properties,
+            point_layers[k] = self.viewer.add_points(points,
+                                            name=k,
+                                            properties=point_properties,
                                             symbol='o',
                                             size=30 * pixel_size,
-                                            face_color=colormap.colors[i],
+                                            face_color="expr",
+                                            face_color_cycle=color_cycle,
+                                            face_colormap=color_map,
+                                            face_contrast_limits=climits,
                                             opacity=1,
-                                            visible=True, 
+                                            visible=True,
                                             edge_width=0
                                             )
-            # counter
-            i += 1
 
     
     if annotation_labels is not None:
