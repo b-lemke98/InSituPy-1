@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "xeniumdata"
+name = "insitupy"
 version = "0.1.0"
 description = "Package introducing the XeniumData structure to read an analyze Xenium in situ data in a structured manner."
 authors = ["jwrth <j.wirth@tum.de>"]
