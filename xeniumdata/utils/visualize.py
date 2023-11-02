@@ -224,6 +224,11 @@ def show(self,
         self.viewer.scale_bar.visible = True
         self.viewer.scale_bar.unit = unit
         
+    # set maximum height of widget to prevent the widget from having a large distance
+    add_genes.max_height = 100
+    add_observations.max_height = 100
+    
+    # add widgets to napari window
     self.viewer.window.add_dock_widget(add_genes, name="Add genes", area="right")
     self.viewer.window.add_dock_widget(add_observations, name="Add observations", area="right")
     
