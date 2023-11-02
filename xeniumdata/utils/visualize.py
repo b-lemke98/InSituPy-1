@@ -18,9 +18,7 @@ def show(self,
     scalebar: bool = True,
     pixel_size: float = None, # if none, extract from metadata
     unit: str = "µm",
-    cmap_annotations="Dark2",
-    n_points = 100,
-    l = ["C", "D", "E", "F"]
+    cmap_annotations="Dark2"
     ):
     
     # get information about pixel size
