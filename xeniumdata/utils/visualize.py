@@ -1,4 +1,5 @@
 import napari
+from napari.utils.notifications import Notification
 from matplotlib.colors import rgb2hex
 import numpy as np
 import matplotlib
@@ -8,16 +9,6 @@ from .exceptions import XeniumDataMissingObject
 from ..palettes import CustomPalettes
 from scipy.sparse import issparse
 from magicgui import magicgui
-
-# @magicgui(
-#     call_button='Make Points', 
-#     n_points={'maximum': 200},
-#     name={'choices': ["A", "B", "C"]}
-#     )
-
-# def make_points(n_points=40, name="A") -> napari.types.LayerDataTuple:
-#     data = 500 * np.random.rand(n_points, 2)
-#     return (data, {'name': name}, 'points')
 
 def show(self,
     keys: Optional[str] = None,
@@ -31,57 +22,57 @@ def show(self,
     n_points = 100,
     l = ["C", "D", "E", "F"]
     ):
+    
+    # get information about pixel size
+    if (pixel_size is None) & (scalebar):
+        # extract pixel_size
+        pixel_size = float(self.metadata["pixel_size"])
+    else:
+        pixel_size = 1
+        
+    # get available genes
+    genes = self.matrix.var_names.tolist()
+    obses = self.matrix.obs.columns.tolist()
+    
+    # get point coordinates
+    points = np.flip(self.matrix.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
+    
+    # get expression matrix
+    if issparse(self.matrix.X):
+        X = self.matrix.X.toarray()
+    else:
+        X = self.matrix.X
             
     # create viewer
     self.viewer = napari.Viewer()
     
     @magicgui(
-        call_button='Add', 
-        gene={'choices': self.matrix.var_names.tolist()}
+        call_button='Add',
+        gene={'choices': genes},
         )
-
-    def make_points(gene=self.matrix.var_names[0]) -> napari.types.LayerDataTuple:        
-        # get expression matrix
-        if issparse(self.matrix.X):
-            X = self.matrix.X.toarray()
-        else:
-            X = self.matrix.X
-            
+    def add_genes(gene=None) -> napari.types.LayerDataTuple:
         # get expression values
-        if gene in self.matrix.obs.columns:
-            expr = self.matrix.obs[gene].values
-            
-            # get color cycle for categorical data
-            palettes = CustomPalettes()
-            color_cycle = getattr(palettes, "tab20_mod").colors
-            color_map = None
-            climits = None
-        else:
-            geneid = self.matrix.var_names.get_loc(gene)
-            expr = X[:, geneid]
-            color_map = "viridis"
-            color_cycle = None
-            climits = [0, np.percentile(expr, 95)]
-            
+        geneid = self.matrix.var_names.get_loc(gene)
+        expr = X[:, geneid]
         
-        point_properties = {
-            "expr": expr,
-        }
+        # set color settings for continuous data
+        color_map = "viridis"
+        color_cycle = None
+        climits = [0, np.percentile(expr, 95)]
         
-        # get point coordinates
-        points = np.flip(self.matrix.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
+        # generate point layer
         layer = (
             points, 
             {
                 'name': gene,
-                'properties': point_properties,
+                'properties': {"expr": expr},
                 'symbol': 'o',
                 'size': 30 * pixel_size,
                 'face_color': "expr",
                 'face_color_cycle': color_cycle,
                 'face_colormap': color_map,
                 'face_contrast_limits': climits,
-                'opacity': 0.5,
+                'opacity': 1,
                 'visible': True,
                 'edge_width': 0
                 }, 
@@ -89,19 +80,49 @@ def show(self,
             )
         return layer
     
-    if (pixel_size is None) & (scalebar):
-        # extract pixel_size
-        pixel_size = float(self.metadata["pixel_size"])
-    else:
-        pixel_size = 1
+    @magicgui(
+        call_button='Add',
+        observation={'choices': obses}
+        )
+    def add_observations(observation=None) -> napari.types.LayerDataTuple:
+        # get observation values
+        expr = self.matrix.obs[observation].values
+        
+        # get color cycle for categorical data
+        palettes = CustomPalettes()
+        color_cycle = getattr(palettes, "tab20_mod").colors
+        color_map = None
+        climits = None
+        
+        # generate point layer
+        layer = (
+            points, 
+            {
+                'name': observation,
+                'properties': {"expr": expr},
+                'symbol': 'o',
+                'size': 30 * pixel_size,
+                'face_color': "expr",
+                'face_color_cycle': color_cycle,
+                'face_colormap': color_map,
+                'face_contrast_limits': climits,
+                'opacity': 1,
+                'visible': True,
+                'edge_width': 0
+                }, 
+            'points'
+            )
+        return layer
                 
     if show_images:
         # add images
         if not hasattr(self, "images"):
             raise XeniumDataMissingObject("images")
             
-        for i, img_name in enumerate(self.images.metadata.keys()):
+        image_keys = self.images.metadata.keys()
+        for i, img_name in enumerate(image_keys):
             img = getattr(self.images, img_name)
+            visible = False if i < len(image_keys) - 1 else True # only last image is set visible
             self.viewer.add_image(
                     img,
                     #channel_axis=channel_axis,
@@ -109,7 +130,8 @@ def show(self,
                     #colormap=["gray", "blue", "green"],
                     rgb=self.images.metadata[img_name]["rgb"],
                     contrast_limits=self.images.metadata[img_name]["contrast_limits"],
-                    scale=(pixel_size, pixel_size)
+                    scale=(pixel_size, pixel_size),
+                    visible=visible
                 )
     
     # optionally: add cells as points
@@ -130,7 +152,8 @@ def show(self,
             X = self.matrix.X
 
         point_layers = {}
-        for k in keys:
+        for i, k in enumerate(keys):
+            visible = False if i < len(keys) - 1 else True # only last image is set visible
             # get expression values
             if k in self.matrix.obs.columns:
                 expr = self.matrix.obs[k].values
@@ -162,7 +185,7 @@ def show(self,
                                             face_colormap=color_map,
                                             face_contrast_limits=climits,
                                             opacity=1,
-                                            visible=True,
+                                            visible=visible,
                                             edge_width=0
                                             )
 
@@ -201,7 +224,8 @@ def show(self,
         self.viewer.scale_bar.visible = True
         self.viewer.scale_bar.unit = unit
         
-    self.viewer.window.add_dock_widget(make_points, name="Add expression layer")
+    self.viewer.window.add_dock_widget(add_genes, name="Add genes", area="right")
+    self.viewer.window.add_dock_widget(add_observations, name="Add observations", area="right")
     
     napari.run()
     return self.viewer
