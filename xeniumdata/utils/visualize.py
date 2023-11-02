@@ -7,6 +7,17 @@ from .utils import convert_to_list
 from .exceptions import XeniumDataMissingObject
 from ..palettes import CustomPalettes
 from scipy.sparse import issparse
+from magicgui import magicgui
+
+# @magicgui(
+#     call_button='Make Points', 
+#     n_points={'maximum': 200},
+#     name={'choices': ["A", "B", "C"]}
+#     )
+
+# def make_points(n_points=40, name="A") -> napari.types.LayerDataTuple:
+#     data = 500 * np.random.rand(n_points, 2)
+#     return (data, {'name': name}, 'points')
 
 def show(self,
     keys: Optional[str] = None,
@@ -16,12 +27,67 @@ def show(self,
     scalebar: bool = True,
     pixel_size: float = None, # if none, extract from metadata
     unit: str = "µm",
-    cmap_annotations="Dark2"
+    cmap_annotations="Dark2",
+    n_points = 100,
+    l = ["C", "D", "E", "F"]
     ):
             
     # create viewer
     self.viewer = napari.Viewer()
     
+    @magicgui(
+        call_button='Add', 
+        gene={'choices': self.matrix.var_names.tolist()}
+        )
+
+    def make_points(gene=self.matrix.var_names[0]) -> napari.types.LayerDataTuple:        
+        # get expression matrix
+        if issparse(self.matrix.X):
+            X = self.matrix.X.toarray()
+        else:
+            X = self.matrix.X
+            
+        # get expression values
+        if gene in self.matrix.obs.columns:
+            expr = self.matrix.obs[gene].values
+            
+            # get color cycle for categorical data
+            palettes = CustomPalettes()
+            color_cycle = getattr(palettes, "tab20_mod").colors
+            color_map = None
+            climits = None
+        else:
+            geneid = self.matrix.var_names.get_loc(gene)
+            expr = X[:, geneid]
+            color_map = "viridis"
+            color_cycle = None
+            climits = [0, np.percentile(expr, 95)]
+            
+        
+        point_properties = {
+            "expr": expr,
+        }
+        
+        # get point coordinates
+        points = np.flip(self.matrix.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
+        layer = (
+            points, 
+            {
+                'name': gene,
+                'properties': point_properties,
+                'symbol': 'o',
+                'size': 30 * pixel_size,
+                'face_color': "expr",
+                'face_color_cycle': color_cycle,
+                'face_colormap': color_map,
+                'face_contrast_limits': climits,
+                'opacity': 0.5,
+                'visible': True,
+                'edge_width': 0
+                }, 
+            'points'
+            )
+        return layer
     
     if (pixel_size is None) & (scalebar):
         # extract pixel_size
@@ -49,8 +115,8 @@ def show(self,
     # optionally: add cells as points
     if show_cells or keys is not None:
         if not hasattr(self, "matrix"):
-            raise XeniumDataMissingObject("matrix")
-        
+            raise XeniumDataMissingObject("matrix")       
+
         # convert keys to list
         keys = convert_to_list(keys)
         
@@ -134,6 +200,8 @@ def show(self,
         # add scale bar
         self.viewer.scale_bar.visible = True
         self.viewer.scale_bar.unit = unit
+        
+    self.viewer.window.add_dock_widget(make_points, name="Add expression layer")
     
     napari.run()
     return self.viewer
