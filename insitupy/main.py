@@ -47,7 +47,7 @@ class XeniumData:
     from .utils.preprocessing import normalize, hvg, reduce_dimensions
     
     # import visualization functions
-    from .utils.visualize import show
+    from .visualize.visualize import show
     
     # import crop function
     from .utils.crop import crop

@@ -1,14 +1,13 @@
 import napari
-from napari.utils.notifications import Notification
 from matplotlib.colors import rgb2hex
 import numpy as np
 import matplotlib
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
-from .utils import convert_to_list
-from .exceptions import XeniumDataMissingObject
+from ..utils.utils import convert_to_list
+from ..utils.exceptions import XeniumDataMissingObject
 from ..palettes import CustomPalettes
 from scipy.sparse import issparse
-from magicgui import magicgui
+from .widget import initialize_widgets
 
 def show(self,
     keys: Optional[str] = None,
@@ -27,91 +26,25 @@ def show(self,
         pixel_size = float(self.metadata["pixel_size"])
     else:
         pixel_size = 1
-        
-    # get available genes
-    genes = self.matrix.var_names.tolist()
-    obses = self.matrix.obs.columns.tolist()
     
-    # get point coordinates
-    points = np.flip(self.matrix.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
-    
-    # get expression matrix
-    if issparse(self.matrix.X):
-        X = self.matrix.X.toarray()
-    else:
-        X = self.matrix.X
-            
     # create viewer
     self.viewer = napari.Viewer()
     
-    @magicgui(
-        call_button='Add',
-        gene={'choices': genes},
+    # initialize the widgets
+    add_genes, add_observations = initialize_widgets(
+        matrix=self.matrix,
+        pixel_size=pixel_size
         )
-    def add_genes(gene=None) -> napari.types.LayerDataTuple:
-        # get expression values
-        geneid = self.matrix.var_names.get_loc(gene)
-        expr = X[:, geneid]
-        
-        # set color settings for continuous data
-        color_map = "viridis"
-        color_cycle = None
-        climits = [0, np.percentile(expr, 95)]
-        
-        # generate point layer
-        layer = (
-            points, 
-            {
-                'name': gene,
-                'properties': {"expr": expr},
-                'symbol': 'o',
-                'size': 30 * pixel_size,
-                'face_color': "expr",
-                'face_color_cycle': color_cycle,
-                'face_colormap': color_map,
-                'face_contrast_limits': climits,
-                'opacity': 1,
-                'visible': True,
-                'edge_width': 0
-                }, 
-            'points'
-            )
-        return layer
     
-    @magicgui(
-        call_button='Add',
-        observation={'choices': obses}
-        )
-    def add_observations(observation=None) -> napari.types.LayerDataTuple:
-        # get observation values
-        expr = self.matrix.obs[observation].values
-        
-        # get color cycle for categorical data
-        palettes = CustomPalettes()
-        color_cycle = getattr(palettes, "tab20_mod").colors
-        color_map = None
-        climits = None
-        
-        # generate point layer
-        layer = (
-            points, 
-            {
-                'name': observation,
-                'properties': {"expr": expr},
-                'symbol': 'o',
-                'size': 30 * pixel_size,
-                'face_color': "expr",
-                'face_color_cycle': color_cycle,
-                'face_colormap': color_map,
-                'face_contrast_limits': climits,
-                'opacity': 1,
-                'visible': True,
-                'edge_width': 0
-                }, 
-            'points'
-            )
-        return layer
-                
+    # set maximum height of widget to prevent the widget from having a large distance
+    add_genes.max_height = 100
+    add_observations.max_height = 100
+    
+    # add widgets to napari window
+    self.viewer.window.add_dock_widget(add_genes, name="Add genes", area="right")
+    self.viewer.window.add_dock_widget(add_observations, name="Add observations", area="right")
+         
+    # optionally add images       
     if show_images:
         # add images
         if not hasattr(self, "images"):
@@ -187,7 +120,7 @@ def show(self,
                                             edge_width=0
                                             )
 
-    
+    # optionally add annotations
     if annotation_labels is not None:
         # get colorcycle for region annotations
         cmap_annot = matplotlib.colormaps[cmap_annotations]
@@ -221,14 +154,6 @@ def show(self,
         # add scale bar
         self.viewer.scale_bar.visible = True
         self.viewer.scale_bar.unit = unit
-        
-    # set maximum height of widget to prevent the widget from having a large distance
-    add_genes.max_height = 100
-    add_observations.max_height = 100
-    
-    # add widgets to napari window
-    self.viewer.window.add_dock_widget(add_genes, name="Add genes", area="right")
-    self.viewer.window.add_dock_widget(add_observations, name="Add observations", area="right")
     
     napari.run()
     return self.viewer
