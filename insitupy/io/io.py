@@ -198,15 +198,17 @@ def save(self,
     if hasattr(self, "matrix"):
         mtx_path = (path / "matrix")
         mtx_path.mkdir(parents=True, exist_ok=True) # create directory
-        self.matrix.write(mtx_path / "matrix.h5ad")
-        metadata["matrix"] = Path(relpath(mtx_path, path)).as_posix()
+        mtx_file = mtx_path / "matrix.h5ad"
+        self.matrix.write(mtx_file)
+        metadata["matrix"] = Path(relpath(mtx_file, path)).as_posix()
         
     # save transcripts
     if hasattr(self, "transcripts"):
         trans_path = (path / "transcripts")
         trans_path.mkdir(parents=True, exist_ok=True) # create directory
-        self.transcripts.to_parquet(trans_path / "transcripts.parquet")
-        metadata["transcripts"] = Path(relpath(trans_path, path)).as_posix()
+        trans_file = trans_path / "transcripts.parquet"
+        self.transcripts.to_parquet(trans_file)
+        metadata["transcripts"] = Path(relpath(trans_file, path)).as_posix()
         
     # save boundaries
     if hasattr(self, "boundaries"):
@@ -236,8 +238,8 @@ def save(self,
     if zip:
         shutil.make_archive(path, 'zip', path, verbose=False)
         
-    # write InSituData metadata to json file
-    metadata_path = path / "insitu.data"
+    # write Xeniumdata metadata to json file
+    metadata_path = path / "xeniumdata.json"
     metadata_json = json.dumps(metadata, indent=4)
     with open(metadata_path, "w") as metafile:
         metafile.write(metadata_json)
