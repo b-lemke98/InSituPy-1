@@ -2,6 +2,8 @@ import anndata
 import dask.array as da
 import zarr
 from pandas.api.types import is_numeric_dtype, is_string_dtype
+from scipy.sparse import issparse
+import numpy as np
 
 class textformat:
     '''
@@ -177,3 +179,16 @@ def load_pyramid(store):
         da.from_zarr(store, component=d["path"])
         for d in datasets
     ]
+    
+def check_raw(X):
+    '''
+    Check if a matrix consists of raw integer counts or if it is processed already.
+    '''
+    
+    # convert sparse matrix to numpy array
+    if issparse(X):
+        X = X.toarray()
+    
+    # check if the matrix contains raw counts
+    if not np.all(np.modf(X)[0] == 0):
+        raise ValueError("Anndata object does not contain raw counts. Preprocessing aborted.")

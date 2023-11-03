@@ -3,27 +3,19 @@ import anndata
 import scanpy as sc
 from .utils import split_batches, check_sanity
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
-from scipy.sparse import issparse
+from scipy.sparse import issparse, csr_matrix
+from .utils import check_raw
 
 
 def normalize(self,
+              transformation_method: Literal["log1p", "sqrt"] = "log1p",
               verbose: bool = True
               ):
     '''
     Function to normalize data.
     '''
-
-    # if count matrix does not consist of raw counts abort preprocessing
-    X = self.matrix.X
-    
-    # convert sparse matrix to numpy array
-    if issparse(X):
-        X = X.toarray()
-    
-    # check if the matrix contains raw counts
-    if not np.all(np.modf(X)[0] == 0):
-        print("Anndata object does not contain raw counts. Preprocessing aborted.")
-        return
+    # check if the matrix consists of raw integer counts
+    check_raw(self.matrix.X)
 
     # store raw counts in layer
     print("Store raw counts in anndata.layers['counts']...") if verbose else None
@@ -33,8 +25,14 @@ def normalize(self,
     print("Normalization, log-transformation...") if verbose else None
     sc.pp.normalize_total(self.matrix)
     self.matrix.layers['norm_counts'] = self.matrix.X.copy()
-    sc.pp.log1p(self.matrix)
-        
+    
+    # normalize either 
+    if transformation_method == "log1p":
+        sc.pp.log1p(self.matrix)
+    elif transformation_method == "sqrt":
+        X = self.matrix.X.toarray()   
+        self.matrix.X = csr_matrix(np.sqrt(X) + np.sqrt(X + 1))
+    
     
 def hvg(self,
         hvg_batch_key: Optional[str] = None, 
