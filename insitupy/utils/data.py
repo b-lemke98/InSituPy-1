@@ -159,32 +159,28 @@ class BoundariesData:
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self, 
-                 path: Union[str, os.PathLike, Path], 
-                 cell_boundaries_file: str = "cell_boundaries.parquet",
-                 nucleus_boundaries_file: str = "nucleus_boundaries.parquet",
+                 path: Union[str, os.PathLike, Path],
+                 filenames: List[Union[str, os.PathLike, Path]],
+                 names: List[str],
                  pixel_size: Optional[float] = None
                  ):
-        # generate paths
-        cellbound_path = path / cell_boundaries_file
-        nucbound_path = path / nucleus_boundaries_file
-        
-        # load dataframe
-        celldf = pd.read_parquet(cellbound_path)
-        nucdf = pd.read_parquet(nucbound_path)
-        
-        # decode columns
-        celldf = celldf.apply(lambda x: decode_robust_series(x), axis=0)
-        nucdf = nucdf.apply(lambda x: decode_robust_series(x), axis=0)
-        
-        if pixel_size is not None:
-            # convert coordinates into pixel coordinates
-            coord_cols = ["vertex_x", "vertex_y"]
-            celldf[coord_cols] = celldf[coord_cols].apply(lambda x: x / pixel_size)
-            nucdf[coord_cols] = nucdf[coord_cols].apply(lambda x: x / pixel_size)
-        
-        # add to object
-        setattr(self, "cells", celldf)
-        setattr(self, "nuclei", nucdf)
+        for n, f in zip(names, filenames):
+            # generate paths
+            filepath = path / f
+            
+            # load dataframe
+            bounddf = pd.read_parquet(filepath)
+            
+            # decode columns
+            bounddf = bounddf.apply(lambda x: decode_robust_series(x), axis=0)
+            
+            if pixel_size is not None:
+                # convert coordinates into pixel coordinates
+                coord_cols = ["vertex_x", "vertex_y"]
+                bounddf[coord_cols] = bounddf[coord_cols].apply(lambda x: x / pixel_size)
+                            
+            # add to object
+            setattr(self, n, bounddf)
         
     def __repr__(self):
         repr_strings = [f"{tf.Bold+a+tf.ResetAll}" for a in ["cells", "nuclei"]]

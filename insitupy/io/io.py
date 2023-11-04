@@ -106,9 +106,20 @@ def read_transcripts(self,
         coord_cols = ["x_location", "y_location", "z_location"]
         self.transcripts[coord_cols] = self.transcripts[coord_cols].apply(lambda x: x / self.metadata["pixel_size"])
         
-def read_boundaries(self):
+def read_boundaries(self,
+                    filenames: List[Union[str, os.PathLike, Path]] = ["cell_boundaries.parquet", "nucleus_boundaries.parquet"],
+                    names: List[str] = ["cells", "nuclei"]
+                    ):
+    # convert arguments to lists
+    filenames = convert_to_list(filenames)
+    names = convert_to_list(names)
+    
     # read boundaries data
-    self.boundaries = BoundariesData(path=self.path, pixel_size=self.metadata["pixel_size"])
+    self.boundaries = BoundariesData(path=self.path,
+                                     filenames=filenames,
+                                     names=names,
+                                     pixel_size=self.metadata["pixel_size"]
+                                     )
     
 def read_annotations(self,
                      annot_path: Union[str, os.PathLike, Path] = "../annotations",
