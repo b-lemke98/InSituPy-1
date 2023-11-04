@@ -30,19 +30,20 @@ def show(self,
     # create viewer
     self.viewer = napari.Viewer()
     
-    # initialize the widgets
-    add_genes, add_observations = initialize_widgets(
-        matrix=self.matrix,
-        pixel_size=pixel_size
-        )
-    
-    # set maximum height of widget to prevent the widget from having a large distance
-    add_genes.max_height = 100
-    add_observations.max_height = 100
-    
-    # add widgets to napari window
-    self.viewer.window.add_dock_widget(add_genes, name="Add genes", area="right")
-    self.viewer.window.add_dock_widget(add_observations, name="Add observations", area="right")
+    if hasattr(self, "matrix"):
+        # initialize the widgets
+        add_genes, add_observations = initialize_widgets(
+            matrix=self.matrix,
+            pixel_size=pixel_size
+            )
+        
+        # set maximum height of widget to prevent the widget from having a large distance
+        add_genes.max_height = 100
+        add_observations.max_height = 100
+        
+        # add widgets to napari window
+        self.viewer.window.add_dock_widget(add_genes, name="Add genes", area="right")
+        self.viewer.window.add_dock_widget(add_observations, name="Add observations", area="right")
          
     # optionally add images       
     if show_images:

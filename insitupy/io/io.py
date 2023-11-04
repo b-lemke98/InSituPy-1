@@ -17,93 +17,104 @@ import json
 def read_matrix(self, 
                 read_cells: bool = True
                 ):
-    # extract parameters from metadata
-    pixel_size = self.metadata["pixel_size"]
-    cf_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
-    cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
+    if self.from_xeniumdata:
+        self.matrix = sc.read(self.path / self.xd_metadata["matrix"])
+    else:
+        # extract parameters from metadata
+        pixel_size = self.metadata["pixel_size"]
+        cf_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
+        cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
 
-    with warnings.catch_warnings():
-        warnings.simplefilter(action='ignore', category=FutureWarning)
-        # read matrix data
-        self.matrix = sc.read_10x_h5(cf_h5_path)
-    
-    if read_cells:
-        # read cell information
-        cells_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cells_zarr_filepath"]
-        cells_parquet_path = cells_zarr_path.parent / cells_zarr_path.name.replace(".zarr.zip", ".parquet")
-        cells = pd.read_parquet(cells_parquet_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter(action='ignore', category=FutureWarning)
+            # read matrix data
+            self.matrix = sc.read_10x_h5(cf_h5_path)
         
-        # transform cell ids from bytes to str
-        cells = cells.set_index("cell_id")
+        if read_cells:
+            # read cell information
+            cells_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cells_zarr_filepath"]
+            cells_parquet_path = cells_zarr_path.parent / cells_zarr_path.name.replace(".zarr.zip", ".parquet")
+            cells = pd.read_parquet(cells_parquet_path)
+            
+            # transform cell ids from bytes to str
+            cells = cells.set_index("cell_id")
 
-        # make sure that the indices are decoded strings
-        if is_numeric_dtype(cells.index):
-            cells.index = cells.index.astype(str)
-        else:
-            cells.index = decode_robust_series(cells.index)
+            # make sure that the indices are decoded strings
+            if is_numeric_dtype(cells.index):
+                cells.index = cells.index.astype(str)
+            else:
+                cells.index = decode_robust_series(cells.index)
+            
+            # add information to anndata observations
+            self.matrix.obs = pd.merge(left=self.matrix.obs, right=cells, left_index=True, right_index=True)
         
-        # add information to anndata observations
-        self.matrix.obs = pd.merge(left=self.matrix.obs, right=cells, left_index=True, right_index=True)
-    
-    # transfer coordinates to .obsm
-    coord_cols = ["x_centroid", "y_centroid"]
-    self.matrix.obsm["spatial"] = self.matrix.obs[coord_cols].values
-    self.matrix.obsm["spatial"] /= pixel_size
-    self.matrix.obs.drop(coord_cols, axis=1, inplace=True)
+        # transfer coordinates to .obsm
+        coord_cols = ["x_centroid", "y_centroid"]
+        self.matrix.obsm["spatial"] = self.matrix.obs[coord_cols].values
+        self.matrix.obsm["spatial"] /= pixel_size
+        self.matrix.obs.drop(coord_cols, axis=1, inplace=True)
     
 def read_images(self,
                 names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
                 dapi_type: str = "focus"
                 ):
-
-    if names == "nuclei":
-        img_keys = [f"morphology_{dapi_type}_filepath"]
-        img_names = ["nuclei"]
+    if self.from_xeniumdata:
+        img_files = list(self.xd_metadata["images"].values())
+        img_names = list(self.xd_metadata["images"].keys())
     else:
-        # get available keys for registered images in metadata
-        img_keys = [elem for elem in self.metadata["images"] if elem.startswith("registered")]
-        
-        # extract image names from keys and add nuclei
-        img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
-        
-        # add dapi image key
-        img_keys = [f"morphology_{dapi_type}_filepath"] + img_keys
-        
-        if names != "all":
-            # make sure keys is a list
-            names = convert_to_list(names)
-            # select the specified keys
-            mask = [elem in names for elem in img_names]
-            img_keys = [elem for m, elem in zip(mask, img_keys) if m]
-            img_names = [elem for m, elem in zip(mask, img_names) if m]
+        if names == "nuclei":
+            img_keys = [f"morphology_{dapi_type}_filepath"]
+            img_names = ["nuclei"]
+        else:
+            # get available keys for registered images in metadata
+            img_keys = [elem for elem in self.metadata["images"] if elem.startswith("registered")]
             
-    # get path of image files
-    img_files = [self.metadata["images"][k] for k in img_keys]
+            # extract image names from keys and add nuclei
+            img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
+            
+            # add dapi image key
+            img_keys = [f"morphology_{dapi_type}_filepath"] + img_keys
+            
+            if names != "all":
+                # make sure keys is a list
+                names = convert_to_list(names)
+                # select the specified keys
+                mask = [elem in names for elem in img_names]
+                img_keys = [elem for m, elem in zip(mask, img_keys) if m]
+                img_names = [elem for m, elem in zip(mask, img_names) if m]
+                
+        # get path of image files
+        img_files = [self.metadata["images"][k] for k in img_keys]
         
     # load image into ImageData object
     self.images = ImageData(self.path, img_files, img_names)
     
     
-def read_transcripts(self):
-    # read transcripts
-    self.transcripts = pd.read_parquet(self.path / self.transcript_filename)
-    
-    # decode columns
-    self.transcripts = self.transcripts.apply(lambda x: decode_robust_series(x), axis=0)
-    
-    # convert coordinates into pixel coordinates
-    coord_cols = ["x_location", "y_location", "z_location"]
-    self.transcripts[coord_cols] = self.transcripts[coord_cols].apply(lambda x: x / self.metadata["pixel_size"])
+def read_transcripts(self,
+                     transcript_filename: str = "transcripts.parquet"
+                     ):
+    if self.from_xeniumdata:
+        self.transcripts = pd.read_parquet(self.path / self.xd_metadata["transcripts"])
+    else:
+        # read transcripts
+        self.transcripts = pd.read_parquet(self.path / transcript_filename)
+        
+        # decode columns
+        self.transcripts = self.transcripts.apply(lambda x: decode_robust_series(x), axis=0)
+        
+        # convert coordinates into pixel coordinates
+        coord_cols = ["x_location", "y_location", "z_location"]
+        self.transcripts[coord_cols] = self.transcripts[coord_cols].apply(lambda x: x / self.metadata["pixel_size"])
         
 def read_boundaries(self):
     # read boundaries data
     self.boundaries = BoundariesData(path=self.path, pixel_size=self.metadata["pixel_size"])
     
 def read_annotations(self,
-                        annot_path: Union[str, os.PathLike, Path] = "../annotations",
-                        suffix: str = ".geojson",
-                        pattern_annotation_file: str = "annotation-{slide_id}__{region_id}__{name}"
-                        ) -> pd.DataFrame:
+                     annot_path: Union[str, os.PathLike, Path] = "../annotations",
+                     suffix: str = ".geojson",
+                     pattern_annotation_file: str = "annotation-{slide_id}__{region_id}__{name}"
+                     ):
     annot_path = Path(annot_path)
     
     # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
@@ -165,6 +176,11 @@ def save(self,
     
     # create a metadata dictionary
     metadata = {}
+    
+    # store basic information about experiment
+    metadata["slide_id"] = self.slide_id
+    metadata["region_id"] = self.region_id
+    metadata["path"] = str(self.path)
     
     # save images
     if hasattr(self, "images"):

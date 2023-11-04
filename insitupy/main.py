@@ -7,6 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from dask_image.imread import imread
 from .utils.utils import textformat as tf
+from .utils.utils import read_json
 from parse import *
 from .images import resize_image, deconvolve_he, ImageRegistration
 import gc
@@ -19,26 +20,15 @@ from .utils.exceptions import UnknownOptionError
 SHRT_MAX = 2**15-1 # 32767
 SHRT_MIN = -(2**15-1) # -32767
 
-def read_xenium_metadata(
-    path: Union[str, os.PathLike, Path],
-    metadata_filename: str = "experiment.xenium"
-    ) -> dict:
-    '''
-    Function to read the xenium metadata file which usually is in the xenium output folder of one region.
-    '''
-    # load metadata file
-    metapath = path / metadata_filename
-    with open(metapath, "r") as metafile:
-        metadata = json.load(metafile)
-        
-    return metadata
-
 class XeniumData:
     '''
     XeniumData object to read Xenium in situ data in a structured way.
     '''
     # import read and write functions
-    from .io.io import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts, save
+    from .io.io import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
+    
+    # import write function
+    from .io.io import save
     
     # import analysis functions
     from .utils.annotations import annotate
@@ -54,13 +44,29 @@ class XeniumData:
     
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
-                 transcript_filename: str = "transcripts.parquet",
                  pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{region_id}",
                  matrix: Optional[AnnData] = None
                  ):
-        if matrix is None:
+        self.from_xeniumdata = False  # flag indicating from where the data is read
+        if (path / "xeniumdata.json").is_file():
             self.path = Path(path)
-            self.transcript_filename = transcript_filename
+            
+            # read xeniumdata metadata
+            self.metadata_filename = "xeniumdata.json"
+            self.xd_metadata = read_json(self.path / self.metadata_filename)
+            
+            # read general xenium metadata
+            self.metadata = read_json(self.path / "xenium.json")
+            
+            # retrieve slide_id and region_id
+            self.slide_id = self.xd_metadata["slide_id"]
+            self.region_id = self.xd_metadata["region_id"]
+            
+            # set flag for xeniumdata
+            self.from_xeniumdata = True
+            
+        elif matrix is None:
+            self.path = Path(path)
             
             # check if path exists
             if not self.path.is_dir():
@@ -77,7 +83,7 @@ class XeniumData:
             self.metadata_save_path = self.path / "experiment_modified.xenium"
                 
             # read metadata
-            self.metadata = read_xenium_metadata(self.path, metadata_filename=self.metadata_filename)
+            self.metadata = read_json(self.path / self.metadata_filename)
             
             # parse folder name to get slide_id and region_id
             name_stub = "__".join(self.path.stem.split("__")[:3])

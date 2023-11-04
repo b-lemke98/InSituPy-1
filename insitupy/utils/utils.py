@@ -4,6 +4,10 @@ import zarr
 from pandas.api.types import is_numeric_dtype, is_string_dtype
 from scipy.sparse import issparse
 import numpy as np
+from typing import Optional, Tuple, Union, List, Dict, Any, Literal
+import os
+from pathlib import Path
+import json
 
 class textformat:
     '''
@@ -163,6 +167,21 @@ def split_batches(adata, batch, hvg=None, return_categories=False):
     if return_categories:
         return split, batch_categories
     return split
+    
+def check_raw(X):
+    '''
+    Check if a matrix consists of raw integer counts or if it is processed already.
+    '''
+    
+    # convert sparse matrix to numpy array
+    if issparse(X):
+        X = X.toarray()
+    
+    # check if the matrix contains raw counts
+    if not np.all(np.modf(X)[0] == 0):
+        raise ValueError("Anndata object does not contain raw counts. Preprocessing aborted.")
+
+## read utils
 
 def load_pyramid(store):
     '''
@@ -180,15 +199,14 @@ def load_pyramid(store):
         for d in datasets
     ]
     
-def check_raw(X):
+def read_json(
+    file: Union[str, os.PathLike, Path],
+    ) -> dict:
     '''
-    Check if a matrix consists of raw integer counts or if it is processed already.
+    Function to load json files as dictionary.
     '''
-    
-    # convert sparse matrix to numpy array
-    if issparse(X):
-        X = X.toarray()
-    
-    # check if the matrix contains raw counts
-    if not np.all(np.modf(X)[0] == 0):
-        raise ValueError("Anndata object does not contain raw counts. Preprocessing aborted.")
+    # load metadata file
+    with open(file, "r") as metafile:
+        metadata = json.load(metafile)
+        
+    return metadata
