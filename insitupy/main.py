@@ -21,9 +21,21 @@ SHRT_MAX = 2**15-1 # 32767
 SHRT_MIN = -(2**15-1) # -32767
 
 class XeniumData:
-    '''
-    XeniumData object to read Xenium in situ data in a structured way.
-    '''
+    """_summary_
+
+    Raises:
+        FileNotFoundError: _description_
+        FileNotFoundError: _description_
+        FileNotFoundError: _description_
+        ValueError: _description_
+        ValueError: _description_
+        UnknownOptionError: _description_
+        ValueError: _description_
+        TypeError: _description_
+
+    Returns:
+        _type_: _description_
+    """
     # import read and write functions
     from .io._read import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
     
@@ -47,6 +59,16 @@ class XeniumData:
                  pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{sample_id}",
                  matrix: Optional[AnnData] = None
                  ):
+        """_summary_
+
+        Args:
+            path (Union[str, os.PathLike, Path]): _description_
+            pattern_xenium_folder (str, optional): _description_. Defaults to "output-{ins_id}__{slide_id}__{sample_id}".
+            matrix (Optional[AnnData], optional): _description_. Defaults to None.
+
+        Raises:
+            FileNotFoundError: _description_
+        """
         self.from_xeniumdata = False  # flag indicating from where the data is read
         if (path / "xeniumdata.json").is_file():
             self.path = Path(path)

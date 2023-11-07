@@ -142,11 +142,18 @@ def read_annotations(self,
 def read_all(self, verbose: bool = True):
     read_funcs = [elem for elem in dir(self) if elem.startswith("read_")]
     read_funcs = [elem for elem in read_funcs if elem != "read_all"]
+    modalities = [elem.split("_", maxsplit=1)[1] for elem in read_funcs]
     
-    # check if there is an annotations folder
-    if len(list(self.path.parent.glob("annotations"))) == 0:
-        read_funcs.remove("read_annotations")
-        print("No folder named `annotations` found. Function `read_annotations()` was skipped.", flush=True)
+    for m in modalities:
+         # check if there is an folder of this modality
+        if len(list(self.path.glob(m))) == 0:
+            read_funcs.remove(f"read_{m}")
+            print(f"No folder named `{m}` found. Function `read_{m}()` was skipped.", flush=True)
+    
+    # # check if there is an annotations folder
+    # if len(list(self.path.parent.glob("annotations"))) == 0:
+    #     read_funcs.remove("read_annotations")
+    #     print("No folder named `annotations` found. Function `read_annotations()` was skipped.", flush=True)
         
     for f in read_funcs:
         if verbose: 

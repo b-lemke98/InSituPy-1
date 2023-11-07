@@ -19,7 +19,8 @@ def show(self,
     pixel_size: float = None, # if none, extract from metadata
     unit: str = "µm",
     cmap_annotations: str ="Dark2",
-    grayscale_colormap: List[str] = ["red", "green", "cyan", "magenta", "yellow", "gray"]
+    grayscale_colormap: List[str] = ["red", "green", "cyan", "magenta", "yellow", "gray"],
+    return_viewer: bool = False
     ):
     # get information about pixel size
     if (pixel_size is None) & (scalebar):
@@ -183,4 +184,5 @@ def show(self,
         self.viewer.scale_bar.unit = unit
     
     napari.run()
-    return self.viewer
+    if return_viewer:
+        return self.viewer
