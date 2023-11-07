@@ -34,9 +34,10 @@ For detailed instructions on using InSituPy, refer to the [official documentatio
 
 Explore our tutorials to learn how to use InSituPy effectively:
 
-1. [Basic Data Processing](https://InSituPy.readthedocs.io/en/latest/tutorials/basic_processing.html) - Learn how to preprocess raw data and prepare it for analysis.
-2. [Spatial Visualization](https://InSituPy.readthedocs.io/en/latest/tutorials/spatial_visualization.html) - Visualize spatial gene expression patterns using interactive plots and heatmaps.
-3. [Advanced Analysis](https://InSituPy.readthedocs.io/en/latest/tutorials/advanced_analysis.html) - Dive into advanced analysis techniques, including spatial clustering and cell type identification.
+1. [Demonstration of Basic Functionalities](notebooks/00_InSituPy_demo.ipynb) - Learn about the basic functionalities, such as loading of data, image registration and interactive visualization with napari.
+2. TODO!! [Basic Data Processing](https://InSituPy.readthedocs.io/en/latest/tutorials/basic_processing.html) - Learn how to preprocess raw data and prepare it for analysis.
+3. TODO!! [Spatial Visualization](https://InSituPy.readthedocs.io/en/latest/tutorials/spatial_visualization.html) - Visualize spatial gene expression patterns using interactive plots and heatmaps.
+4. TODO!! [Advanced Analysis](https://InSituPy.readthedocs.io/en/latest/tutorials/advanced_analysis.html) - Dive into advanced analysis techniques, including spatial clustering and cell type identification.
 
 ## Features
 
