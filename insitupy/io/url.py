@@ -8,20 +8,27 @@ def download_url(
     url: str,
     out_dir: Union[str, os.PathLike, Path] = ".",
     file_name: Optional[str] = None,
-    chunk_size=1024
-    ):
-    """Downloads a file from the specified URL and saves it to the given file path.
+    chunk_size: int = 1024,
+    overwrite: bool = False
+    ) -> None:
+    """
+    Downloads a file from the specified URL and saves it to the given output directory.
     
     Code adapted from: https://gist.github.com/yanqd0/c13ed29e29432e3cf3e7c38467f42f51
 
     Args:
-        url (str): The URL from which the file will be downloaded.
-        out_dir (Union[str, os.PathLike, Path], optional): The directory where the downloaded file will be saved in. 
-                                                           Defaults to ".".
-        file_name (Optional[str], optional): The name (without suffix) under which the downloaded file is saved. If None, the name is
-                                             is inferred from the URL. Defaults to None.
-        chunk_size (int, optional): The size of each chunk for streaming the download. 
-                                    Defaults to 1024 bytes.
+        url (str): The URL of the file to be downloaded.
+        out_dir (Union[str, os.PathLike, Path], optional): The output directory where the downloaded file will be saved.
+            Default is the current directory (".").
+        file_name (str, optional): The name of the downloaded file. If not provided, the function will use the name
+            from the URL. Default is None.
+        chunk_size (int, optional): The size of the chunks in bytes to download the file. Default is 1024 bytes.
+        overwrite (bool, optional): If True, the function will download the file even if it already exists in the
+            output directory, overwriting the existing file. If False and the file exists, the function will skip
+            the download. Default is False.
+
+    Returns:
+        None: This function does not return any value. The downloaded file is saved in the specified output directory.
     """
     # create output directory if necessary
     out_dir = Path(out_dir)
@@ -34,6 +41,10 @@ def download_url(
     
     # create path for output file
     outfile = out_dir / (file_name + suffix)
+    
+    if outfile.exists():
+        print(f"File {outfile} exists already. Download is skipped. To force download set `overwrite=True`.")
+        return
     
     # request content from URL
     resp = requests.get(url, stream=True)
