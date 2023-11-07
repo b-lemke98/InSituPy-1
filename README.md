@@ -63,4 +63,4 @@ InSituPy is licensed under the [MIT License](LICENSE).
 
 ---
 
-**InSituPy** is developed and maintained by the InSituPy team. We appreciate your feedback and hope this package enhances your in situ transcriptomics analysis experience!
+**InSituPy** is developed and maintained by [jwrth](https://github.com/jwrth). We appreciate your feedback and hope this package enhances your in situ transcriptomics analysis experience!
