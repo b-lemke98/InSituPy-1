@@ -40,7 +40,7 @@ Explore our tutorials to learn how to use InSituPy effectively:
 
 ## Contributing
 
-Contributions are welcome! If you find any issues or have suggestions for new features, please open an [issue](https://github.com/InSituPy/InSituPy/issues) or submit a pull request.
+Contributions are welcome! If you find any issues or have suggestions for new features, please open an [issue](https://github.com/jwrth/InSituPy/issues) or submit a pull request.
 
 ## License
 
