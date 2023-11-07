@@ -24,7 +24,7 @@ To install InSituPy, follow these steps:
    pip install .
    ```
 
-Make sure you have Python 3.6 or later installed on your system.
+Make sure you have Python 3.9 or later installed on your system.
 
 ## Getting Started
 
