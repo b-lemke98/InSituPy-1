@@ -63,4 +63,4 @@ InSituPy is licensed under the [MIT License](LICENSE).
 
 ---
 
-**InSituPy** is developed and maintained by [jwrth](https://github.com/jwrth). We appreciate your feedback and hope this package enhances your in situ transcriptomics analysis experience!
+**InSituPy** is developed and maintained by [jwrth](https://github.com/jwrth). Feedback is highly appreciated and hopefully **InSituPy** helps you with your Xenium In Situ analysis. The package is thought to be a starting point to simplify the analysis of in situ sequencing data in Python and it would be exciting to integrate functionalities into larger and more comprehensive data structures.
