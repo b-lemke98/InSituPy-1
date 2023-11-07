@@ -25,10 +25,10 @@ class XeniumData:
     XeniumData object to read Xenium in situ data in a structured way.
     '''
     # import read and write functions
-    from .io.io import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
+    from .io._read import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
     
     # import write function
-    from .io.io import save
+    from .io._write import save
     
     # import analysis functions
     from .utils.annotations import annotate
@@ -44,7 +44,7 @@ class XeniumData:
     
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
-                 pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{region_id}",
+                 pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{sample_id}",
                  matrix: Optional[AnnData] = None
                  ):
         self.from_xeniumdata = False  # flag indicating from where the data is read
@@ -58,9 +58,9 @@ class XeniumData:
             # read general xenium metadata
             self.metadata = read_json(self.path / "xenium.json")
             
-            # retrieve slide_id and region_id
+            # retrieve slide_id and sample_id
             self.slide_id = self.xd_metadata["slide_id"]
-            self.region_id = self.xd_metadata["region_id"]
+            self.sample_id = self.xd_metadata["sample_id"]
             
             # set flag for xeniumdata
             self.from_xeniumdata = True
@@ -85,23 +85,23 @@ class XeniumData:
             # read metadata
             self.metadata = read_json(self.path / self.metadata_filename)
             
-            # parse folder name to get slide_id and region_id
+            # parse folder name to get slide_id and sample_id
             name_stub = "__".join(self.path.stem.split("__")[:3])
             p_parsed = parse(pattern_xenium_folder, name_stub)
             self.slide_id = p_parsed.named["slide_id"]
-            self.region_id = p_parsed.named["region_id"]
+            self.sample_id = p_parsed.named["sample_id"]
         else:
             self.matrix = matrix
             self.slide_id = ""
-            self.region_id = ""
+            self.sample_id = ""
             self.path = Path("unknown/unknown")
             self.metadata_filename = ""
         
     def __repr__(self):
         repr = (
-            f"{tf.Bold+tf.Red}XeniumData{tf.ResetAll}\n" 
+            f"{tf.Bold+tf.Red}XeniumData{tf.ResetAll}\n"
             f"{tf.Bold}Slide ID:{tf.ResetAll}\t{self.slide_id}\n"
-            f"{tf.Bold}Region ID:{tf.ResetAll}\t{self.region_id}\n"
+            f"{tf.Bold}Sample ID:{tf.ResetAll}\t{self.sample_id}\n"
             f"{tf.Bold}Data path:{tf.ResetAll}\t{self.path.parent}\n"
             f"{tf.Bold}Data folder:{tf.ResetAll}\t{self.path.name}\n"
             f"{tf.Bold}Metadata file:{tf.ResetAll}\t{self.metadata_filename}"            
@@ -200,7 +200,7 @@ class XeniumData:
     def register_images(self,
                         img_dir: Union[str, os.PathLike, Path],
                         img_suffix: str = ".ome.tif",
-                        pattern_img_file: str = "{slide_id}__{region_id}__{image_names}__{image_type}",
+                        pattern_img_file: str = "{slide_id}__{sample_id}__{image_names}__{image_type}",
                         decon_scale_factor: float = 0.2,
                         image_name_sep: str = "_",  # string separating the image names in the file name
                         nuclei_name: str = "DAPI",  # name used for the nuclei image
@@ -219,17 +219,17 @@ class XeniumData:
         if not self.img_dir.is_dir():
             raise FileNotFoundError(f"No such directory found: {str(self.img_dir)}")
         
-        print(f"Processing region {tf.Bold}{self.region_id}{tf.ResetAll} of slide {tf.Bold}{self.slide_id}{tf.ResetAll}", flush=True)        
+        print(f"Processing sample {tf.Bold}{self.sample_id}{tf.ResetAll} of slide {tf.Bold}{self.slide_id}{tf.ResetAll}", flush=True)        
         
         # get a list of image files
         img_files = sorted(self.img_dir.glob("*{}".format(img_suffix)))
         
         # find the corresponding image
-        corr_img_files = [elem for elem in img_files if self.slide_id in str(elem) and self.region_id in str(elem)]
+        corr_img_files = [elem for elem in img_files if self.slide_id in str(elem) and self.sample_id in str(elem)]
         
         # make sure images corresponding to the Xenium data were found
         if len(corr_img_files) == 0:
-            print(f'\tNo image corresponding to slide`{self.slide_id}` and region `{self.region_id}` were found.')
+            print(f'\tNo image corresponding to slide `{self.slide_id}` and sample `{self.sample_id}` were found.')
         else:
             if self.metadata_filename == "experiment_modified.xenium":
                 print(f"\tFound modified `{self.metadata_filename}` file. Information will be added to this file.")
@@ -368,7 +368,7 @@ class XeniumData:
                         
                     # save files
                     imreg_selected.save(path=self.path,
-                                        filename=f"{self.slide_id}__{self.region_id}__{self.image_names[0]}",
+                                        filename=f"{self.slide_id}__{self.sample_id}__{self.image_names[0]}",
                                         axes=axes_image,
                                         photometric='rgb',
                                         ome_metadata=metadata
@@ -402,7 +402,7 @@ class XeniumData:
                         
                         # save files
                         imreg_selected.save(path=self.path,
-                                        filename=f"{self.slide_id}__{self.region_id}__{n}",
+                                        filename=f"{self.slide_id}__{self.sample_id}__{n}",
                                         axes='YX',
                                         photometric='minisblack'
                                         )

@@ -137,5 +137,6 @@ dmypy.json
 # Coala
 *.orig
 
-# output files
+# output files and folders
 *.out
+out/

@@ -18,6 +18,20 @@ from shapely import Polygon
 def read_qupath_annotation(file: Union[str, os.PathLike, Path], 
                            use_geopandas: bool = True
                            ) -> pd.DataFrame:
+    """
+    Reads QuPath annotation data from a file and processes it into a pandas DataFrame.
+    
+    Args:
+        file (Union[str, os.PathLike, Path]): The path to the QuPath annotation file.
+        use_geopandas (bool, optional): If True, use geopandas to read the file. 
+                                        Defaults to True.
+        
+    Returns:
+        pd.DataFrame: A DataFrame containing processed QuPath annotation data.
+        
+    Raises:
+        Exception: If the file reading or processing fails.
+    """
     # read dataframe
     df = geopandas.read_file(file)
 

@@ -5,8 +5,9 @@ from ..palettes import CustomPalettes
 from scipy.sparse import issparse
 from magicgui import magicgui
 from magicgui.widgets import FunctionGui
+from pandas.api.types import is_numeric_dtype
 
-def initialize_widgets(
+def initialize_point_widgets(
     matrix,
     pixel_size: float
     ) -> Tuple[FunctionGui, FunctionGui]:
@@ -31,22 +32,22 @@ def initialize_widgets(
     def add_genes(gene=None) -> napari.types.LayerDataTuple:
         # get expression values
         geneid = matrix.var_names.get_loc(gene)
-        expr = X[:, geneid]
+        color_value = X[:, geneid]
         
         # set color settings for continuous data
         color_map = "viridis"
         color_cycle = None
-        climits = [0, np.percentile(expr, 95)]
+        climits = [0, np.percentile(color_value, 95)]
         
         # generate point layer
         layer = (
             points, 
             {
                 'name': gene,
-                'properties': {"expr": expr},
+                'properties': {"color_value": color_value},
                 'symbol': 'o',
                 'size': 30 * pixel_size,
-                'face_color': "expr",
+                'face_color': "color_value",
                 'face_color_cycle': color_cycle,
                 'face_colormap': color_map,
                 'face_contrast_limits': climits,
@@ -64,23 +65,34 @@ def initialize_widgets(
         )
     def add_observations(observation=None) -> napari.types.LayerDataTuple:
         # get observation values
-        expr = matrix.obs[observation].values
+        color_value = matrix.obs[observation]
         
-        # get color cycle for categorical data
-        palettes = CustomPalettes()
-        color_cycle = getattr(palettes, "tab20_mod").colors
-        color_map = None
-        climits = None
+        # check if the data should be plotted categorical or continous
+        if is_numeric_dtype(color_value):
+            categorical = False # if the data is numeric it should be plotted continous
+        else:
+            categorical = True # if the data is not numeric it should be plotted categorically
+            
+        if categorical:
+            # get color cycle for categorical data
+            palettes = CustomPalettes()
+            color_cycle = getattr(palettes, "tab20_mod").colors
+            color_map = None
+            climits = None
+        else:
+            color_map = "viridis"
+            color_cycle = None
+            climits = [0, np.percentile(color_value, 95)]
         
         # generate point layer
         layer = (
             points, 
             {
                 'name': observation,
-                'properties': {"expr": expr},
+                'properties': {"color_value": color_value.values},
                 'symbol': 'o',
                 'size': 30 * pixel_size,
-                'face_color': "expr",
+                'face_color': "color_value",
                 'face_color_cycle': color_cycle,
                 'face_colormap': color_map,
                 'face_contrast_limits': climits,

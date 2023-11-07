@@ -7,7 +7,8 @@ from ..utils.utils import convert_to_list
 from ..utils.exceptions import XeniumDataMissingObject
 from ..palettes import CustomPalettes
 from scipy.sparse import issparse
-from .widget import initialize_widgets
+from .widget import initialize_point_widgets
+from pandas.api.types import is_numeric_dtype
 
 def show(self,
     keys: Optional[str] = None,
@@ -17,9 +18,9 @@ def show(self,
     scalebar: bool = True,
     pixel_size: float = None, # if none, extract from metadata
     unit: str = "µm",
-    cmap_annotations="Dark2"
+    cmap_annotations: str ="Dark2",
+    grayscale_colormap: List[str] = ["red", "green", "cyan", "magenta", "yellow", "gray"]
     ):
-    
     # get information about pixel size
     if (pixel_size is None) & (scalebar):
         # extract pixel_size
@@ -32,7 +33,7 @@ def show(self,
     
     if hasattr(self, "matrix"):
         # initialize the widgets
-        add_genes, add_observations = initialize_widgets(
+        add_genes, add_observations = initialize_point_widgets(
             matrix=self.matrix,
             pixel_size=pixel_size
             )
@@ -52,15 +53,30 @@ def show(self,
             raise XeniumDataMissingObject("images")
             
         image_keys = self.images.metadata.keys()
+        n_grayscales = 0 # number of grayscale images
         for i, img_name in enumerate(image_keys):
             img = getattr(self.images, img_name)
             visible = False if i < len(image_keys) - 1 else True # only last image is set visible
+            
+            # check if the current image is RGB
+            is_rgb = self.images.metadata[img_name]["rgb"]
+            
+            if is_rgb:
+                cmap = None  # default value of cmap
+                blending = "translucent_no_depth"  # set blending mode
+            else:
+                if img_name == "nuclei":
+                    cmap = "blue"
+                else:
+                    cmap = grayscale_colormap[n_grayscales]
+                    n_grayscales += 1
+                blending = "additive"  # set blending mode
             self.viewer.add_image(
                     img,
-                    #channel_axis=channel_axis,
                     name=img_name,
-                    #colormap=["gray", "blue", "green"],
-                    rgb=self.images.metadata[img_name]["rgb"],
+                    colormap=cmap,
+                    blending=blending,
+                    rgb=is_rgb,
                     contrast_limits=self.images.metadata[img_name]["contrast_limits"],
                     scale=(pixel_size, pixel_size),
                     visible=visible
@@ -88,22 +104,32 @@ def show(self,
             visible = False if i < len(keys) - 1 else True # only last image is set visible
             # get expression values
             if k in self.matrix.obs.columns:
-                expr = self.matrix.obs[k].values
+                color_value = self.matrix.obs[k].values
                 
+                # check if the data should be plotted categorical or continous
+                if is_numeric_dtype(self.matrix.obs[k]):
+                    categorical = False # if the data is numeric it should be plotted continous
+                else:
+                    categorical = True # if the data is not numeric it should be plotted categorically
+                    
+            else:
+                geneid = self.matrix.var_names.get_loc(k)
+                color_value = X[:, geneid]
+                categorical = False # expression data is always continuous
+                
+            if categorical:
                 # get color cycle for categorical data
                 palettes = CustomPalettes()
                 color_cycle = getattr(palettes, "tab20_mod").colors
                 color_map = None
                 climits = None
             else:
-                geneid = self.matrix.var_names.get_loc(k)
-                expr = X[:, geneid]
                 color_map = "viridis"
                 color_cycle = None
-                climits = [0, np.percentile(expr, 95)]
+                climits = [0, np.percentile(color_value, 95)]
             
             point_properties = {
-                "expr": expr,
+                "color_value": color_value,
                 #"confidence": subset.X.toarray()[:, 1]
             }
 
@@ -112,7 +138,7 @@ def show(self,
                                             properties=point_properties,
                                             symbol='o',
                                             size=30 * pixel_size,
-                                            face_color="expr",
+                                            face_color="color_value",
                                             face_color_cycle=color_cycle,
                                             face_colormap=color_map,
                                             face_contrast_limits=climits,
