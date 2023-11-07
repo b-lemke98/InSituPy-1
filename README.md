@@ -4,11 +4,25 @@ InSituPy is a Python package designed to facilitate the analysis of in situ tran
 
 ## Installation
 
-To install InSituPy, you can use `pip`:
+To install InSituPy, follow these steps:
 
-```bash
-pip install insitupy
-```
+1. Clone the repository to your local machine:
+
+   ```bash
+   git clone https://github.com/jwrth/InSituPy.git
+   ```
+
+2. Navigate to the cloned repository:
+
+   ```bash
+   cd insitupy
+   ```
+
+3. Install the package using `pip`:
+
+   ```bash
+   pip install .
+   ```
 
 Make sure you have Python 3.6 or later installed on your system.
 
