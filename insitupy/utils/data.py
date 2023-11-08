@@ -10,18 +10,25 @@ from .utils import convert_to_list, load_pyramid, decode_robust_series
 from parse import *
 import xmltodict
 import warnings
+from ..utils.annotations import read_qupath_annotation
 
 class AnnotationData:
     '''
     Object to store annotations.
     '''
-    def __init__(self):
+    def __init__(self,
+                 annot_files: List[Union[str, os.PathLike, Path]], 
+                 annot_labels: List[str]
+                 ) -> None:
         self.labels = []
         self.n_annotations = []
         self.classes = []
         self.analyzed = []
-        #self.n_classes = []
         
+        for label, file in zip(annot_labels, annot_files):
+            # read annotation and store in dictionary
+            self.add_annotation(file=file, label=label)
+            
     def __repr__(self):
         if len(self.labels) > 0:
             repr_strings = [f"{tf.Bold}{a}:{tf.ResetAll}\t{b} annotations, {len(c)} classes {*c,} {d}" for a,b,c,d in zip(self.labels, 
@@ -36,14 +43,18 @@ class AnnotationData:
         return repr
         
     def add_annotation(self,
-                       dataframe: pd.DataFrame,
-                       name: str
+                       file: Union[str, os.PathLike, Path],
+                       label: str
                        ):
-        setattr(self, name, dataframe)
-        self.labels.append(name)
-        self.n_annotations.append(len(dataframe))
-        self.classes.append(dataframe.name.unique())
-        self.analyzed.append("")
+        # read annotations as dataframe dataframe and add to AnnotationData object
+        df = read_qupath_annotation(file=file)
+        setattr(self, label, df)
+        
+        # record metadata information
+        self.labels.append(label) # names of the annotations
+        self.n_annotations.append(len(df)) # number of annotations
+        self.classes.append(df.name.unique()) # annotation classes
+        self.analyzed.append("") # whether this annotation has been used in the annotate() function
 
 class ImageData:
     '''
@@ -160,13 +171,13 @@ class BoundariesData:
     '''
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
-                 filenames: List[Union[str, os.PathLike, Path]],
-                 names: List[str],
+                 files: List[Union[str, os.PathLike, Path]],
+                 labels: List[str],
                  pixel_size: Optional[float] = None
                  ):
-        for n, f in zip(names, filenames):
+        for n, f in zip(labels, files):
             # generate paths
-            filepath = path / f
+            filepath = Path(os.path.normpath(path / f))
             
             # load dataframe
             bounddf = pd.read_parquet(filepath)

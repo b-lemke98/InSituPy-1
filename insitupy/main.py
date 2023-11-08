@@ -21,6 +21,7 @@ SHRT_MAX = 2**15-1 # 32767
 SHRT_MIN = -(2**15-1) # -32767
 
 class XeniumData:
+    #TODO: Docstring of XeniumData
     """_summary_
 
     Raises:

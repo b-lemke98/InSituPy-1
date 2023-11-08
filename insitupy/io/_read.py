@@ -4,9 +4,9 @@ import os
 import scanpy as sc
 import pandas as pd
 from ..utils.utils import decode_robust_series, convert_to_list
-from ..utils.annotations import read_qupath_annotation
 from parse import *
 from ..utils.data import ImageData, BoundariesData, AnnotationData
+from ..utils.exceptions import ModalityNotFoundError
 from pandas.api.types import is_numeric_dtype
 import warnings
 
@@ -14,13 +14,20 @@ def read_matrix(self,
                 read_cells: bool = True
                 ):
     if self.from_xeniumdata:
+        # check if matrix data is stored in this XeniumData
+        if "matrix" not in self.xd_metadata:
+            raise ModalityNotFoundError(modality="matrix")
+        
+        # read matrix data
+        print("Reading matrix...", flush=True)
         self.matrix = sc.read(self.path / self.xd_metadata["matrix"])
     else:
+        print("Reading matrix...", flush=True)
         # extract parameters from metadata
         pixel_size = self.metadata["pixel_size"]
         cf_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
         cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
-
+        
         with warnings.catch_warnings():
             warnings.simplefilter(action='ignore', category=FutureWarning)
             # read matrix data
@@ -55,6 +62,11 @@ def read_images(self,
                 dapi_type: str = "focus"
                 ):
     if self.from_xeniumdata:
+        # check if matrix data is stored in this XeniumData
+        if "images" not in self.xd_metadata:
+            raise ModalityNotFoundError(modality="images")
+        
+        # get file paths and names
         img_files = list(self.xd_metadata["images"].values())
         img_names = list(self.xd_metadata["images"].keys())
     else:
@@ -83,6 +95,7 @@ def read_images(self,
         img_files = [self.metadata["images"][k] for k in img_keys]
         
     # load image into ImageData object
+    print("Reading images...", flush=True)
     self.images = ImageData(self.path, img_files, img_names)
     
     
@@ -90,9 +103,16 @@ def read_transcripts(self,
                      transcript_filename: str = "transcripts.parquet"
                      ):
     if self.from_xeniumdata:
+        # check if matrix data is stored in this XeniumData
+        if "transcripts" not in self.xd_metadata:
+            raise ModalityNotFoundError(modality="transcripts")
+        
+        # read transcripts
+        print("Reading transcripts...", flush=True)
         self.transcripts = pd.read_parquet(self.path / self.xd_metadata["transcripts"])
     else:
         # read transcripts
+        print("Reading transcripts...", flush=True)
         self.transcripts = pd.read_parquet(self.path / transcript_filename)
         
         # decode columns
@@ -103,61 +123,81 @@ def read_transcripts(self,
         self.transcripts[coord_cols] = self.transcripts[coord_cols].apply(lambda x: x / self.metadata["pixel_size"])
         
 def read_boundaries(self,
-                    filenames: List[Union[str, os.PathLike, Path]] = ["cell_boundaries.parquet", "nucleus_boundaries.parquet"],
-                    names: List[str] = ["cells", "nuclei"]
+                    files: List[str] = ["cell_boundaries.parquet", "nucleus_boundaries.parquet"],
+                    labels: List[str] = ["cells", "nuclei"]
                     ):
+    if self.from_xeniumdata:
+        # check if matrix data is stored in this XeniumData
+        if "boundaries" not in self.xd_metadata:
+            raise ModalityNotFoundError(modality="boundaries")
+        
+        # get path and names of boundary files
+        labels = self.xd_metadata["boundaries"].keys()
+        files = [self.xd_metadata["boundaries"][n] for n in labels]
+
     # convert arguments to lists
-    filenames = convert_to_list(filenames)
-    names = convert_to_list(names)
-    
+    labels = convert_to_list(labels)
+    files = convert_to_list(files)
+        
     # read boundaries data
+    print("Reading boundaries...", flush=True)
     self.boundaries = BoundariesData(path=self.path,
-                                     filenames=filenames,
-                                     names=names,
-                                     pixel_size=self.metadata["pixel_size"]
-                                     )
+                                    files=files,
+                                    labels=labels,
+                                    pixel_size=self.metadata["pixel_size"]
+                                    )
     
 def read_annotations(self,
-                     annot_path: Union[str, os.PathLike, Path] = "../annotations",
+                     annotation_dir: Union[str, os.PathLike, Path] = None, # "../annotations",
                      suffix: str = ".geojson",
                      pattern_annotation_file: str = "annotation-{slide_id}__{sample_id}__{name}"
                      ):
-    annot_path = Path(annot_path)
-    
-    # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
-    if not annot_path.is_dir():
-        annot_path = Path(os.path.normpath(os.path.join(self.path, annot_path)))
-        assert annot_path.is_dir(), "`annot_path` is neither a direct path nor a relative path."
-    
-    annot_path = annot_path
-    self.annotations = AnnotationData()
-    for file in annot_path.glob(f"*{suffix}"):
-        if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
-            parsed = parse(pattern_annotation_file, file.stem)
-            annot_name = parsed.named["name"]
+    if self.from_xeniumdata:
+        # check if matrix data is stored in this XeniumData
+        if "annotations" not in self.xd_metadata:
+            raise ModalityNotFoundError(modality="annotations")
+        
+        # get path and names of annotation files
+        labels = self.xd_metadata["annotations"].keys()
+        files = [self.xd_metadata["annotations"][n] for n in labels]
+        
+    else:
+        if annotation_dir is  None:
+            raise ModalityNotFoundError(modality="annotations")
+        else:
+            # convert to Path
+            annotation_dir = Path(annotation_dir)
             
-            # read annotation and store in dictionary
-            self.annotations.add_annotation(read_qupath_annotation(file=file), annot_name)
+            # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
+            if not annotation_dir.is_dir():
+                annotation_dir = Path(os.path.normpath(self.path / annotation_dir))
+                if not annotation_dir.is_dir():
+                    raise FileNotFoundError(f"`annot_path` {annotation_dir} is neither a direct path nor a relative path.")
+            
+            # get list annotation files that match the current slide id and sample id
+            files = []
+            labels = []
+            for file in annotation_dir.glob(f"*{suffix}"):
+                if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
+                    parsed = parse(pattern_annotation_file, file.stem)
+                    labels.append(parsed.named["name"])
+                    files.append(file)
+            
+    print("Reading annotations...", flush=True)
+    self.annotations = AnnotationData(annot_files=files, annot_labels=labels)
             
 def read_all(self, verbose: bool = True):
+    # extract read functions
     read_funcs = [elem for elem in dir(self) if elem.startswith("read_")]
     read_funcs = [elem for elem in read_funcs if elem != "read_all"]
-    modalities = [elem.split("_", maxsplit=1)[1] for elem in read_funcs]
     
-    for m in modalities:
-         # check if there is an folder of this modality
-        if len(list(self.path.glob(m))) == 0:
-            read_funcs.remove(f"read_{m}")
-            print(f"No folder named `{m}` found. Function `read_{m}()` was skipped.", flush=True)
-    
-    # # check if there is an annotations folder
-    # if len(list(self.path.parent.glob("annotations"))) == 0:
-    #     read_funcs.remove("read_annotations")
-    #     print("No folder named `annotations` found. Function `read_annotations()` was skipped.", flush=True)
-        
     for f in read_funcs:
-        if verbose: 
-            print(f"Running {f}()", flush=True)
+        # if verbose: 
+        #     print(f"Running {f}()", flush=True)
         func = getattr(self, f)
-        func()
+        try:
+            func()
+        except ModalityNotFoundError as err:
+            print(err)
+            
         

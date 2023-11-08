@@ -123,3 +123,17 @@ class NotEnoughFeatureMatchesError(Exception):
                  ):
         self.message = f"A maximum of {number} matched features were found. This was below the threshold of {threshold}."
         super().__init__(self.message)
+        
+class ModalityNotFoundError(Exception):
+    """Exception raised if a certain modality is not found by XeniumData read modules.
+
+    Args:
+        modality: 
+            Name of the modality (e.g. matrix)
+    """
+
+    def __init__(self, 
+                 modality: str, 
+                 ):
+        self.message = f"No `{modality}` modality found."
+        super().__init__(self.message)

@@ -24,7 +24,6 @@ def crop(self,
         _self = self.copy()
         if with_viewer:
             _self.viewer = viewer_copy
-            print(viewer_copy)
         
     # assert that either shape_layer is given or xlim/ylim
     assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
