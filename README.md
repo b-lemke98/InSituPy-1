@@ -1,6 +1,6 @@
-# InSituPy: Python Package for the Analysis of Xenium In Situ Data
+# InSituPy: Python Package for the Analysis of _Xenium In Situ_ Data
 
-InSituPy is a Python package designed to facilitate the analysis of in situ sequencing data generated with the [_Xenium in situ_](https://www.10xgenomics.com/platforms/xenium) methodology. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissues.
+InSituPy is a Python package designed to facilitate the analysis of in situ sequencing data generated with the [_Xenium In Situ_](https://www.10xgenomics.com/platforms/xenium) methodology. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissues.
 
 ## Installation
 
@@ -34,7 +34,7 @@ For detailed instructions on using InSituPy, refer to the [official documentatio
 
 Explore the tutorials to learn how to use InSituPy effectively:
 
-1. [Download example data for tutorial](notebooks/00_InSituPy_demo_download_data.ipynb) - Download _Xenium in situ_ example data for the subsequent tutorials.
+1. [Download example data for tutorial](notebooks/00_InSituPy_demo_download_data.ipynb) - Download _Xenium In Situ_ example data for the subsequent tutorials.
 2. [Basic functionalities](notebooks/00_InSituPy_demo_download_data.ipynb) - Learn about the basic functionalities, such as loading of data, image registration and interactive visualization with napari.
 
 ## Features
@@ -43,7 +43,7 @@ Explore the tutorials to learn how to use InSituPy effectively:
 
 - **Interactive Visualization:** Create interactive plots using [napari](https://napari.org/stable/#) to easily explore spatial gene expression patterns.
 
-- **Annotation:** Annotate Xenium in situ data in the napari viewer or import annotations from external tools like [QuPath](https://qupath.github.io/).
+- **Annotation:** Annotate _Xenium In Situ_ data in the napari viewer or import annotations from external tools like [QuPath](https://qupath.github.io/).
 
 ## Contributing
 
@@ -55,4 +55,4 @@ InSituPy is licensed under the [MIT License](LICENSE).
 
 ---
 
-**InSituPy** is developed and maintained by [jwrth](https://github.com/jwrth). Feedback is highly appreciated and hopefully **InSituPy** helps you with your Xenium In Situ analysis. The package is thought to be a starting point to simplify the analysis of in situ sequencing data in Python and it would be exciting to integrate functionalities into larger and more comprehensive data structures.
+**InSituPy** is developed and maintained by [jwrth](https://github.com/jwrth). Feedback is highly appreciated and hopefully **InSituPy** helps you with your _Xenium In Situ_ analysis. The package is thought to be a starting point to simplify the analysis of in situ sequencing data in Python and it would be exciting to integrate functionalities into larger and more comprehensive data structures.
