@@ -1,6 +1,6 @@
 # InSituPy: Python Package for the Analysis of Xenium In Situ Data
 
-InSituPy is a Python package designed to facilitate the analysis of in situ transcriptomics data. With InSituPy, you can process, visualize, and analyze spatially resolved transcriptomics data obtained through various in situ techniques, enabling comprehensive exploration of spatial gene expression patterns within tissues.
+InSituPy is a Python package designed to facilitate the analysis of in situ sequencing data generated with the [_Xenium in situ_](https://www.10xgenomics.com/platforms/xenium) methodology. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissues.
 
 ## Installation
 
@@ -32,26 +32,18 @@ For detailed instructions on using InSituPy, refer to the [official documentatio
 
 ## Tutorials
 
-Explore our tutorials to learn how to use InSituPy effectively:
+Explore the tutorials to learn how to use InSituPy effectively:
 
-1. [Demonstration of Basic Functionalities](notebooks/00_InSituPy_demo.ipynb) - Learn about the basic functionalities, such as loading of data, image registration and interactive visualization with napari.
-2. TODO!! [Basic Data Processing](https://InSituPy.readthedocs.io/en/latest/tutorials/basic_processing.html) - Learn how to preprocess raw data and prepare it for analysis.
-3. TODO!! [Spatial Visualization](https://InSituPy.readthedocs.io/en/latest/tutorials/spatial_visualization.html) - Visualize spatial gene expression patterns using interactive plots and heatmaps.
-4. TODO!! [Advanced Analysis](https://InSituPy.readthedocs.io/en/latest/tutorials/advanced_analysis.html) - Dive into advanced analysis techniques, including spatial clustering and cell type identification.
+1. [Download example data for tutorial](notebooks/00_InSituPy_demo_download_data.ipynb) - Download _Xenium in situ_ example data for the subsequent tutorials.
+2. [Basic functionalities](notebooks/00_InSituPy_demo_download_data.ipynb) - Learn about the basic functionalities, such as loading of data, image registration and interactive visualization with napari.
 
 ## Features
 
 - **Data Preprocessing:** InSituPy provides functions for normalizing, filtering, and transforming raw in situ transcriptomics data.
 
-- **Spatial Visualization:** Explore gene expression patterns in spatial context using interactive visualizations and heatmaps.
+- **Interactive Visualization:** Create interactive plots using [napari](https://napari.org/stable/#) to easily explore spatial gene expression patterns.
 
-- **Spatial Clustering:** Identify spatially distinct clusters of cells or regions within tissues.
-
-- **Cell Type Annotation:** Automatically annotate cell types based on spatial gene expression profiles.
-
-- **Integration with Single-Cell Data:** Integrate in situ transcriptomics data with single-cell RNA-seq data for comprehensive analysis.
-
-- **Interactive Plots:** Create interactive plots to explore spatial gene expression patterns across different samples and conditions.
+- **Annotation:** Annotate Xenium in situ data in the napari viewer or import annotations from external tools like [QuPath](https://qupath.github.io/).
 
 ## Contributing
 
