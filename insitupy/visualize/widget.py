@@ -89,7 +89,7 @@ def initialize_point_widgets(
             points, 
             {
                 'name': observation,
-                'properties': {"color_value": color_value.values},
+                'properties': {"color_value": color_value.tolist()},
                 'symbol': 'o',
                 'size': 30 * pixel_size,
                 'face_color': "color_value",

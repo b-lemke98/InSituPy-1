@@ -365,7 +365,7 @@ class ImageRegistration:
         remove_last_line_from_csv(T_csv)
 
         # save image showing the number of key points found in both images during registration
-        matchedVis_file = reg_dir / f"{filename}__matchedvis.pdf"
+        matchedVis_file = reg_dir / f"{filename}__common_features.pdf"
         plt.imshow(matchedVis)
         plt.savefig(matchedVis_file, dpi=400)
         plt.close()

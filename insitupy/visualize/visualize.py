@@ -128,7 +128,7 @@ def show(self,
                 color_map = "viridis"
                 color_cycle = None
                 climits = [0, np.percentile(color_value, 95)]
-            
+                            
             point_properties = {
                 "color_value": color_value,
                 #"confidence": subset.X.toarray()[:, 1]
