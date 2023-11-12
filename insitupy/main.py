@@ -70,6 +70,7 @@ class XeniumData:
         Raises:
             FileNotFoundError: _description_
         """
+        path = Path(path) # make sure the path is a pathlib path
         self.from_xeniumdata = False  # flag indicating from where the data is read
         if (path / "xeniumdata.json").is_file():
             self.path = Path(path)
