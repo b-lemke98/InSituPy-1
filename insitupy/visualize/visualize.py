@@ -46,7 +46,7 @@ def show(self,
         # add widgets to napari window
         self.viewer.window.add_dock_widget(add_genes, name="Add genes", area="right")
         self.viewer.window.add_dock_widget(add_observations, name="Add observations", area="right")
-         
+        
     # optionally add images       
     if show_images:
         # add images
@@ -182,6 +182,37 @@ def show(self,
         # add scale bar
         self.viewer.scale_bar.visible = True
         self.viewer.scale_bar.unit = unit
+        
+    # connect functions to native napari events
+    # https://napari.org/dev/howtos/connecting_events.html
+    # def print_layer_name(event):
+    #     print(f"{event.source.name} changed its data!")
+
+    # layer.events.data.connect(print_layer_name)
+    
+    # def print_layer_name(event):
+    #     print(f"{event.source.name} changed its data!")
+
+    # self.viewer.layers.selection.events.active.connect(print_layer_name)
+    
+    def _on_removed(event):
+        layer = event.value
+        print("removed: " + layer.name)
+
+    self.viewer.layers.events.removed.connect(_on_removed)
+    
+    def _on_inserted(event):
+        layer = event.value
+        print("inserted: " + layer.name)
+
+    self.viewer.layers.events.inserted.connect(_on_inserted)
+    
+    def _on_moved(event):
+        layer = event.value
+        new_index = event.new_index
+        print(f"moved to {new_index}: {layer.name}")
+
+    self.viewer.layers.events.moved.connect(_on_moved)
     
     napari.run()
     if return_viewer:
