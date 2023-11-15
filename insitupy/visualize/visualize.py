@@ -10,6 +10,45 @@ from scipy.sparse import issparse
 from .widget import initialize_point_widgets
 from pandas.api.types import is_numeric_dtype
 
+from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvas
+
+
+def colorlegend_mpl(
+    colors, labels, fig=None, ax=None
+    ):
+    with plt.style.context('dark_background'):
+        handles = [Line2D([0], [0], 
+                        marker='o', 
+                        color='w', 
+                        label=l,
+                        markerfacecolor=c, 
+                        markeredgewidth=0,
+                        linewidth=0,
+                        markersize=15) for c, l in zip(colors, labels)]
+
+        if np.any([elem is None for elem in [fig, ax]]):
+            assert (fig is None) & (ax is None), "Only fig or axis is None not both."
+            
+            # create new subplot
+            fig, ax = plt.subplots(1,1,figsize=(2,2))
+            return_fig_ax = True
+        else:
+            return_fig_ax = False
+        
+        ax.legend(handles=handles, 
+                  loc="center", 
+                  labelspacing=1, 
+                  borderpad=0.5,
+                  ncol=1
+                  )
+        ax.set_axis_off()
+    plt.close()
+    
+    if return_fig_ax:
+        return fig, ax
+
 def show(self,
     keys: Optional[str] = None,
     annotation_labels: Optional[str] = None,
@@ -203,6 +242,17 @@ def show(self,
     
     def _on_inserted(event):
         layer = event.value
+        
+        # create random colorlegend
+        palettes = CustomPalettes()
+        colors = palettes.tab20_mod.colors
+        color_list = np.random.choice(colors, 5)
+        self.clb_fig, self.clb_ax = colorlegend_mpl(colors=color_list, labels=color_list)
+        # create widget for colorbar
+        self.clb_widget = FigureCanvas(self.clb_fig)
+        # add the figure to the viewer as a FigureCanvas widget
+        self.viewer.window.add_dock_widget(self.clb_widget, area="right")
+        
         print("inserted: " + layer.name)
 
     self.viewer.layers.events.inserted.connect(_on_inserted)
@@ -213,6 +263,35 @@ def show(self,
         print(f"moved to {new_index}: {layer.name}")
 
     self.viewer.layers.events.moved.connect(_on_moved)
+    
+    def _on_active(event):
+        layer = event.value
+        
+        if hasattr(self, "clb_widget"):
+            print('here')
+            # create random colorlegend
+            palettes = CustomPalettes()
+            colors = palettes.tab20_mod.colors
+            color_list = np.random.choice(colors, 5)
+            handles = [Line2D([0], [0], 
+                        marker='o', 
+                        color='w', 
+                        label=l,
+                        markerfacecolor=c, 
+                        markeredgewidth=0,
+                        linewidth=0,
+                        markersize=15) for c, l in zip(color_list, color_list)]
+            self.clb_ax = self.clb_ax.legend(handles)
+            self.clb_widget.canvas.draw_idle()
+            # self.clb_widget.figure = clb_fig
+            # #self.clb_widget.clear()
+            # self.clb_widget.figure.canvas.draw()
+            # self.clb_widget.draw()
+        
+        if hasattr(layer, "name"):
+            print(f"active: {layer.name}")
+
+    self.viewer.layers.selection.events.active.connect(_on_active)
     
     napari.run()
     if return_viewer:
