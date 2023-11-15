@@ -131,7 +131,6 @@ def show(self,
                             
             point_properties = {
                 "color_value": color_value,
-                #"confidence": subset.X.toarray()[:, 1]
             }
 
             point_layers[k] = self.viewer.add_points(points,
@@ -139,7 +138,10 @@ def show(self,
                                             properties=point_properties,
                                             symbol='o',
                                             size=30 * pixel_size,
-                                            face_color="color_value",
+                                            face_color={
+                                                "color_mode": "cycle", # workaround (see https://github.com/napari/napari/issues/6433)
+                                                "colors": "color_value" 
+                                                },
                                             face_color_cycle=color_cycle,
                                             face_colormap=color_map,
                                             face_contrast_limits=climits,
