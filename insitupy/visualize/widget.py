@@ -23,7 +23,7 @@ def initialize_point_widgets(
     if issparse(matrix.X):
         X = matrix.X.toarray()
     else:
-        X = matrix.X    
+        X = matrix.X
     
     @magicgui(
             call_button='Add',
@@ -92,7 +92,10 @@ def initialize_point_widgets(
                 'properties': {"color_value": color_value.tolist()},
                 'symbol': 'o',
                 'size': 30 * pixel_size,
-                'face_color': "color_value",
+                'face_color': {
+                    "color_mode": "cycle", # workaround (see https://github.com/napari/napari/issues/6433)
+                    "colors": "color_value"
+                    },
                 'face_color_cycle': color_cycle,
                 'face_colormap': color_map,
                 'face_contrast_limits': climits,

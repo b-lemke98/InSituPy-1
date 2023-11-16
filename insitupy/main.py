@@ -289,7 +289,7 @@ class XeniumData:
                 print(f'\tProcessing following {image_type} images: {tf.Bold}{", ".join(self.image_names)}{tf.ResetAll}', flush=True)
 
                 # read images
-                print("\t\tLoading images...", flush=True)
+                print("\t\tLoading images to be registered...", flush=True)
                 image = imread(img_file) # e.g. HE image
                 
                 # sometimes images are read with an empty time dimension in the first axis. 

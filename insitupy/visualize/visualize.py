@@ -124,10 +124,12 @@ def show(self,
                 color_cycle = getattr(palettes, "tab20_mod").colors
                 color_map = None
                 climits = None
+                color_mode = "cycle"
             else:
                 color_map = "viridis"
                 color_cycle = None
                 climits = [0, np.percentile(color_value, 95)]
+                color_mode = "colormap"
                             
             point_properties = {
                 "color_value": color_value,
@@ -139,7 +141,7 @@ def show(self,
                                             symbol='o',
                                             size=30 * pixel_size,
                                             face_color={
-                                                "color_mode": "cycle", # workaround (see https://github.com/napari/napari/issues/6433)
+                                                "color_mode": color_mode, # workaround (see https://github.com/napari/napari/issues/6433)
                                                 "colors": "color_value" 
                                                 },
                                             face_color_cycle=color_cycle,

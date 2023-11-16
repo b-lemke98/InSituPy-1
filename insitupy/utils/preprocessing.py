@@ -36,7 +36,7 @@ def normalize(self,
     self.matrix.layers['counts'] = self.matrix.X.copy()
 
     # preprocessing according to napari tutorial in squidpy
-    print("Normalization, log-transformation...") if verbose else None
+    print(f"Normalization, {transformation_method}-transformation...") if verbose else None
     sc.pp.normalize_total(self.matrix)
     self.matrix.layers['norm_counts'] = self.matrix.X.copy()
     
