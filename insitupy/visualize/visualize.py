@@ -7,8 +7,10 @@ from ..utils.utils import convert_to_list
 from ..utils.exceptions import XeniumDataMissingObject
 from ..palettes import CustomPalettes
 from scipy.sparse import issparse
-from .widget import initialize_point_widgets
+from .widget import initialize_point_widgets, _create_points_layer
 from pandas.api.types import is_numeric_dtype
+from napari.layers import Layer
+from napari.layers.points.points import Points
 
 def show(self,
     keys: Optional[str] = None,
@@ -57,7 +59,7 @@ def show(self,
         n_grayscales = 0 # number of grayscale images
         for i, img_name in enumerate(image_keys):
             img = getattr(self.images, img_name)
-            visible = False if i < len(image_keys) - 1 else True # only last image is set visible
+            ivis = False if i < len(image_keys) - 1 else True # only last image is set visible
             
             # check if the current image is RGB
             is_rgb = self.images.metadata[img_name]["rgb"]
@@ -80,7 +82,7 @@ def show(self,
                     rgb=is_rgb,
                     contrast_limits=self.images.metadata[img_name]["contrast_limits"],
                     scale=(pixel_size, pixel_size),
-                    visible=visible
+                    visible=ivis
                 )
     
     # optionally: add cells as points
@@ -100,55 +102,29 @@ def show(self,
         else:
             X = self.matrix.X
 
-        point_layers = {}
         for i, k in enumerate(keys):
-            visible = False if i < len(keys) - 1 else True # only last image is set visible
+            pvis = False if i < len(keys) - 1 else True # only last image is set visible
             # get expression values
             if k in self.matrix.obs.columns:
                 color_value = self.matrix.obs[k].values
-                
-                # check if the data should be plotted categorical or continous
-                if is_numeric_dtype(self.matrix.obs[k]):
-                    categorical = False # if the data is numeric it should be plotted continous
-                else:
-                    categorical = True # if the data is not numeric it should be plotted categorically
-                    
+            
             else:
                 geneid = self.matrix.var_names.get_loc(k)
                 color_value = X[:, geneid]
-                categorical = False # expression data is always continuous
-                
-            if categorical:
-                # get color cycle for categorical data
-                palettes = CustomPalettes()
-                color_cycle = getattr(palettes, "tab20_mod").colors
-                color_map = None
-                climits = None
-            else:
-                color_map = "viridis"
-                color_cycle = None
-                climits = [0, np.percentile(color_value, 95)]
-                            
-            point_properties = {
-                "color_value": color_value,
-            }
 
-            point_layers[k] = self.viewer.add_points(points,
-                                            name=k,
-                                            properties=point_properties,
-                                            symbol='o',
-                                            size=30 * pixel_size,
-                                            face_color={
-                                                "color_mode": "cycle", # workaround (see https://github.com/napari/napari/issues/6433)
-                                                "colors": "color_value" 
-                                                },
-                                            face_color_cycle=color_cycle,
-                                            face_colormap=color_map,
-                                            face_contrast_limits=climits,
-                                            opacity=1,
-                                            visible=visible,
-                                            edge_width=0
-                                            )
+            # create points layer
+            layer = _create_points_layer(
+                points=points,
+                color_value=color_value,
+                name=k,
+                pixel_size=pixel_size,
+                size_factor=30,
+                visible=pvis
+            )
+            
+            # add layer programmatically - does not work for all types of layers
+            # see: https://forum.image.sc/t/add-layerdatatuple-to-napari-viewer-programmatically/69878
+            self.viewer.add_layer(Layer.create(*layer))            
 
     # optionally add annotations
     if annotation_labels is not None:
