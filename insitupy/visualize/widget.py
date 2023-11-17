@@ -12,7 +12,10 @@ def _create_points_layer(points,
                          color_value, 
                          name, 
                          pixel_size,
-                         size_factor: int = 30
+                         size_factor: int = 30,
+                         opacity: float = 1,
+                         visible: bool = True,
+                         edge_width: float = 0
                          ) -> LayerDataTuple:
     # check if the data should be plotted categorical or continous
     if is_numeric_dtype(color_value):
@@ -48,9 +51,9 @@ def _create_points_layer(points,
             'face_color_cycle': color_cycle,
             'face_colormap': color_map,
             'face_contrast_limits': climits,
-            'opacity': 1,
-            'visible': True,
-            'edge_width': 0
+            'opacity': opacity,
+            'visible': visible,
+            'edge_width': edge_width
             }, 
         'points'
         )
