@@ -7,104 +7,219 @@ from magicgui import magicgui
 from magicgui.widgets import FunctionGui
 from pandas.api.types import is_numeric_dtype
 
-def initialize_point_widgets(
-    matrix,
-    pixel_size: float
-    ) -> Tuple[FunctionGui, FunctionGui]:
+class InitPointWidgets:
+    def __init__(
+        self,
+        matrix,
+        pixel_size: float
+        ) -> Tuple[FunctionGui, FunctionGui]:
         
-    # get available genes
-    genes = matrix.var_names.tolist()
-    obses = matrix.obs.columns.tolist()
+        # get available genes
+        self.genes = matrix.var_names.tolist()
+        self.obses = matrix.obs.columns.tolist()
+        
+        # get point coordinates
+        self.points = np.flip(matrix.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
+        
+        # get expression matrix
+        if issparse(matrix.X):
+            self.X = matrix.X.toarray()
+        else:
+            self.X = matrix.X
+        self.var_names = matrix.var_names
+            
+        # get observation data
+        self.obs_X = matrix.obs.values # observation matrix
+        self.obs_cols = matrix.obs.columns # observation columns
+        
+        # add arguments to self
+        self.pixel_size = pixel_size
+        
     
-    # get point coordinates
-    points = np.flip(matrix.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
+@magicgui(
+    call_button='Add',
+    gene={'choices': self.genes},
+    )
+def add_genes(self, 
+                gene=None
+                ) -> napari.types.LayerDataTuple:
+    # get expression values
+    geneid = self.var_names.get_loc(gene)
+    color_value = self.X[:, geneid]
     
-    # get expression matrix
-    if issparse(matrix.X):
-        X = matrix.X.toarray()
+    # set color settings for continuous data
+    color_map = "viridis"
+    color_cycle = None
+    climits = [0, np.percentile(color_value, 95)]
+    
+    # generate point layer
+    layer = (
+        self.points, 
+        {
+            'name': gene,
+            'properties': {"color_value": color_value},
+            'symbol': 'o',
+            'size': 30 * self.pixel_size,
+            'face_color': "color_value",
+            'face_color_cycle': color_cycle,
+            'face_colormap': color_map,
+            'face_contrast_limits': climits,
+            'opacity': 1,
+            'visible': True,
+            'edge_width': 0
+            }, 
+        'points'
+        )
+    return layer
+
+@magicgui(
+    call_button='Add',
+    observation={'choices': self.obses}
+    )
+def add_observations(self,
+                        observation=None,
+                        ) -> napari.types.LayerDataTuple:
+    # get observation values
+    color_value = matrix.obs[observation]
+    
+    # check if the data should be plotted categorical or continous
+    if is_numeric_dtype(color_value):
+        categorical = False # if the data is numeric it should be plotted continous
     else:
-        X = matrix.X
-    
-    @magicgui(
-            call_button='Add',
-            gene={'choices': genes},
-            )
-    def add_genes(gene=None) -> napari.types.LayerDataTuple:
-        # get expression values
-        geneid = matrix.var_names.get_loc(gene)
-        color_value = X[:, geneid]
+        categorical = True # if the data is not numeric it should be plotted categorically
         
-        # set color settings for continuous data
+    if categorical:
+        # get color cycle for categorical data
+        palettes = CustomPalettes()
+        color_cycle = getattr(palettes, "tab20_mod").colors
+        color_map = None
+        climits = None
+    else:
         color_map = "viridis"
         color_cycle = None
         climits = [0, np.percentile(color_value, 95)]
-        
-        # generate point layer
-        layer = (
-            points, 
-            {
-                'name': gene,
-                'properties': {"color_value": color_value},
-                'symbol': 'o',
-                'size': 30 * pixel_size,
-                'face_color': "color_value",
-                'face_color_cycle': color_cycle,
-                'face_colormap': color_map,
-                'face_contrast_limits': climits,
-                'opacity': 1,
-                'visible': True,
-                'edge_width': 0
-                }, 
-            'points'
-            )
-        return layer
     
-    @magicgui(
-        call_button='Add',
-        observation={'choices': obses}
+    # generate point layer
+    layer = (
+        points, 
+        {
+            'name': observation,
+            'properties': {"color_value": color_value.tolist()},
+            'symbol': 'o',
+            'size': 30 * pixel_size,
+            'face_color': {
+                "color_mode": "cycle", # workaround (see https://github.com/napari/napari/issues/6433)
+                "colors": "color_value"
+                },
+            'face_color_cycle': color_cycle,
+            'face_colormap': color_map,
+            'face_contrast_limits': climits,
+            'opacity': 1,
+            'visible': True,
+            'edge_width': 0
+            }, 
+        'points'
         )
-    def add_observations(observation=None) -> napari.types.LayerDataTuple:
-        # get observation values
-        color_value = matrix.obs[observation]
+    return layer
+
+# def initialize_point_widgets(
+#     matrix,
+#     pixel_size: float
+#     ) -> Tuple[FunctionGui, FunctionGui]:
         
-        # check if the data should be plotted categorical or continous
-        if is_numeric_dtype(color_value):
-            categorical = False # if the data is numeric it should be plotted continous
-        else:
-            categorical = True # if the data is not numeric it should be plotted categorically
-            
-        if categorical:
-            # get color cycle for categorical data
-            palettes = CustomPalettes()
-            color_cycle = getattr(palettes, "tab20_mod").colors
-            color_map = None
-            climits = None
-        else:
-            color_map = "viridis"
-            color_cycle = None
-            climits = [0, np.percentile(color_value, 95)]
-        
-        # generate point layer
-        layer = (
-            points, 
-            {
-                'name': observation,
-                'properties': {"color_value": color_value.tolist()},
-                'symbol': 'o',
-                'size': 30 * pixel_size,
-                'face_color': {
-                    "color_mode": "cycle", # workaround (see https://github.com/napari/napari/issues/6433)
-                    "colors": "color_value"
-                    },
-                'face_color_cycle': color_cycle,
-                'face_colormap': color_map,
-                'face_contrast_limits': climits,
-                'opacity': 1,
-                'visible': True,
-                'edge_width': 0
-                }, 
-            'points'
-            )
-        return layer
+#     # get available genes
+#     genes = matrix.var_names.tolist()
+#     obses = matrix.obs.columns.tolist()
     
-    return add_genes, add_observations
+#     # get point coordinates
+#     points = np.flip(matrix.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
+    
+#     # get expression matrix
+#     if issparse(matrix.X):
+#         X = matrix.X.toarray()
+#     else:
+#         X = matrix.X
+    
+#     @magicgui(
+#             call_button='Add',
+#             gene={'choices': genes},
+#             )
+#     def add_genes(gene=None) -> napari.types.LayerDataTuple:
+#         # get expression values
+#         geneid = matrix.var_names.get_loc(gene)
+#         color_value = X[:, geneid]
+        
+#         # set color settings for continuous data
+#         color_map = "viridis"
+#         color_cycle = None
+#         climits = [0, np.percentile(color_value, 95)]
+        
+#         # generate point layer
+#         layer = (
+#             points, 
+#             {
+#                 'name': gene,
+#                 'properties': {"color_value": color_value},
+#                 'symbol': 'o',
+#                 'size': 30 * pixel_size,
+#                 'face_color': "color_value",
+#                 'face_color_cycle': color_cycle,
+#                 'face_colormap': color_map,
+#                 'face_contrast_limits': climits,
+#                 'opacity': 1,
+#                 'visible': True,
+#                 'edge_width': 0
+#                 }, 
+#             'points'
+#             )
+#         return layer
+    
+#     @magicgui(
+#         call_button='Add',
+#         observation={'choices': obses}
+#         )
+#     def add_observations(observation=None) -> napari.types.LayerDataTuple:
+#         # get observation values
+#         color_value = matrix.obs[observation]
+        
+#         # check if the data should be plotted categorical or continous
+#         if is_numeric_dtype(color_value):
+#             categorical = False # if the data is numeric it should be plotted continous
+#         else:
+#             categorical = True # if the data is not numeric it should be plotted categorically
+            
+#         if categorical:
+#             # get color cycle for categorical data
+#             palettes = CustomPalettes()
+#             color_cycle = getattr(palettes, "tab20_mod").colors
+#             color_map = None
+#             climits = None
+#         else:
+#             color_map = "viridis"
+#             color_cycle = None
+#             climits = [0, np.percentile(color_value, 95)]
+        
+#         # generate point layer
+#         layer = (
+#             points, 
+#             {
+#                 'name': observation,
+#                 'properties': {"color_value": color_value.tolist()},
+#                 'symbol': 'o',
+#                 'size': 30 * pixel_size,
+#                 'face_color': {
+#                     "color_mode": "cycle", # workaround (see https://github.com/napari/napari/issues/6433)
+#                     "colors": "color_value"
+#                     },
+#                 'face_color_cycle': color_cycle,
+#                 'face_colormap': color_map,
+#                 'face_contrast_limits': climits,
+#                 'opacity': 1,
+#                 'visible': True,
+#                 'edge_width': 0
+#                 }, 
+#             'points'
+#             )
+#         return layer
+    
+#     return add_genes, add_observations
