@@ -1,6 +1,6 @@
 __author__ = "Johannes Wirth"
 __email__ = "j.wirth@tum.de"
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 from .main import *
 from .panels import *
