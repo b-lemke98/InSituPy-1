@@ -39,7 +39,7 @@ For detailed instructions on using InSituPy, refer to the [official documentatio
 
 ## Tutorials
 
-Explore the tutorials to learn how to use InSituPy effectively:
+Explore the tutorials in `./notebooks/` to learn how to use InSituPy:
 
 1. [Download example data for tutorial](notebooks/01_InSituPy_demo_download_data.ipynb) - Download _Xenium In Situ_ example data for the subsequent tutorials.
 2. [Registration of additional images](notebooks/02_InSituPy_demo_register_images.ipynb) - Learn how to register additional images.
