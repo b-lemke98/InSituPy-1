@@ -34,8 +34,9 @@ For detailed instructions on using InSituPy, refer to the [official documentatio
 
 Explore the tutorials to learn how to use InSituPy effectively:
 
-1. [Download example data for tutorial](notebooks/00_InSituPy_demo_download_data.ipynb) - Download _Xenium In Situ_ example data for the subsequent tutorials.
-2. [Basic functionalities](notebooks/00_InSituPy_demo_download_data.ipynb) - Learn about the basic functionalities, such as loading of data, image registration and interactive visualization with napari.
+1. [Download example data for tutorial](notebooks/01_InSituPy_demo_download_data.ipynb) - Download _Xenium In Situ_ example data for the subsequent tutorials.
+2. [Registration of additional images](notebooks/02_InSituPy_demo_register_images.ipynb) - Learn how to register additional images.
+3. [Basic analysis functionalities](notebooks/03_InSituPy_demo_analyze.ipynb) - Learn about the basic functionalities, such as loading of data, basic preprocessing and interactive visualization with napari.
 
 ## Features
 
