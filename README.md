@@ -15,7 +15,7 @@ To install InSituPy within a conda environment, you can follow these steps:
 2. Navigate to the cloned repository:
 
    ```bash
-   cd insitupy
+   cd InSituPy
    ```
 
 3. Create and activate a conda environment:
