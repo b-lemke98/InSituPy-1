@@ -22,6 +22,7 @@ annoy = { file = "wheels/annoy-1.17.0-cp39-cp39-win_amd64.whl" }
 scanorama = "^1.7.4"
 pytest = "^7.4.2"
 xmltodict = "^0.13.0"
+zarr = "^2.16.1"
 
 
 [build-system]
