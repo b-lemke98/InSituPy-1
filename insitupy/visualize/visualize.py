@@ -94,7 +94,8 @@ def show(self,
         keys = convert_to_list(keys)
         
         # get point coordinates
-        points = np.flip(self.matrix.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
+        points = np.flip(self.matrix.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
+        points *= pixel_size # convert to length unit (e.g. µm)
         
         # get expression matrix
         if issparse(self.matrix.X):
@@ -146,12 +147,13 @@ def show(self,
                 
                 # extract coordinates from shapely object
                 shape_array = np.array([shape.exterior.coords.xy[1].tolist(), shape.exterior.coords.xy[0].tolist()]).T
+                shape_array *= pixel_size # convert to length unit
                 #shape_arrays = [np.array([c.exterior.coords.xy[1].tolist(), c.exterior.coords.xy[0].tolist()]).T for c in shape]
         
                 self.viewer.add_shapes(shape_array, 
                                 name=annot_name, 
                                 shape_type='polygon', 
-                                edge_width=50,
+                                edge_width=10,
                                 edge_color=hexcolor,
                                 face_color='transparent'
                                 )
