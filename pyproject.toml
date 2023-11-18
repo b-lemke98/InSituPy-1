@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "insitupy"
-version = "0.1.0"
+version = "1.0.1"
 description = "Package introducing the XeniumData structure to read an analyze Xenium in situ data in a structured manner."
 authors = ["jwrth <j.wirth@tum.de>"]
 readme = "README.md"
@@ -23,6 +23,9 @@ scanorama = "^1.7.4"
 pytest = "^7.4.2"
 xmltodict = "^0.13.0"
 zarr = "^2.16.1"
+pyarrow = "^14.0.1"
+fastparquet = "^2023.10.1"
+imagecodecs = "^2023.9.18"
 
 
 [build-system]
