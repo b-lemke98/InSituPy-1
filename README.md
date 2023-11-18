@@ -4,7 +4,7 @@ InSituPy is a Python package designed to facilitate the analysis of in situ sequ
 
 ## Installation
 
-To install InSituPy, follow these steps:
+To install InSituPy within a conda environment, you can follow these steps:
 
 1. Clone the repository to your local machine:
 
@@ -15,16 +15,23 @@ To install InSituPy, follow these steps:
 2. Navigate to the cloned repository:
 
    ```bash
-   cd insitupy
+   cd InSituPy
    ```
 
-3. Install the package using `pip`:
+3. Create and activate a conda environment:
+
+   ```bash
+   conda create --name insitupy python=3.9
+   conda activate insitupy
+   ```
+
+4. Install the package using `pip` within the conda environment:
 
    ```bash
    pip install .
    ```
 
-Make sure you have Python 3.9 or later installed on your system.
+Make sure you have Conda installed on your system before proceeding with these steps. If not, you can install Miniconda or Anaconda from [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html).
 
 ## Getting Started
 
