@@ -33,6 +33,8 @@ To install InSituPy within a conda environment, you can follow these steps:
 
 Make sure you have Conda installed on your system before proceeding with these steps. If not, you can install Miniconda or Anaconda from [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html).
 
+To ensure that the InSituPy package is available as a kernel in Jupyter notebooks within your conda environment, you can follow the instructions [here](https://ipython.readthedocs.io/en/stable/install/kernel_install.html).
+
 ## Getting Started
 
 For detailed instructions on using InSituPy, refer to the [official documentation](https://InSituPy.readthedocs.io). The documentation provides comprehensive guides on installation, usage, and advanced features.
