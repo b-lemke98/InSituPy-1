@@ -9,8 +9,7 @@ from .utils import textformat as tf
 from .utils import convert_to_list, load_pyramid, decode_robust_series
 from parse import *
 import xmltodict
-import warnings
-from ..utils.annotations import read_qupath_annotation
+from ..io.io import read_qupath_geojson
 
 class AnnotationData:
     '''
@@ -47,7 +46,14 @@ class AnnotationData:
                        label: str
                        ):
         # read annotations as dataframe dataframe and add to AnnotationData object
-        df = read_qupath_annotation(file=file)
+        file = Path(file)
+        if file.suffix == ".geojson":
+            df = read_qupath_geojson(file=file)
+        elif file.suffix == ".parquet":
+            df = pd.read_parquet(file)
+        else:
+            raise ValueError(f"Unknown file extension: {file.suffix}. File is expected to be `.geojson` or `.parquet`.")
+            
         setattr(self, label, df)
         
         # record metadata information

@@ -107,6 +107,8 @@ def save(self,
             annot_df = getattr(self.annotations, n)
             annot_file = annot_path / f"{n}.parquet"
             annot_df.to_parquet(annot_file)
+            # annot_file = annot_path / f"{n}.geojson"
+            # annot_df.to_file(str(annot_file), driver="GeoJSON")
             metadata["annotations"][n] = Path(relpath(annot_file, path)).as_posix()
             
     # Optionally: zip the resulting directory
