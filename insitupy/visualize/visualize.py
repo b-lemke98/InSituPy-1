@@ -138,20 +138,30 @@ def show(self,
         annotation_labels = convert_to_list(annotation_labels)
         for annotation_label in annotation_labels:
             annot_df = getattr(self.annotations, annotation_label)
-            # add annotations as shapes
-            for i, row in annot_df.iterrows():
-                # get metadata
-                annot_name = row["name"]
-                shape = row["geometry"]
-                hexcolor = rgb2hex([elem / 255 for elem in row["color"]])
+            
+            # get classes
+            classes = annot_df['name'].unique()
+            
+            # iterate through classes
+            for cl in classes:
+                # get dataframe for this class
+                class_df = annot_df[annot_df["name"] == cl]
                 
-                # extract coordinates from shapely object
-                shape_array = np.array([shape.exterior.coords.xy[1].tolist(), shape.exterior.coords.xy[0].tolist()]).T
-                shape_array *= pixel_size # convert to length unit
-                #shape_arrays = [np.array([c.exterior.coords.xy[1].tolist(), c.exterior.coords.xy[0].tolist()]).T for c in shape]
-        
-                self.viewer.add_shapes(shape_array, 
-                                name=annot_name, 
+                # iterate through annotations of this class and collect them as list
+                shape_list = []
+                for i, row in class_df.iterrows():
+                    # get metadata
+                    annot_name = row["name"]
+                    shape = row["geometry"]
+                    hexcolor = rgb2hex([elem / 255 for elem in row["color"]])
+                    
+                    # extract coordinates from shapely object
+                    shape_array = np.array([shape.exterior.coords.xy[1].tolist(), shape.exterior.coords.xy[0].tolist()]).T
+                    shape_array *= pixel_size # convert to length unit
+                    shape_list.append(shape_array)
+                    
+                self.viewer.add_shapes(shape_list, 
+                                name=f"{cl} ({annotation_label})", 
                                 shape_type='polygon', 
                                 edge_width=10,
                                 edge_color=hexcolor,

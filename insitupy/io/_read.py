@@ -159,10 +159,10 @@ def read_annotations(self,
         
         # get path and names of annotation files
         labels = self.xd_metadata["annotations"].keys()
-        files = [self.xd_metadata["annotations"][n] for n in labels]
+        files = [self.path / self.xd_metadata["annotations"][n] for n in labels]
         
     else:
-        if annotation_dir is  None:
+        if annotation_dir is None:
             raise ModalityNotFoundError(modality="annotations")
         else:
             # convert to Path

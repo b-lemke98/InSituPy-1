@@ -5,6 +5,7 @@ from os.path import relpath
 from parse import *
 import shutil
 from ..images.io import write_ome_tiff
+from ..io.io import write_qupath_geojson
 import json
 
 def save(self,
@@ -105,10 +106,10 @@ def save(self,
         metadata["annotations"] = {}
         for n in self.annotations.labels:
             annot_df = getattr(self.annotations, n)
-            annot_file = annot_path / f"{n}.parquet"
-            annot_df.to_parquet(annot_file)
-            # annot_file = annot_path / f"{n}.geojson"
-            # annot_df.to_file(str(annot_file), driver="GeoJSON")
+            # annot_file = annot_path / f"{n}.parquet"
+            # annot_df.to_parquet(annot_file)
+            annot_file = annot_path / f"{n}.geojson"
+            write_qupath_geojson(dataframe=annot_df, file=annot_file)
             metadata["annotations"][n] = Path(relpath(annot_file, path)).as_posix()
             
     # Optionally: zip the resulting directory
