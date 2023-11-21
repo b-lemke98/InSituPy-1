@@ -5,12 +5,11 @@ import matplotlib
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from ..utils.utils import convert_to_list
 from ..utils.exceptions import XeniumDataMissingObject
-from ..palettes import CustomPalettes
 from scipy.sparse import issparse
 from .widget import initialize_point_widgets, _create_points_layer
-from pandas.api.types import is_numeric_dtype
 from napari.layers import Layer
-from napari.layers.points.points import Points
+from shapely.geometry.multipolygon import MultiPolygon
+from shapely.geometry.polygon import Polygon, LinearRing
 
 def show(self,
     keys: Optional[str] = None,
@@ -151,14 +150,35 @@ def show(self,
                 shape_list = []
                 for i, row in class_df.iterrows():
                     # get metadata
-                    annot_name = row["name"]
-                    shape = row["geometry"]
+                    polygon = row["geometry"]
                     hexcolor = rgb2hex([elem / 255 for elem in row["color"]])
                     
-                    # extract coordinates from shapely object
-                    shape_array = np.array([shape.exterior.coords.xy[1].tolist(), shape.exterior.coords.xy[0].tolist()]).T
-                    shape_array *= pixel_size # convert to length unit
-                    shape_list.append(shape_array)
+                    # check if polygon is a MultiPolygon or just a simple Polygon object
+                    if isinstance(polygon, MultiPolygon):
+                        poly_list = list(polygon.geoms)
+                    elif isinstance(polygon, Polygon):
+                        poly_list = [polygon]
+                    else:
+                        raise ValueError(f"Input must be a Polygon or MultiPolygon object. Received: {type(polygon)}")
+                    
+                    for p in poly_list:
+                        # extract exterior coordinates from shapely object
+                        exterior_array = np.array([p.exterior.coords.xy[1].tolist(),
+                                                   p.exterior.coords.xy[0].tolist()]).T
+                        exterior_array *= pixel_size # convert to length unit
+                        shape_list.append(exterior_array)
+                        
+                        # if polygon has interiors, plot them as well
+                        # for information on donut-shaped polygons in napari see: https://forum.image.sc/t/is-it-possible-to-generate-doughnut-shapes-in-napari-shapes-layer/88834
+                        if len(p.interiors) > 0:
+                            for linear_ring in p.interiors:
+                                if isinstance(linear_ring, LinearRing):
+                                    interior_array = np.array([linear_ring.coords.xy[1].tolist(),
+                                                               linear_ring.coords.xy[0].tolist()]).T
+                                    interior_array *= pixel_size # convert to length unit
+                                    shape_list.append(interior_array)
+                                else:
+                                    ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
                     
                 self.viewer.add_shapes(shape_list, 
                                 name=f"{cl} ({annotation_label})", 
