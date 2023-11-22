@@ -116,4 +116,3 @@ def initialize_point_widgets(
         return layer
     
     return add_genes, add_observations
-

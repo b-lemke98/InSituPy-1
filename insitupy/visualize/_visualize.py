@@ -6,7 +6,7 @@ from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from ..utils.utils import convert_to_list
 from ..utils.exceptions import XeniumDataMissingObject
 from scipy.sparse import issparse
-from .widget import initialize_point_widgets, _create_points_layer
+from ._widgets import initialize_point_widgets, _create_points_layer
 from napari.layers import Layer
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import Polygon, LinearRing
@@ -48,7 +48,7 @@ def show(self,
         self.viewer.window.add_dock_widget(add_genes, name="Add genes", area="right")
         self.viewer.window.add_dock_widget(add_observations, name="Add observations", area="right")
          
-    # optionally add images       
+    # optionally add images
     if show_images:
         # add images
         if not hasattr(self, "images"):
@@ -127,7 +127,7 @@ def show(self,
             self.viewer.add_layer(Layer.create(*layer))            
 
     # optionally add annotations
-    if annotation_labels is not None:
+    if annotation_labels is not None:        
         # get colorcycle for region annotations
         cmap_annot = matplotlib.colormaps[cmap_annotations]
         cc_annot = cmap_annot.colors
