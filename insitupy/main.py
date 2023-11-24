@@ -276,7 +276,6 @@ class XeniumData:
         except AttributeError as e:
             print(f"{str(e)}. Use `.show()` first to open a napari viewer.")
             
-            
         # iterate through layers and save them as annotation if they meet requirements
         layers = viewer.layers
         collection_dict = {}
@@ -294,15 +293,15 @@ class XeniumData:
                     if annot_label not in self.annotations.metadata:
                         pass
                     
-                    if annot_label not in collection_dict:
-                        # initialize an empty dictionary to collect the data
-                        collection_dict[annot_label] = {
-                            "id": [],
-                            "objectType": [],
-                            "geometry": [],
-                            "name": [],
-                            "color": []
-                        }
+                    # if annot_label not in collection_dict:
+                    #     # initialize an empty dictionary to collect the data
+                    #     collection_dict[annot_label] = {
+                    #         "id": [],
+                    #         "objectType": [],
+                    #         "geometry": [],
+                    #         "name": [],
+                    #         "color": []
+                    #     }
                     
                     # extract list of shape parameters from current layer
                     coord_list = layer.data # coordinates

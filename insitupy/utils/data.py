@@ -53,19 +53,25 @@ class AnnotationData:
                        label: str
                        ):
         # parse geopandas data from dataframe or file
-        df = parse_geopandas(data)
+        new_df = parse_geopandas(data)
 
-        if label not in self.metadata:
-            # add dataframe to AnnotationData object
-            setattr(self, label, df)
+        if not hasattr(self, label):
+            # if label does not exist yet the new df is the whole annotation dataframe
+            annot_df = new_df
         
-            # record metadata information
-            if label not in self.metadata:
-                self.metadata[label] = {}
+            # add new entry to metadata
+            self.metadata[label] = {}
+        else:
+            annot_df = getattr(self, label)
+            annot_df = pd.concat([annot_df, new_df], ignore_index=True)
+        
+        # add dataframe to AnnotationData object
+        setattr(self, label, annot_df)
             
-            self.metadata[label]["n_annotations"] = len(df)  # number of annotations
-            self.metadata[label]["classes"] = df['name'].unique()  # annotation classes
-            self.metadata[label]["analyzed"] = ""  # whether this annotation has been used in the annotate() function
+        # record metadata information
+        self.metadata[label]["n_annotations"] = len(annot_df)  # number of annotations
+        self.metadata[label]["classes"] = annot_df['name'].unique()  # annotation classes
+        self.metadata[label]["analyzed"] = ""  # whether this annotation has been used in the annotate() function
 
 class ImageData:
     '''

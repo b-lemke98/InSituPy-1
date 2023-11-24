@@ -121,7 +121,7 @@ def show(self,
         cc_annot = cmap_annot.colors
         
         if annotation_labels == "all":
-            annotation_labels = self.annotations.labels
+            annotation_labels = self.annotations.metadata.keys()
         annotation_labels = convert_to_list(annotation_labels)
         for annotation_label in annotation_labels:
             annot_df = getattr(self.annotations, annotation_label)
