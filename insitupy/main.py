@@ -19,7 +19,8 @@ from napari.layers import Shapes
 from .utils.exceptions import ModalityNotFoundError
 from .utils.data import AnnotationData
 from geopandas import GeoDataFrame
-
+from uuid import uuid4
+from shapely import Polygon
 
 
 # make sure that image does not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
@@ -290,8 +291,49 @@ class XeniumData:
                     print(class_name)
                     print(annot_label)
                     
+                    # extract list of shape parameters from current layer
+                    coord_list = layer.data # coordinates
+                    edge_colors = layer.edge_color.tolist() # edge colors
+                    
+                    # check if layer contains already unique ids
+                    # if 'uid' in layer.properties:
+                    #     # the layer was already stored in the AnnotationData object
+                    #     # now all the shapes in the layer that are not already in the AnnotationData
+                    #     # need to be added
+                    #     # best would be tu work with the uids and search
+                    #     # for uids that do not exist yet
+                    #     pass
+                    # else:
+                    #     # the layer was not yet stored in AnnotationData
+                    #     # new uids need to be assigned
+                    #     # but still it could belong to a annot_label
+                    #     # that exists already
+                    #     # therfore first check if the annot_label
+                    #     # is already in the AnnotationData object
                     if annot_label not in self.annotations.metadata:
-                        pass
+                        # in this case the layer just needs to be added
+                        if not hasattr(self, "annotations"):
+                            self.annotations = AnnotationData() # initialize empty object
+                        
+                        # build annotation GeoDataFrame
+                        shapes = layer.data
+                        annot_df = {
+                            "id": [str(uuid4()) for _ in range(len(shapes))],
+                            "objectType": "annotation",
+                            "name": class_name,
+                            "color": edge_colors
+                        }
+                        geometries = [Polygon(elem) for elem in shapes]
+                        annot_df = GeoDataFrame(annot_df, 
+                                                geometry=geometries
+                                                )
+
+                        # add annotations
+                        self.annotations.add_annotation(data=annot_df, label=annot_label)
+                        
+                    
+                    # if annot_label not in self.annotations.metadata:
+                    #     pass
                     
                     # if annot_label not in collection_dict:
                     #     # initialize an empty dictionary to collect the data
@@ -303,9 +345,7 @@ class XeniumData:
                     #         "color": []
                     #     }
                     
-                    # extract list of shape parameters from current layer
-                    coord_list = layer.data # coordinates
-                    edge_colors = layer.edge_color # edge colors
+
                     
                     
                 
