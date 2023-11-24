@@ -132,17 +132,19 @@ def initialize_point_widgets(
 #     return annotation_widget
 
 @magic_factory(
-        call_button='Add annotation layer'
+        call_button='Add annotation layer',
+        annot_label={'label': 'Label:'},
+        class_name={'label': 'Class:'}
     )
 def annotation_widget(
-    Class: str = "",
-    Label: str = ""
+    annot_label: str = "",
+    class_name: str = ""
 ) -> napari.types.LayerDataTuple:
     # generate name
     name_pattern: str = "*{class_name} ({annot_label})"
-    name = name_pattern.format(class_name=Class, annot_label=Label)
+    name = name_pattern.format(class_name=class_name, annot_label=annot_label)
 
-    if (Class != "") & (Label != ""):
+    if (class_name != "") & (annot_label != ""):
         # generate shapes layer for annotation
         layer = (
             [],
@@ -156,8 +158,12 @@ def annotation_widget(
             'shapes'
             )
         
+        annotation_widget.class_name.value = ""
+        annotation_widget.annot_label.value = ""
+        
         return layer
     
+
 
     else:
         return None
