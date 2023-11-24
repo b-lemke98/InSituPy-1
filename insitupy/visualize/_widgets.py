@@ -3,7 +3,7 @@ import numpy as np
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 from ..palettes import CustomPalettes
 from scipy.sparse import issparse
-from magicgui import magicgui
+from magicgui import magicgui, magic_factory
 from magicgui.widgets import FunctionGui
 from pandas.api.types import is_numeric_dtype
 from napari.types import LayerDataTuple
@@ -116,3 +116,85 @@ def initialize_point_widgets(
         return layer
     
     return add_genes, add_observations
+
+# def initialize_annotation_widget(
+#     ) -> FunctionGui:
+#     @magicgui(
+#         call_button='Add annotation'
+#     )
+#     def annotation_widget(
+#         Label="test",
+#         Class="blubb"
+#     ):
+#         print(Label)
+#         print(Class)
+    
+#     return annotation_widget
+
+@magic_factory(
+        call_button='Add annotation layer'
+    )
+def annotation_widget(
+    Class: str = "",
+    Label: str = ""
+) -> napari.types.LayerDataTuple:
+    # generate name
+    name_pattern: str = "*{class_name} ({annot_label})"
+    name = name_pattern.format(class_name=Class, annot_label=Label)
+
+    if (Class != "") & (Label != ""):
+        # generate shapes layer for annotation
+        layer = (
+            [],
+            {
+                'name': name,
+                'shape_type': 'polygon',
+                'edge_width': 10,
+                'edge_color': "#ffc800ff",
+                'face_color': 'transparent'
+                }, 
+            'shapes'
+            )
+        
+        return layer
+    
+
+    else:
+        return None
+
+# from napari import Viewer
+# @magic_factory(
+#     call_button='Add annotation layer'
+#     )
+# def annotation_widget(
+#     #viewer: Viewer,
+#     Label="test",
+#     Class="blubb",
+#     #data=None
+#     ):
+#     print('here')
+#     layer = (
+#         np.array([[11, 13], [111, 113], [22, 246]]), 
+#         {
+#             'name': f"{Label}_{Class}",
+#             'shape_type': 'polygon',
+#             'edge_width': 10,
+#             'edge_color': "#ffc800ff",
+#             'face_color': 'transparent'
+#             }, 
+#         'shapes'
+#         )
+#     return layer
+    
+#     # if data is None:
+#     #     print('heyho')
+#     # else:
+#     #     print('booya')
+#     # print(viewer.layers)
+    
+#     # print(Label)
+#     # print(Class)
+#     # d = viewer.dict()
+#     # print(d['test'])
+#     # d['test'] = "checkho"
+#     # print(d['test'])

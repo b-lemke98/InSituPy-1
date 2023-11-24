@@ -1,4 +1,4 @@
-from xeniumdata.utils.utils import decode_robust_series
+from insitupy.utils.utils import decode_robust_series
 import pandas as pd
 
 s = pd.Series(list("ABCD"))  # string series
@@ -22,4 +22,3 @@ def test_ascii_decode():
 
 def test_mixed_series_decode():
     assert decode_robust_series(m).equals(mt)
-

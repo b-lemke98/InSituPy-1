@@ -34,6 +34,26 @@ def read_qupath_geojson(file: Union[str, os.PathLike, Path]) -> pd.DataFrame:
     # Return the transformed DataFrame
     return dataframe
 
+def parse_geopandas(
+    data: Union[GeoDataFrame, pd.DataFrame, dict,
+                str, os.PathLike, Path]
+    ):
+    # check if the input is a path or a GeoDataFrame
+    if isinstance(data, GeoDataFrame):
+        df = data
+    elif isinstance(data, pd.DataFrame) or isinstance(data, dict):
+        df = GeoDataFrame(data, geometry=data["geometry"])
+    else:
+        # read annotations as GeoDataFrame
+        data = Path(data)
+        if data.suffix == ".geojson":
+            df = read_qupath_geojson(file=data)
+        else:
+            raise ValueError(f"Unknown file extension: {data.suffix}. File is expected to be `.geojson` or `.parquet`.")
+        
+    return df
+        
+
 
 def write_qupath_geojson(dataframe: GeoDataFrame,
                          file: Union[str, os.PathLike, Path]

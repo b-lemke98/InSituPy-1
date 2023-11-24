@@ -9,24 +9,25 @@ from .utils import textformat as tf
 from .utils import convert_to_list, load_pyramid, decode_robust_series
 from parse import *
 import xmltodict
-from ..io.io import read_qupath_geojson
+from ..io.io import parse_geopandas
 
 class AnnotationData:
     '''
     Object to store annotations.
     '''
     def __init__(self,
-                 annot_files: List[Union[str, os.PathLike, Path]], 
-                 annot_labels: List[str]
+                 annot_files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
+                 annot_labels: Optional[List[str]] = None
                  ) -> None:
         self.labels = []
         self.n_annotations = []
         self.classes = []
         self.analyzed = []
         
-        for label, file in zip(annot_labels, annot_files):
-            # read annotation and store in dictionary
-            self.add_annotation(file=file, label=label)
+        if annot_files is not None:
+            for label, file in zip(annot_labels, annot_files):
+                # read annotation and store in dictionary
+                self.add_annotation(data=file, label=label)
             
     def __repr__(self):
         if len(self.labels) > 0:
@@ -40,21 +41,18 @@ class AnnotationData:
             s = ""
         repr = f"{tf.Cyan+tf.Bold}annotations{tf.ResetAll}\n{s}"
         return repr
-        
+            
     def add_annotation(self,
-                       file: Union[str, os.PathLike, Path],
+                       data: Union[gpd.GeoDataFrame, pd.DataFrame, dict, 
+                                   str, os.PathLike, Path],
                        label: str
                        ):
-        # read annotations as dataframe dataframe and add to AnnotationData object
-        file = Path(file)
-        if file.suffix == ".geojson":
-            df = read_qupath_geojson(file=file)
-        elif file.suffix == ".parquet":
-            df = pd.read_parquet(file)
-        else:
-            raise ValueError(f"Unknown file extension: {file.suffix}. File is expected to be `.geojson` or `.parquet`.")
-            
-        setattr(self, label, df)
+        # parse geopandas data from dataframe or file
+        df = parse_geopandas(data)
+
+        if label not in self.labels:
+            # add dataframe to AnnotationData object
+            setattr(self, label, df)
         
         # record metadata information
         self.labels.append(label) # names of the annotations

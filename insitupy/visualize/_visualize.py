@@ -10,6 +10,8 @@ from ._widgets import initialize_point_widgets, _create_points_layer
 from napari.layers import Layer
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import Polygon, LinearRing
+from ._widgets import annotation_widget
+
 
 def show(self,
     keys: Optional[str] = None,
@@ -21,7 +23,8 @@ def show(self,
     unit: str = "µm",
     cmap_annotations: str ="Dark2",
     grayscale_colormap: List[str] = ["red", "green", "cyan", "magenta", "yellow", "gray"],
-    return_viewer: bool = False
+    return_viewer: bool = False,
+    widgets_max_width: int = 170
     ):
     # get information about pixel size
     if (pixel_size is None) & (scalebar):
@@ -33,21 +36,6 @@ def show(self,
     # create viewer
     self.viewer = napari.Viewer()
     
-    if hasattr(self, "matrix"):
-        # initialize the widgets
-        add_genes, add_observations = initialize_point_widgets(
-            matrix=self.matrix,
-            pixel_size=pixel_size
-            )
-        
-        # set maximum height of widget to prevent the widget from having a large distance
-        add_genes.max_height = 100
-        add_observations.max_height = 100
-        
-        # add widgets to napari window
-        self.viewer.window.add_dock_widget(add_genes, name="Add genes", area="right")
-        self.viewer.window.add_dock_widget(add_observations, name="Add observations", area="right")
-         
     # optionally add images
     if show_images:
         # add images
@@ -148,9 +136,12 @@ def show(self,
                 
                 # iterate through annotations of this class and collect them as list
                 shape_list = []
+                color_list = []
+                uid_list = []
                 for i, row in class_df.iterrows():
                     # get metadata
                     polygon = row["geometry"]
+                    uid = row["id"]
                     hexcolor = rgb2hex([elem / 255 for elem in row["color"]])
                     
                     # check if polygon is a MultiPolygon or just a simple Polygon object
@@ -163,10 +154,14 @@ def show(self,
                     
                     for p in poly_list:
                         # extract exterior coordinates from shapely object
-                        exterior_array = np.array([p.exterior.coords.xy[1].tolist(),
-                                                   p.exterior.coords.xy[0].tolist()]).T
+                        # Note: the last coordinate is removed since it is identical with the first
+                        # in shapely objects, leading sometimes to visualization bugs in napari
+                        exterior_array = np.array([p.exterior.coords.xy[1].tolist()[:-1],
+                                                   p.exterior.coords.xy[0].tolist()[:-1]]).T
                         exterior_array *= pixel_size # convert to length unit
-                        shape_list.append(exterior_array)
+                        shape_list.append(exterior_array)  # collect shape
+                        color_list.append(hexcolor)  # collect corresponding color
+                        uid_list.append(uid)  # collect corresponding unique id
                         
                         # if polygon has interiors, plot them as well
                         # for information on donut-shaped polygons in napari see: https://forum.image.sc/t/is-it-possible-to-generate-doughnut-shapes-in-napari-shapes-layer/88834
@@ -176,18 +171,48 @@ def show(self,
                                     interior_array = np.array([linear_ring.coords.xy[1].tolist(),
                                                                linear_ring.coords.xy[0].tolist()]).T
                                     interior_array *= pixel_size # convert to length unit
-                                    shape_list.append(interior_array)
+                                    shape_list.append(interior_array)  # collect shape
+                                    color_list.append(hexcolor)  # collect corresponding color
+                                    uid_list.append(uid)  # collect corresponding unique id
                                 else:
                                     ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
                     
                 self.viewer.add_shapes(shape_list, 
-                                name=f"{cl} ({annotation_label})", 
+                                name=f"{cl} ({annotation_label})",
+                                properties={
+                                    'uid': uid_list,
+                                },
                                 shape_type='polygon', 
                                 edge_width=10,
-                                edge_color=hexcolor,
+                                edge_color=color_list,
                                 face_color='transparent'
                                 )
+                
+    # WIDGETS     
+    if hasattr(self, "matrix"):
+        # initialize the widgets
+        add_genes, add_observations = initialize_point_widgets(
+            matrix=self.matrix,
+            pixel_size=pixel_size
+            )
+        
+        # set maximum height of widget to prevent the widget from having a large distance
+        add_genes.max_height = 100
+        add_observations.max_height = 100
+        add_genes.max_width = widgets_max_width
+        add_observations.max_width = widgets_max_width
+        
+        # add widgets to napari window
+        self.viewer.window.add_dock_widget(add_genes, name="Genes", area="right")
+        self.viewer.window.add_dock_widget(add_observations, name="Observations", area="right")
     
+    # add annotation widget to napari
+    #annotation_widget = initialize_annotation_widget()
+    annot_widget = annotation_widget()
+    annot_widget.max_height = 100
+    annot_widget.max_width = widgets_max_width
+    self.viewer.window.add_dock_widget(annot_widget, name="Annotations", area="right")
+
     if scalebar:
         # add scale bar
         self.viewer.scale_bar.visible = True
