@@ -19,10 +19,10 @@ class AnnotationData:
                  annot_files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
                  annot_labels: Optional[List[str]] = None
                  ) -> None:
-        self.labels = []
-        self.n_annotations = []
-        self.classes = []
-        self.analyzed = []
+        self.metadata = {}
+        # self.n_annotations = []
+        # self.classes = []
+        # self.analyzed = []
         
         if annot_files is not None:
             for label, file in zip(annot_labels, annot_files):
@@ -30,12 +30,17 @@ class AnnotationData:
                 self.add_annotation(data=file, label=label)
             
     def __repr__(self):
-        if len(self.labels) > 0:
-            repr_strings = [f"{tf.Bold}{a}:{tf.ResetAll}\t{b} annotations, {len(c)} classes {*c,} {d}" for a,b,c,d in zip(self.labels, 
-                                                                                                    self.n_annotations, 
-                                                                                                    self.classes,
-                                                                                                    self.analyzed
-                                                                                                    )]
+        if len(self.metadata) > 0:
+            # repr_strings = [f"{tf.Bold}{a}:{tf.ResetAll}\t{b} annotations, {len(c)} classes {*c,} {d}" for a,b,c,d in zip(self.labels, 
+            #                                                                                         self.n_annotations, 
+            #                                                                                         self.classes,
+            #                                                                                         self.analyzed
+            #                                                                                         )]
+            
+            repr_strings = [
+                f'{tf.Bold}{l}:{tf.ResetAll}\t{m["n_annotations"]} annotations, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
+                ]
+            
             s = "\n".join(repr_strings)
         else:
             s = ""
@@ -50,15 +55,17 @@ class AnnotationData:
         # parse geopandas data from dataframe or file
         df = parse_geopandas(data)
 
-        if label not in self.labels:
+        if label not in self.metadata:
             # add dataframe to AnnotationData object
             setattr(self, label, df)
         
-        # record metadata information
-        self.labels.append(label) # names of the annotations
-        self.n_annotations.append(len(df)) # number of annotations
-        self.classes.append(df.name.unique()) # annotation classes
-        self.analyzed.append("") # whether this annotation has been used in the annotate() function
+            # record metadata information
+            if label not in self.metadata:
+                self.metadata[label] = {}
+            
+            self.metadata[label]["n_annotations"] = len(df)  # number of annotations
+            self.metadata[label]["classes"] = df['name'].unique()  # annotation classes
+            self.metadata[label]["analyzed"] = ""  # whether this annotation has been used in the annotate() function
 
 class ImageData:
     '''

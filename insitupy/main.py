@@ -291,7 +291,7 @@ class XeniumData:
                     print(class_name)
                     print(annot_label)
                     
-                    if annot_label not in self.annotations:
+                    if annot_label not in self.annotations.metadata:
                         pass
                     
                     if annot_label not in collection_dict:
