@@ -152,8 +152,11 @@ def annotation_widget(
                 'name': name,
                 'shape_type': 'polygon',
                 'edge_width': 10,
-                'edge_color': "#ffc800ff",
-                'face_color': 'transparent'
+                'edge_color': "red",
+                'face_color': 'transparent',
+                'properties': {
+                    'uid': np.array([], dtype='object')
+                }
                 }, 
             'shapes'
             )
@@ -162,8 +165,6 @@ def annotation_widget(
         annotation_widget.annot_label.value = ""
         
         return layer
-    
-
 
     else:
         return None

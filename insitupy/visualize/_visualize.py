@@ -11,6 +11,8 @@ from napari.layers import Layer
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import Polygon, LinearRing
 from ._widgets import annotation_widget
+from napari.layers.shapes.shapes import Shapes
+from uuid import uuid4
 
 
 def show(self,
@@ -168,8 +170,8 @@ def show(self,
                         if len(p.interiors) > 0:
                             for linear_ring in p.interiors:
                                 if isinstance(linear_ring, LinearRing):
-                                    interior_array = np.array([linear_ring.coords.xy[1].tolist(),
-                                                               linear_ring.coords.xy[0].tolist()]).T
+                                    interior_array = np.array([linear_ring.coords.xy[1].tolist()[:-1],
+                                                               linear_ring.coords.xy[0].tolist()[:-1]]).T
                                     interior_array *= pixel_size # convert to length unit
                                     shape_list.append(interior_array)  # collect shape
                                     color_list.append(hexcolor)  # collect corresponding color
@@ -212,7 +214,51 @@ def show(self,
     annot_widget.max_height = 100
     annot_widget.max_width = widgets_max_width
     self.viewer.window.add_dock_widget(annot_widget, name="Annotations", area="right")
+    
+    # EVENTS
+    # Function assign to an layer addition event
+    def testfunc(event):
+        if event is not None:
+            layer = event.source
+            print(event.action)
+            if event.action == "add":
+                print(f'Added to {layer}')
+                if 'uid' in layer.properties:
+                    print('here')
+                    layer.properties['uid'][-1] = str(uuid4())
+                else:
+                    print('blubb')
+                    layer.properties['uid'] = np.array([str(uuid4())], dtype='object')
+                    print('heyho')
+                
+            elif event.action == "remove":
+                print(f"Removed from {layer}")
+            else:
+                raise ValueError("Unknown type of `event.action`.")
 
+            print(layer.properties)
+            
+            
+    for layer in self.viewer.layers:
+        if isinstance(layer, Shapes):
+            layer.events.data.connect(testfunc)
+            #layer.metadata = layer.properties
+            
+    # Connect the function to all shapes layers in the viewer
+    def connect_to_all_shapes_layers(event):
+        layer = event.source[event.index]
+        if event is not None and isinstance(layer, Shapes):
+            print('blubb')
+            print(dir(layer.events))
+            #layer.events.data.connect(testfunc)
+            layer.events.data.connect(testfunc)
+            layer.properties['uid'] = "testblubb"
+
+    # Connect the function to any new layers added to the viewer
+    self.viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
+    
+    
+    # NAPARI SETTINGS
     if scalebar:
         # add scale bar
         self.viewer.scale_bar.visible = True
