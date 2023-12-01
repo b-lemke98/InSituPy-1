@@ -82,9 +82,16 @@ class AnnotationData:
             
             # check if the uids are identical
             uids_different = set(annot_df.index).symmetric_difference(new_df.index)
-            if len(uids_different) > 0:            
+            
+            # check if there are any uids different between old and new dataframe
+            if len(uids_different) > 0:
+                # concatenate old and new annoation dataframe         
                 annot_df = pd.concat([annot_df, new_df], ignore_index=False)
+                
+                # remove all duplicated shapes - leaving only the newly added
                 annot_df = annot_df[~annot_df.index.duplicated()]
+                
+                # dataframe will be added
                 add = True
             else:
                 add = False # dataframe will not be added later

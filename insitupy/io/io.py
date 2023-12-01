@@ -55,6 +55,9 @@ def parse_geopandas(
         else:
             raise ValueError(f"Unknown file extension: {data.suffix}. File is expected to be `.geojson` or `.parquet`.")
         
+    # set the crs to EPSG:4326 (does not matter for us but to circumvent errors it is better to set it)
+    df = df.set_crs(4326)
+    
     # set uid column as index
     df = df.set_index(uid_col)
     
