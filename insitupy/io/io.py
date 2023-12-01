@@ -36,7 +36,8 @@ def read_qupath_geojson(file: Union[str, os.PathLike, Path]) -> pd.DataFrame:
 
 def parse_geopandas(
     data: Union[GeoDataFrame, pd.DataFrame, dict,
-                str, os.PathLike, Path]
+                str, os.PathLike, Path],
+    uid_col: str = "id"
     ):
     # check if the input is a path or a GeoDataFrame
     if isinstance(data, GeoDataFrame):
@@ -51,6 +52,9 @@ def parse_geopandas(
         else:
             raise ValueError(f"Unknown file extension: {data.suffix}. File is expected to be `.geojson` or `.parquet`.")
         
+    # set uid column as index
+    df = df.set_index(uid_col)
+    
     return df
         
 

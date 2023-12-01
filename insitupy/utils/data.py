@@ -46,11 +46,25 @@ class AnnotationData:
             s = ""
         repr = f"{tf.Cyan+tf.Bold}annotations{tf.ResetAll}\n{s}"
         return repr
+    
+    def _update_metadata(self, 
+                         label: str,
+                         analyzed: bool
+                         ):
+        # retrieve dataframe
+        annot_df = getattr(self, label)
+        
+        # record metadata information
+        self.metadata[label]["n_annotations"] = len(annot_df)  # number of annotations
+        self.metadata[label]["classes"] = annot_df['name'].unique()  # annotation classes
+        self.metadata[label]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
+        
             
     def add_annotation(self,
                        data: Union[gpd.GeoDataFrame, pd.DataFrame, dict, 
                                    str, os.PathLike, Path],
-                       label: str
+                       label: str,
+                       #uid_col: Optional[str] = "id"
                        ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
@@ -58,20 +72,30 @@ class AnnotationData:
         if not hasattr(self, label):
             # if label does not exist yet the new df is the whole annotation dataframe
             annot_df = new_df
+            add = True # dataframe will be added later
         
             # add new entry to metadata
             self.metadata[label] = {}
         else:
+            # concatenate the new and old dataframe
             annot_df = getattr(self, label)
-            annot_df = pd.concat([annot_df, new_df], ignore_index=True)
-        
-        # add dataframe to AnnotationData object
-        setattr(self, label, annot_df)
             
-        # record metadata information
-        self.metadata[label]["n_annotations"] = len(annot_df)  # number of annotations
-        self.metadata[label]["classes"] = annot_df['name'].unique()  # annotation classes
-        self.metadata[label]["analyzed"] = ""  # whether this annotation has been used in the annotate() function
+            # check if the uids are identical
+            uids_different = set(annot_df).symmetric_difference(new_df)
+            if len(uids_different) > 0:            
+                annot_df = pd.concat([annot_df, new_df], ignore_index=False)
+                annot_df = annot_df[~annot_df.index.duplicated()]
+                add = True
+            else:
+                add = False # dataframe will not be added later
+        
+        if add:
+            # add dataframe to AnnotationData object
+            setattr(self, label, annot_df)
+            
+            # update metadata
+            self._update_metadata(label=label, analyzed=False)
+        
 
 class ImageData:
     '''
