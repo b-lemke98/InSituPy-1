@@ -140,10 +140,10 @@ def show(self,
                 shape_list = []
                 color_list = []
                 uid_list = []
-                for i, row in class_df.iterrows():
+                for uid, row in class_df.iterrows():
                     # get metadata
                     polygon = row["geometry"]
-                    uid = row["id"]
+                    #uid = row["id"]
                     hexcolor = rgb2hex([elem / 255 for elem in row["color"]])
                     
                     # check if polygon is a MultiPolygon or just a simple Polygon object
@@ -180,7 +180,7 @@ def show(self,
                                     ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
                     
                 self.viewer.add_shapes(shape_list, 
-                                name=f"{cl} ({annotation_label})",
+                                name=f"*{cl} ({annotation_label})",
                                 properties={
                                     'uid': uid_list,
                                 },
@@ -217,46 +217,41 @@ def show(self,
     
     # EVENTS
     # Function assign to an layer addition event
-    def testfunc(event):
+    def _update_uid(event):
         if event is not None:
+            
             layer = event.source
-            print(event.action)
+            # print(event.action) # print what event.action returns
+            # print(event.data_indices) # print index of event
             if event.action == "add":
-                print(f'Added to {layer}')
+                # print(f'Added to {layer}')
                 if 'uid' in layer.properties:
-                    print('here')
                     layer.properties['uid'][-1] = str(uuid4())
                 else:
-                    print('blubb')
                     layer.properties['uid'] = np.array([str(uuid4())], dtype='object')
-                    print('heyho')
                 
             elif event.action == "remove":
-                print(f"Removed from {layer}")
+                pass
+                # print(f"Removed from {layer}")
             else:
-                raise ValueError("Unknown type of `event.action`.")
+                raise ValueError("Unexpected value '{event.action}' for `event.action`. Expected 'add' or 'remove'.")
 
-            print(layer.properties)
-            
-            
+            # print(layer.properties)
+
     for layer in self.viewer.layers:
         if isinstance(layer, Shapes):
-            layer.events.data.connect(testfunc)
+            layer.events.data.connect(_update_uid)
             #layer.metadata = layer.properties
             
     # Connect the function to all shapes layers in the viewer
     def connect_to_all_shapes_layers(event):
         layer = event.source[event.index]
         if event is not None and isinstance(layer, Shapes):
-            print('blubb')
-            print(dir(layer.events))
-            #layer.events.data.connect(testfunc)
-            layer.events.data.connect(testfunc)
-            layer.properties['uid'] = "testblubb"
+            # print('Annotation layer added')
+            layer.events.data.connect(_update_uid)
 
     # Connect the function to any new layers added to the viewer
     self.viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
-    
     
     # NAPARI SETTINGS
     if scalebar:

@@ -267,7 +267,8 @@ class XeniumData:
         self.annotations = AnnotationData(annot_files=files, annot_labels=labels)
             
     def store_annotations(self,
-                          name_pattern = "*{class_name} ({annot_label})"
+                          name_pattern = "*{class_name} ({annot_label})",
+                          uid_col: str = "id"
                           ):
         '''
         Function to extract annotation layers from shapes layers and store them in the XeniumData object.
@@ -277,6 +278,7 @@ class XeniumData:
         except AttributeError as e:
             print(f"{str(e)}. Use `.show()` first to open a napari viewer.")
             
+        # extract pixel_size
         # iterate through layers and save them as annotation if they meet requirements
         layers = viewer.layers
         collection_dict = {}
@@ -288,65 +290,32 @@ class XeniumData:
                 if name_parsed is not None:
                     annot_label = name_parsed.named["annot_label"]
                     class_name = name_parsed.named["class_name"]
+                    
+                    # if the XeniumData object does not has an annotations attribute, initialize it
+                    if not hasattr(self, "annotations"):
+                        self.annotations = AnnotationData() # initialize empty object
+                        
+                    #if annot_label not in self.annotations.metadata:
+                    # in this case the layer just needs to be added
                     print(class_name)
                     print(annot_label)
+                    # build annotation GeoDataFrame
+                    shapes = layer.data
+                    annot_df = {
+                        #"id": [str(uuid4()) for _ in range(len(shapes))],
+                        uid_col: layer.properties["uid"],
+                        "objectType": "annotation",
+                        "geometry": [Polygon(elem) for elem in shapes],
+                        "name": class_name,
+                        "color": layer.edge_color.tolist(),
+                    }
                     
-                    # extract list of shape parameters from current layer
-                    coord_list = layer.data # coordinates
-                    edge_colors = layer.edge_color.tolist() # edge colors
-                    
-                    # check if layer contains already unique ids
-                    # if 'uid' in layer.properties:
-                    #     # the layer was already stored in the AnnotationData object
-                    #     # now all the shapes in the layer that are not already in the AnnotationData
-                    #     # need to be added
-                    #     # best would be tu work with the uids and search
-                    #     # for uids that do not exist yet
-                    #     pass
-                    # else:
-                    #     # the layer was not yet stored in AnnotationData
-                    #     # new uids need to be assigned
-                    #     # but still it could belong to a annot_label
-                    #     # that exists already
-                    #     # therfore first check if the annot_label
-                    #     # is already in the AnnotationData object
-                    if annot_label not in self.annotations.metadata:
-                        # in this case the layer just needs to be added
-                        if not hasattr(self, "annotations"):
-                            self.annotations = AnnotationData() # initialize empty object
-                        
-                        # build annotation GeoDataFrame
-                        shapes = layer.data
-                        annot_df = {
-                            "id": [str(uuid4()) for _ in range(len(shapes))],
-                            "objectType": "annotation",
-                            "name": class_name,
-                            "color": edge_colors
-                        }
-                        geometries = [Polygon(elem) for elem in shapes]
-                        annot_df = GeoDataFrame(annot_df, 
-                                                geometry=geometries
-                                                )
+                    # generate GeoDataFrame
+                    annot_df = GeoDataFrame(annot_df, geometry="geometry")
 
-                        # add annotations
-                        self.annotations.add_annotation(data=annot_df, label=annot_label)
-                        
-                    
-                    # if annot_label not in self.annotations.metadata:
-                    #     pass
-                    
-                    # if annot_label not in collection_dict:
-                    #     # initialize an empty dictionary to collect the data
-                    #     collection_dict[annot_label] = {
-                    #         "id": [],
-                    #         "objectType": [],
-                    #         "geometry": [],
-                    #         "name": [],
-                    #         "color": []
-                    #     }
-                    
+                    # add annotations
+                    self.annotations.add_annotation(data=annot_df, label=annot_label)                       
 
-                    
                     
                 
 
