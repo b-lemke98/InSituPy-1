@@ -140,6 +140,7 @@ def show(self,
                 shape_list = []
                 color_list = []
                 uid_list = []
+                type_list = [] # list to store whether the polygon is exterior or interior
                 for uid, row in class_df.iterrows():
                     # get metadata
                     polygon = row["geometry"]
@@ -164,6 +165,7 @@ def show(self,
                         shape_list.append(exterior_array)  # collect shape
                         color_list.append(hexcolor)  # collect corresponding color
                         uid_list.append(uid)  # collect corresponding unique id
+                        type_list.append("exterior")
                         
                         # if polygon has interiors, plot them as well
                         # for information on donut-shaped polygons in napari see: https://forum.image.sc/t/is-it-possible-to-generate-doughnut-shapes-in-napari-shapes-layer/88834
@@ -176,13 +178,15 @@ def show(self,
                                     shape_list.append(interior_array)  # collect shape
                                     color_list.append(hexcolor)  # collect corresponding color
                                     uid_list.append(uid)  # collect corresponding unique id
+                                    type_list.append("interior")
                                 else:
                                     ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
                     
                 self.viewer.add_shapes(shape_list, 
                                 name=f"*{cl} ({annotation_label})",
                                 properties={
-                                    'uid': uid_list,
+                                    'uid': uid_list, # list with uids
+                                    'type': type_list # list giving information on whether the polygon is interior or exterior
                                 },
                                 shape_type='polygon', 
                                 edge_width=10,

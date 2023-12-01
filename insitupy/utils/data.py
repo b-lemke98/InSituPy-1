@@ -81,14 +81,13 @@ class AnnotationData:
             annot_df = getattr(self, label)
             
             # check if the uids are identical
-            uids_different = set(annot_df).symmetric_difference(new_df)
+            uids_different = set(annot_df.index).symmetric_difference(new_df.index)
             if len(uids_different) > 0:            
                 annot_df = pd.concat([annot_df, new_df], ignore_index=False)
                 annot_df = annot_df[~annot_df.index.duplicated()]
                 add = True
             else:
                 add = False # dataframe will not be added later
-        
         if add:
             # add dataframe to AnnotationData object
             setattr(self, label, annot_df)

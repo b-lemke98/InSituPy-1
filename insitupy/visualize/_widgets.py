@@ -161,8 +161,8 @@ def annotation_widget(
             'shapes'
             )
         
-        annotation_widget.class_name.value = ""
         annotation_widget.annot_label.value = ""
+        #annotation_widget.class_name.value = ""
         
         return layer
 

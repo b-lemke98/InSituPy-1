@@ -299,20 +299,28 @@ class XeniumData:
                     # in this case the layer just needs to be added
                     print(class_name)
                     print(annot_label)
-                    # build annotation GeoDataFrame
+                    
+                    # extract shapes coordinates and colors
                     shapes = layer.data
+                    colors = layer.edge_color.tolist()
+                    
+                    # scale coordinates
+                    shapes = [elem / self.metadata["pixel_size"] for elem in shapes]
+                    
+                    # build annotation GeoDataFrame
                     annot_df = {
                         #"id": [str(uuid4()) for _ in range(len(shapes))],
                         uid_col: layer.properties["uid"],
                         "objectType": "annotation",
-                        "geometry": [Polygon(elem) for elem in shapes],
+                        "geometry": [Polygon(np.stack([ar[:, 1], ar[:, 0]], axis=1)) for ar in shapes],  # switch x/y
                         "name": class_name,
-                        "color": layer.edge_color.tolist(),
+                        "color": [[int(elem[e]*255) for e in range(3)] for elem in colors]
+                        #"color": layer.edge_color.tolist(),
                     }
                     
                     # generate GeoDataFrame
                     annot_df = GeoDataFrame(annot_df, geometry="geometry")
-
+                    
                     # add annotations
                     self.annotations.add_annotation(data=annot_df, label=annot_label)                       
 
