@@ -60,6 +60,7 @@ Explore the tutorials in `./notebooks/` to learn how to use InSituPy:
 1. [Download example data for tutorial](notebooks/01_InSituPy_demo_download_data.ipynb) - Download _Xenium In Situ_ example data for the subsequent tutorials.
 2. [Registration of additional images](notebooks/02_InSituPy_demo_register_images.ipynb) - Learn how to register additional images.
 3. [Basic analysis functionalities](notebooks/03_InSituPy_demo_analyze.ipynb) - Learn about the basic functionalities, such as loading of data, basic preprocessing and interactive visualization with napari.
+4. [Add annotations](notebooks/04_InSituPy_demo_annotations.ipynb) - Learn how to add annotations from external software such as [QuPath](https://qupath.github.io/).
 
 ## Features
 

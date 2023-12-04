@@ -5,7 +5,7 @@ import scanpy as sc
 import pandas as pd
 from ..utils.utils import decode_robust_series, convert_to_list
 from parse import *
-from ..utils.data import ImageData, BoundariesData, AnnotationData
+from ..utils.data import ImageData, BoundariesData
 from ..utils.exceptions import ModalityNotFoundError
 from pandas.api.types import is_numeric_dtype
 import warnings
@@ -146,45 +146,6 @@ def read_boundaries(self,
                                     labels=labels,
                                     pixel_size=self.metadata["pixel_size"]
                                     )
-    
-def read_annotations(self,
-                     annotation_dir: Union[str, os.PathLike, Path] = None, # "../annotations",
-                     suffix: str = ".geojson",
-                     pattern_annotation_file: str = "annotation-{slide_id}__{sample_id}__{name}"
-                     ):
-    if self.from_xeniumdata:
-        # check if matrix data is stored in this XeniumData
-        if "annotations" not in self.xd_metadata:
-            raise ModalityNotFoundError(modality="annotations")
-        
-        # get path and names of annotation files
-        labels = self.xd_metadata["annotations"].keys()
-        files = [self.xd_metadata["annotations"][n] for n in labels]
-        
-    else:
-        if annotation_dir is  None:
-            raise ModalityNotFoundError(modality="annotations")
-        else:
-            # convert to Path
-            annotation_dir = Path(annotation_dir)
-            
-            # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
-            if not annotation_dir.is_dir():
-                annotation_dir = Path(os.path.normpath(self.path / annotation_dir))
-                if not annotation_dir.is_dir():
-                    raise FileNotFoundError(f"`annot_path` {annotation_dir} is neither a direct path nor a relative path.")
-            
-            # get list annotation files that match the current slide id and sample id
-            files = []
-            labels = []
-            for file in annotation_dir.glob(f"*{suffix}"):
-                if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
-                    parsed = parse(pattern_annotation_file, file.stem)
-                    labels.append(parsed.named["name"])
-                    files.append(file)
-            
-    print("Reading annotations...", flush=True)
-    self.annotations = AnnotationData(annot_files=files, annot_labels=labels)
             
 def read_all(self, verbose: bool = True):
     # extract read functions

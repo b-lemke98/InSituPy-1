@@ -84,6 +84,11 @@ class textformat:
     HLINE = "\u2500"
     RARROWHEAD = "\u27A4"
     TICK = "\u2714"
+    CIRCLE_EMPTY = "\u25EF"
+    CIRCLE_FILLED = "\u2B24"
+    CIRCLE_HALF = "\u25D0"
+    CIRCLE_THREEQUARTER = "\u25D5"
+    CIRCLE_ONEQUARTER = "\u25D4"
 
     # spacer
     SPACER = "    "

@@ -15,6 +15,13 @@ import functools as ft
 import seaborn as sns
 from anndata import AnnData
 from .utils.exceptions import UnknownOptionError
+from napari.layers import Shapes
+from .utils.exceptions import ModalityNotFoundError
+from .utils.data import AnnotationData
+from geopandas import GeoDataFrame
+from uuid import uuid4
+from shapely import Polygon
+
 
 # make sure that image does not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
 SHRT_MAX = 2**15-1 # 32767
@@ -38,19 +45,19 @@ class XeniumData:
         _type_: _description_
     """
     # import read and write functions
-    from .io._read import read_all, read_annotations, read_boundaries, read_images, read_matrix, read_transcripts
+    from .io._read import read_all, read_boundaries, read_images, read_matrix, read_transcripts
     
     # import write function
     from .io._write import save
     
     # import analysis functions
-    from .utils.annotations import annotate
+    from .utils.annotations import assign_annotations
     
     # import preprocessing functions
     from .utils.preprocessing import normalize, hvg, reduce_dimensions
     
     # import visualization functions
-    from .visualize.visualize import show
+    from .visualize._visualize import show
     
     # import crop function
     from .utils.crop import crop
@@ -219,7 +226,107 @@ class XeniumData:
         print(f"\t\tSave metadata to {metadata_path}", flush=True)
         with open(metadata_path, "w") as metafile:
             metafile.write(metadata_json)
+            
+    def read_annotations(self,
+                     annotation_dir: Union[str, os.PathLike, Path] = None, # "../annotations",
+                     suffix: str = ".geojson",
+                     pattern_annotation_file: str = "annotation-{slide_id}__{sample_id}__{name}"
+                     ):
+        if self.from_xeniumdata:
+            # check if matrix data is stored in this XeniumData
+            if "annotations" not in self.xd_metadata:
+                raise ModalityNotFoundError(modality="annotations")
+            
+            # get path and names of annotation files
+            labels = self.xd_metadata["annotations"].keys()
+            files = [self.path / self.xd_metadata["annotations"][n] for n in labels]
+            
+        else:
+            if annotation_dir is None:
+                raise ModalityNotFoundError(modality="annotations")
+            else:
+                # convert to Path
+                annotation_dir = Path(annotation_dir)
+                
+                # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
+                if not annotation_dir.is_dir():
+                    annotation_dir = Path(os.path.normpath(self.path / annotation_dir))
+                    if not annotation_dir.is_dir():
+                        raise FileNotFoundError(f"`annot_path` {annotation_dir} is neither a direct path nor a relative path.")
+                
+                # get list annotation files that match the current slide id and sample id
+                files = []
+                labels = []
+                for file in annotation_dir.glob(f"*{suffix}"):
+                    if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
+                        parsed = parse(pattern_annotation_file, file.stem)
+                        labels.append(parsed.named["name"])
+                        files.append(file)
+            
+        print("Reading annotations...", flush=True)
+        self.annotations = AnnotationData(annot_files=files, annot_labels=labels)
+        
+        if self.from_xeniumdata:
+            # read saved metadata
+            new_metadata = read_json(self.path / "annotations" / "annotations_metadata.json")
+            
+            # if keys in stored metadata fit to loaded metadata substitute use the stored metadata
+            if new_metadata.keys() == self.annotations.metadata.keys():
+                self.annotations.metadata = new_metadata
+            
+    def store_annotations(self,
+                          name_pattern = "*{class_name} ({annot_label})",
+                          uid_col: str = "id"
+                          ):
+        '''
+        Function to extract annotation layers from shapes layers and store them in the XeniumData object.
+        '''
+        try:
+            viewer = self.viewer
+        except AttributeError as e:
+            print(f"{str(e)}. Use `.show()` first to open a napari viewer.")
+            
+        # extract pixel_size
+        # iterate through layers and save them as annotation if they meet requirements
+        layers = viewer.layers
+        collection_dict = {}
+        for layer in layers:
+            if not isinstance(layer, Shapes):
+                pass
+            else:
+                name_parsed = parse(name_pattern, layer.name)
+                if name_parsed is not None:
+                    annot_label = name_parsed.named["annot_label"]
+                    class_name = name_parsed.named["class_name"]
+                    
+                    # if the XeniumData object does not has an annotations attribute, initialize it
+                    if not hasattr(self, "annotations"):
+                        self.annotations = AnnotationData() # initialize empty object
+                    
+                    # extract shapes coordinates and colors
+                    shapes = layer.data
+                    colors = layer.edge_color.tolist()
+                    
+                    # scale coordinates
+                    shapes = [elem / self.metadata["pixel_size"] for elem in shapes]
+                    
+                    # build annotation GeoDataFrame
+                    annot_df = {
+                        uid_col: layer.properties["uid"],
+                        "objectType": "annotation",
+                        "geometry": [Polygon(np.stack([ar[:, 1], ar[:, 0]], axis=1)) for ar in shapes],  # switch x/y
+                        "name": class_name,
+                        "color": [[int(elem[e]*255) for e in range(3)] for elem in colors]
+                    }
+                    
+                    # generate GeoDataFrame
+                    annot_df = GeoDataFrame(annot_df, geometry="geometry")
+                    
+                    # add annotations
+                    self.annotations.add_annotation(data=annot_df, label=annot_label, verbose=True)                       
 
+                    
+                
 
     def register_images(self,
                         img_dir: Union[str, os.PathLike, Path],

@@ -9,52 +9,109 @@ from .utils import textformat as tf
 from .utils import convert_to_list, load_pyramid, decode_robust_series
 from parse import *
 import xmltodict
-import warnings
-from ..utils.annotations import read_qupath_annotation
+from ..io.io import parse_geopandas
 
 class AnnotationData:
     '''
     Object to store annotations.
     '''
     def __init__(self,
-                 annot_files: List[Union[str, os.PathLike, Path]], 
-                 annot_labels: List[str]
+                 annot_files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
+                 annot_labels: Optional[List[str]] = None
                  ) -> None:
-        self.labels = []
-        self.n_annotations = []
-        self.classes = []
-        self.analyzed = []
+        self.metadata = {}
+        # self.n_annotations = []
+        # self.classes = []
+        # self.analyzed = []
         
-        for label, file in zip(annot_labels, annot_files):
-            # read annotation and store in dictionary
-            self.add_annotation(file=file, label=label)
+        if annot_files is not None:
+            for label, file in zip(annot_labels, annot_files):
+                # read annotation and store in dictionary
+                self.add_annotation(data=file, label=label)
             
     def __repr__(self):
-        if len(self.labels) > 0:
-            repr_strings = [f"{tf.Bold}{a}:{tf.ResetAll}\t{b} annotations, {len(c)} classes {*c,} {d}" for a,b,c,d in zip(self.labels, 
-                                                                                                    self.n_annotations, 
-                                                                                                    self.classes,
-                                                                                                    self.analyzed
-                                                                                                    )]
+        if len(self.metadata) > 0:
+            # repr_strings = [f"{tf.Bold}{a}:{tf.ResetAll}\t{b} annotations, {len(c)} classes {*c,} {d}" for a,b,c,d in zip(self.labels, 
+            #                                                                                         self.n_annotations, 
+            #                                                                                         self.classes,
+            #                                                                                         self.analyzed
+            #                                                                                         )]
+            
+            repr_strings = [
+                f'{tf.Bold}{l}:{tf.ResetAll}\t{m["n_annotations"]} annotations, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
+                ]
+            
             s = "\n".join(repr_strings)
         else:
             s = ""
         repr = f"{tf.Cyan+tf.Bold}annotations{tf.ResetAll}\n{s}"
         return repr
-        
-    def add_annotation(self,
-                       file: Union[str, os.PathLike, Path],
-                       label: str
-                       ):
-        # read annotations as dataframe dataframe and add to AnnotationData object
-        df = read_qupath_annotation(file=file)
-        setattr(self, label, df)
+    
+    def _update_metadata(self, 
+                         label: str,
+                         analyzed: bool
+                         ):
+        # retrieve dataframe
+        annot_df = getattr(self, label)
         
         # record metadata information
-        self.labels.append(label) # names of the annotations
-        self.n_annotations.append(len(df)) # number of annotations
-        self.classes.append(df.name.unique()) # annotation classes
-        self.analyzed.append("") # whether this annotation has been used in the annotate() function
+        self.metadata[label]["n_annotations"] = len(annot_df)  # number of annotations
+        self.metadata[label]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+        self.metadata[label]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
+        
+            
+    def add_annotation(self,
+                       data: Union[gpd.GeoDataFrame, pd.DataFrame, dict, 
+                                   str, os.PathLike, Path],
+                       label: str,
+                       verbose: bool = False
+                       ):
+        # parse geopandas data from dataframe or file
+        new_df = parse_geopandas(data)
+
+        if not hasattr(self, label):
+            # if label does not exist yet the new df is the whole annotation dataframe
+            annot_df = new_df
+        
+            # add new entry to metadata
+            self.metadata[label] = {}
+            
+            # collect additional variables for reporting
+            new_annotations_added = True # dataframe will be added later
+            existing_str = ""
+            old_n = 0
+            new_n = len(annot_df)
+        else:
+            # concatenate the new and old dataframe
+            annot_df = getattr(self, label)
+
+            # concatenate old and new annoation dataframe
+            old_n = len(annot_df)
+            annot_df = pd.concat([annot_df, new_df], ignore_index=False)
+            
+            # remove all duplicated shapes - leaving only the newly added
+            annot_df = annot_df[~annot_df.index.duplicated()]
+            new_n = len(annot_df)
+            
+            # collect additional variables for reporting
+            new_annotations_added = new_n > old_n
+            existing_str = "existing "
+                    
+        if new_annotations_added:
+            # add dataframe to AnnotationData object
+            setattr(self, label, annot_df)
+            
+            # update metadata
+            self._update_metadata(label=label, analyzed=False)
+            
+            if verbose:
+                # report
+                print(f"Added {new_n - old_n} new annotations to {existing_str}label '{label}'")
+            
+            
+        
+        
+        
 
 class ImageData:
     '''
