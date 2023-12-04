@@ -56,7 +56,7 @@ class AnnotationData:
         
         # record metadata information
         self.metadata[label]["n_annotations"] = len(annot_df)  # number of annotations
-        self.metadata[label]["classes"] = annot_df['name'].unique()  # annotation classes
+        self.metadata[label]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
         self.metadata[label]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
         
             
@@ -64,7 +64,7 @@ class AnnotationData:
                        data: Union[gpd.GeoDataFrame, pd.DataFrame, dict, 
                                    str, os.PathLike, Path],
                        label: str,
-                       #uid_col: Optional[str] = "id"
+                       verbose: bool = False
                        ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
@@ -72,35 +72,45 @@ class AnnotationData:
         if not hasattr(self, label):
             # if label does not exist yet the new df is the whole annotation dataframe
             annot_df = new_df
-            add = True # dataframe will be added later
         
             # add new entry to metadata
             self.metadata[label] = {}
+            
+            # collect additional variables for reporting
+            new_annotations_added = True # dataframe will be added later
+            existing_str = ""
+            old_n = 0
+            new_n = len(annot_df)
         else:
             # concatenate the new and old dataframe
             annot_df = getattr(self, label)
+
+            # concatenate old and new annoation dataframe
+            old_n = len(annot_df)
+            annot_df = pd.concat([annot_df, new_df], ignore_index=False)
             
-            # check if the uids are identical
-            uids_different = set(annot_df.index).symmetric_difference(new_df.index)
+            # remove all duplicated shapes - leaving only the newly added
+            annot_df = annot_df[~annot_df.index.duplicated()]
+            new_n = len(annot_df)
             
-            # check if there are any uids different between old and new dataframe
-            if len(uids_different) > 0:
-                # concatenate old and new annoation dataframe         
-                annot_df = pd.concat([annot_df, new_df], ignore_index=False)
-                
-                # remove all duplicated shapes - leaving only the newly added
-                annot_df = annot_df[~annot_df.index.duplicated()]
-                
-                # dataframe will be added
-                add = True
-            else:
-                add = False # dataframe will not be added later
-        if add:
+            # collect additional variables for reporting
+            new_annotations_added = new_n > old_n
+            existing_str = "existing "
+                    
+        if new_annotations_added:
             # add dataframe to AnnotationData object
             setattr(self, label, annot_df)
             
             # update metadata
             self._update_metadata(label=label, analyzed=False)
+            
+            if verbose:
+                # report
+                print(f"Added {new_n - old_n} new annotations to {existing_str}label '{label}'")
+            
+            
+        
+        
         
 
 class ImageData:
