@@ -25,6 +25,20 @@ To install InSituPy within a conda environment, you can follow these steps:
    conda activate insitupy
    ```
 
+4. **(Windows Only)** Download and install the `annoy` package from the provided wheel file. If your Python version is different from `3.9`, make sure to download the correct wheel [here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#annoy) and adapt the installation code accordingly:
+   
+   ```bash
+   pip install wheel/annoy-1.17.0-cp39-cp39-win_amd64.whl
+   ```
+
+   *(Note: Skip this step if you're on Mac or Linux.)*
+
+5. Install the rest of the required packages:
+
+   ```bash
+   pip install .
+   ```
+
 4. Install the package using `pip` within the conda environment:
 
    ```bash
