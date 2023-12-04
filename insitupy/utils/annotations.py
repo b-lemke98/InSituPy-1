@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from .utils import textformat as tf
 
-def annotate(self, 
+def assign_annotations(self, 
             annotation_labels: str = "all",
             add_annotation_masks: bool = False
             ):
@@ -19,7 +19,7 @@ def annotate(self,
     assert hasattr(self, "annotations"), "No .matrix attribute available. Run `read_matrix()`."
     
     if annotation_labels == "all":
-        annotation_labels = self.annotations.labels
+        annotation_labels = self.annotations.metadata.keys()
         
     # make sure annotation labels are a list
     annotation_labels = convert_to_list(annotation_labels)
@@ -29,11 +29,9 @@ def annotate(self,
 
     # iterate through annotation labels
     for annotation_label in annotation_labels:
+        print(f"Assigning label '{annotation_label}'...")
         # extract pandas dataframe of current label
         annot = getattr(self.annotations, annotation_label)
-        
-        # get index of annotation in AnnotationData
-        label_idx = self.annotations.labels.index(annotation_label)
         
         # get unique list of annotation names
         annot_names = annot.name.unique()
@@ -52,8 +50,6 @@ def annotate(self,
             
             # check if points were in any of the polygons
             in_poly_res = np.array(in_poly).any(axis=0)
-            # add results to adata.obs
-            #self.matrix.obs[f"annotation-{annotation_label}__{n.replace(' ', '_')}"] = in_poly_res
             
             # collect results
             df[n] = in_poly_res
@@ -71,4 +67,4 @@ def annotate(self,
             self.matrix.obs = pd.merge(left=self.matrix.obs, right=df.iloc[:, -1], left_index=True, right_index=True)
             
         # save that the current label was analyzed
-        self.annotations.analyzed[label_idx] = tf.TICK
+        self.annotations.metadata[annotation_label]["analyzed"] = tf.TICK
