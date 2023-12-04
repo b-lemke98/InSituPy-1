@@ -7,6 +7,7 @@ import shutil
 from ..images.io import write_ome_tiff
 from ..io.io import write_qupath_geojson
 import json
+import insitupy
 
 def save(self,
          path: Union[str, os.PathLike, Path],
@@ -111,6 +112,9 @@ def save(self,
             annot_file = annot_path / f"{n}.geojson"
             write_qupath_geojson(dataframe=annot_df, file=annot_file)
             metadata["annotations"][n] = Path(relpath(annot_file, path)).as_posix()
+            
+    # save version of InSituPy
+    metadata["version"] = insitupy.__version__
             
     # Optionally: zip the resulting directory
     if zip:
