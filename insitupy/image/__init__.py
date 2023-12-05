@@ -1,5 +1,4 @@
-from .manipulation import *
+from .utils import *
 from .registration import *
-from .deconvolution import *
 from .io import *
 from .registration import *

@@ -4,12 +4,12 @@ import cv2
 from pathlib import Path
 from typing import Optional, Tuple, Union, List, Dict, Any, Literal
 import os
-from .manipulation import resize_image
+from .utils import resize_image
 
-def img_resize(img,scale_factor):
-    width = int(np.floor(img.shape[1] * scale_factor))
-    height = int(np.floor(img.shape[0] * scale_factor))
-    return cv2.resize(img, (width, height), interpolation = cv2.INTER_AREA)
+# def _img_resize(img,scale_factor):
+#     width = int(np.floor(img.shape[1] * scale_factor))
+#     height = int(np.floor(img.shape[0] * scale_factor))
+#     return cv2.resize(img, (width, height), interpolation = cv2.INTER_AREA)
 
 def write_ome_tiff(
     file: Union[str, os.PathLike, Path],

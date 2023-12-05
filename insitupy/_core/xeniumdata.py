@@ -31,20 +31,20 @@ from shapely.geometry.polygon import LinearRing, Polygon
 
 import insitupy
 
-from .images import ImageRegistration, deconvolve_he, resize_image
-from .images.io import write_ome_tiff
-from .io.io import write_qupath_geojson
-from .utils.data import AnnotationData, BoundariesData, ImageData
-from .utils.exceptions import (ModalityNotFoundError, NotOneElementError,
+from ..image import ImageRegistration, deconvolve_he, resize_image
+from ..image.io import write_ome_tiff
+from ..utils.geo import write_qupath_geojson
+from .dataclasses import AnnotationData, BoundariesData, ImageData
+from .._exceptions import (ModalityNotFoundError, NotOneElementError,
                                UnknownOptionError, WrongNapariLayerTypeError,
                                XeniumDataMissingObject,
                                XeniumDataRepeatedCropError)
-from .utils.scanorama import scanorama
-from .utils.utils import (check_raw, convert_to_list, decode_robust_series,
+from ._scanorama import scanorama
+from ..utils.utils import (check_raw, convert_to_list, decode_robust_series,
                           read_json)
-from .utils.utils import textformat as tf
-from .visualize._widgets import (_create_points_layer, annotation_widget,
-                                 initialize_point_widgets)
+from ..utils.utils import textformat as tf
+from ._widgets import (_create_points_layer, _annotation_widget,
+                                 _initialize_point_widgets)
 
 # make sure that image does not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
 SHRT_MAX = 2**15-1 # 32767
@@ -53,21 +53,6 @@ SHRT_MIN = -(2**15-1) # -32767
 
 class XeniumData:
     #TODO: Docstring of XeniumData
-    """_summary_
-
-    Raises:
-        FileNotFoundError: _description_
-        FileNotFoundError: _description_
-        FileNotFoundError: _description_
-        ValueError: _description_
-        ValueError: _description_
-        UnknownOptionError: _description_
-        ValueError: _description_
-        TypeError: _description_
-
-    Returns:
-        _type_: _description_
-    """
     
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
@@ -1315,8 +1300,8 @@ class XeniumData:
         # WIDGETS     
         if hasattr(self, "matrix"):
             # initialize the widgets
-            add_genes, add_observations = initialize_point_widgets(
-                matrix=self.matrix,
+            add_genes, add_observations = _initialize_point_widgets(
+                adata=self.matrix,
                 pixel_size=pixel_size
                 )
             
@@ -1332,7 +1317,7 @@ class XeniumData:
         
         # add annotation widget to napari
         #annotation_widget = initialize_annotation_widget()
-        annot_widget = annotation_widget()
+        annot_widget = _annotation_widget()
         annot_widget.max_height = 100
         annot_widget.max_width = widgets_max_width
         self.viewer.window.add_dock_widget(annot_widget, name="Annotations", area="right")
