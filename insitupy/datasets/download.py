@@ -45,8 +45,12 @@ def download_url(
     outfile = out_dir / (file_name + suffix)
     
     if outfile.exists():
-        print(f"File {outfile} exists already. Download is skipped. To force download set `overwrite=True`.")
-        return
+        if not overwrite:
+            print(f"File {outfile} exists already. Download is skipped. To force download set `overwrite=True`.")
+            return
+        else:
+            pass
+        
     
     # request content from URL
     resp = requests.get(url, stream=True)

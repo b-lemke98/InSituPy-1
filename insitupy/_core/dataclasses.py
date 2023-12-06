@@ -10,7 +10,8 @@ from shapely import Polygon
 from tifffile import TiffFile, imread
 
 from ..utils.geo import parse_geopandas
-from ..utils.utils import convert_to_list, decode_robust_series, load_pyramid
+from ..utils.read import load_pyramid
+from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 
 

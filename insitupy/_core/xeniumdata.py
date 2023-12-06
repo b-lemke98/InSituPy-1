@@ -31,20 +31,21 @@ from shapely.geometry.polygon import LinearRing, Polygon
 
 import insitupy
 
+from .._exceptions import (ModalityNotFoundError, NotOneElementError,
+                           UnknownOptionError, WrongNapariLayerTypeError,
+                           XeniumDataMissingObject,
+                           XeniumDataRepeatedCropError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
 from ..image.io import write_ome_tiff
 from ..utils.geo import write_qupath_geojson
-from .dataclasses import AnnotationData, BoundariesData, ImageData
-from .._exceptions import (ModalityNotFoundError, NotOneElementError,
-                               UnknownOptionError, WrongNapariLayerTypeError,
-                               XeniumDataMissingObject,
-                               XeniumDataRepeatedCropError)
-from ._scanorama import scanorama
-from ..utils.utils import (check_raw, convert_to_list, decode_robust_series,
-                          read_json)
+from ..utils.read import read_json
+from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
-from ._widgets import (_create_points_layer, _annotation_widget,
-                                 _initialize_point_widgets)
+from ._checks import check_raw
+from ._scanorama import scanorama
+from ._widgets import (_annotation_widget, _create_points_layer,
+                       _initialize_point_widgets)
+from .dataclasses import AnnotationData, BoundariesData, ImageData
 
 # make sure that image does not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
 SHRT_MAX = 2**15-1 # 32767
