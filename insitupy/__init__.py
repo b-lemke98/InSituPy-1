@@ -1,6 +1,6 @@
 __author__ = "Johannes Wirth"
 __email__ = "j.wirth@tum.de"
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 from . import image as im
 from . import utils
