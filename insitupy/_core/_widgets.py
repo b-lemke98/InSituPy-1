@@ -1,12 +1,16 @@
+from typing import Tuple
+
 import napari
 import numpy as np
-from typing import Optional, Tuple, Union, List, Dict, Any, Literal
-from ..palettes import CustomPalettes
-from scipy.sparse import issparse
-from magicgui import magicgui, magic_factory
+from anndata import AnnData
+from magicgui import magic_factory, magicgui
 from magicgui.widgets import FunctionGui
-from pandas.api.types import is_numeric_dtype
 from napari.types import LayerDataTuple
+from pandas.api.types import is_numeric_dtype
+from scipy.sparse import issparse
+
+from ..utils.palettes import CustomPalettes
+
 
 def _create_points_layer(points, 
                          color_value, 
@@ -59,23 +63,23 @@ def _create_points_layer(points,
         )
     return layer
 
-def initialize_point_widgets(
-    matrix,
+def _initialize_point_widgets(
+    adata: AnnData,
     pixel_size: float
     ) -> Tuple[FunctionGui, FunctionGui]:
         
     # get available genes
-    genes = matrix.var_names.tolist()
-    obses = matrix.obs.columns.tolist()
+    genes = adata.var_names.tolist()
+    obses = adata.obs.columns.tolist()
     
     # get point coordinates
-    points = np.flip(matrix.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
+    points = np.flip(adata.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
     
     # get expression matrix
-    if issparse(matrix.X):
-        X = matrix.X.toarray()
+    if issparse(adata.X):
+        X = adata.X.toarray()
     else:
-        X = matrix.X
+        X = adata.X
     
     @magicgui(
             call_button='Add',
@@ -83,7 +87,7 @@ def initialize_point_widgets(
             )
     def add_genes(gene=None) -> napari.types.LayerDataTuple:
         # get expression values
-        geneid = matrix.var_names.get_loc(gene)
+        geneid = adata.var_names.get_loc(gene)
         color_value = X[:, geneid]
         
         # create points layer
@@ -103,7 +107,7 @@ def initialize_point_widgets(
         )
     def add_observations(observation=None) -> napari.types.LayerDataTuple:
         # get observation values
-        color_value = matrix.obs[observation].values
+        color_value = adata.obs[observation].values
         # create points layer
         layer = _create_points_layer(
             points=points,
@@ -136,7 +140,7 @@ def initialize_point_widgets(
         annot_label={'label': 'Label:'},
         class_name={'label': 'Class:'}
     )
-def annotation_widget(
+def _annotation_widget(
     annot_label: str = "",
     class_name: str = ""
 ) -> napari.types.LayerDataTuple:
@@ -162,46 +166,9 @@ def annotation_widget(
             )
         
         #annotation_widget.annot_label.value = ""
-        annotation_widget.class_name.value = ""
+        _annotation_widget.class_name.value = ""
         
         return layer
 
     else:
         return None
-
-# from napari import Viewer
-# @magic_factory(
-#     call_button='Add annotation layer'
-#     )
-# def annotation_widget(
-#     #viewer: Viewer,
-#     Label="test",
-#     Class="blubb",
-#     #data=None
-#     ):
-#     print('here')
-#     layer = (
-#         np.array([[11, 13], [111, 113], [22, 246]]), 
-#         {
-#             'name': f"{Label}_{Class}",
-#             'shape_type': 'polygon',
-#             'edge_width': 10,
-#             'edge_color': "#ffc800ff",
-#             'face_color': 'transparent'
-#             }, 
-#         'shapes'
-#         )
-#     return layer
-    
-#     # if data is None:
-#     #     print('heyho')
-#     # else:
-#     #     print('booya')
-#     # print(viewer.layers)
-    
-#     # print(Label)
-#     # print(Class)
-#     # d = viewer.dict()
-#     # print(d['test'])
-#     # d['test'] = "checkho"
-#     # print(d['test'])

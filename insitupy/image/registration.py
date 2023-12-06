@@ -1,17 +1,17 @@
-import numpy as np
-import cv2
-from datetime import datetime
-import numpy as np
-from .manipulation import convert_to_8bit, scale_to_max_width, fit_image_to_size_limit
-from ..utils.utils import remove_last_line_from_csv
-import dask.array as da
-from typing import Optional, Tuple, Union, List, Dict, Any, Literal
-from .io import write_ome_tiff
-import matplotlib.pyplot as plt
 import os
+from datetime import datetime
 from pathlib import Path
-from ..utils.exceptions import NotEnoughFeatureMatchesError
+from typing import Literal, Optional, Union
 
+import cv2
+import dask.array as da
+import matplotlib.pyplot as plt
+import numpy as np
+
+from .._exceptions import NotEnoughFeatureMatchesError
+from ..utils.utils import remove_last_line_from_csv
+from .io import write_ome_tiff
+from .utils import convert_to_8bit, fit_image_to_size_limit, scale_to_max_width
 
 # limits in C (see https://www.geeksforgeeks.org/climits-limits-h-cc/)
 SHRT_MAX = 2**15-1  # 32767

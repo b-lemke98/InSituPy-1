@@ -1,15 +1,19 @@
-from typing import Optional, Tuple, Union, List, Dict, Any, Literal
-from pathlib import Path
 import os
-import pandas as pd
+from pathlib import Path
+from typing import List, Optional, Tuple, Union
+
 import geopandas as gpd
-from shapely import Polygon
-from tifffile import imread, TiffFile
-from .utils import textformat as tf
-from .utils import convert_to_list, load_pyramid, decode_robust_series
-from parse import *
+import pandas as pd
 import xmltodict
-from ..io.io import parse_geopandas
+from parse import *
+from shapely import Polygon
+from tifffile import TiffFile, imread
+
+from ..utils.geo import parse_geopandas
+from ..utils.read import load_pyramid
+from ..utils.utils import convert_to_list, decode_robust_series
+from ..utils.utils import textformat as tf
+
 
 class AnnotationData:
     '''
@@ -108,11 +112,6 @@ class AnnotationData:
                 # report
                 print(f"Added {new_n - old_n} new annotations to {existing_str}label '{label}'")
             
-            
-        
-        
-        
-
 class ImageData:
     '''
     Object to read and load images.
