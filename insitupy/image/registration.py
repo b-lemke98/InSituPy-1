@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Literal, Optional, Union
 
 import cv2
 import dask.array as da
@@ -11,8 +11,7 @@ import numpy as np
 from .._exceptions import NotEnoughFeatureMatchesError
 from ..utils.utils import remove_last_line_from_csv
 from .io import write_ome_tiff
-from .utils import (convert_to_8bit, fit_image_to_size_limit,
-                           scale_to_max_width)
+from .utils import convert_to_8bit, fit_image_to_size_limit, scale_to_max_width
 
 # limits in C (see https://www.geeksforgeeks.org/climits-limits-h-cc/)
 SHRT_MAX = 2**15-1  # 32767

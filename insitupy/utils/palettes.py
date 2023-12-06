@@ -1,7 +1,8 @@
-from matplotlib.colors import ListedColormap, rgb2hex
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import ListedColormap, rgb2hex
+
 
 class CustomPalettes:
     '''

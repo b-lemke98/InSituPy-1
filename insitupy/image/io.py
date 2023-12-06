@@ -1,9 +1,12 @@
-import tifffile as tf
-import numpy as np
-from pathlib import Path
-from typing import Optional, Union, Literal
 import os
+from pathlib import Path
+from typing import Literal, Optional, Union
+
+import numpy as np
+import tifffile as tf
+
 from .utils import resize_image
+
 
 def write_ome_tiff(
     file: Union[str, os.PathLike, Path],

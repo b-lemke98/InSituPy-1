@@ -1,6 +1,8 @@
-import numpy as np
 import anndata
+import numpy as np
+
 from ._checks import check_sanity
+
 
 def split_batches(adata, batch, hvg=None, return_categories=False):
     split = []
