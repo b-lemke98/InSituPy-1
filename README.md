@@ -1,6 +1,8 @@
 # InSituPy: Python Package for the Analysis of _Xenium In Situ_ Data
 
-<center><img src="logo/insitupy_logo.png" width="500"><center>
+<p align="center">
+   <img src="logo/insitupy_logo.png" width="500"><center>
+</p>
 
 InSituPy is a Python package designed to facilitate the analysis of in situ sequencing data generated with the [_Xenium In Situ_](https://www.10xgenomics.com/platforms/xenium) methodology. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissues.
 
