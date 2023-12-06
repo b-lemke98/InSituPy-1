@@ -1,15 +1,9 @@
 import tifffile as tf
 import numpy as np
-import cv2
 from pathlib import Path
-from typing import Optional, Tuple, Union, List, Dict, Any, Literal
+from typing import Optional, Union, Literal
 import os
 from .utils import resize_image
-
-# def _img_resize(img,scale_factor):
-#     width = int(np.floor(img.shape[1] * scale_factor))
-#     height = int(np.floor(img.shape[0] * scale_factor))
-#     return cv2.resize(img, (width, height), interpolation = cv2.INTER_AREA)
 
 def write_ome_tiff(
     file: Union[str, os.PathLike, Path],
@@ -68,15 +62,6 @@ def write_ome_tiff(
     
 
     with tf.TiffWriter(file, bigtiff=True) as tif:
-        # metadata={**metadata,
-        #           **{
-        #               'SignificantBits': 8,
-        #               'PhysicalSizeX': pixelsize,
-        #               'PhysicalSizeXUnit': pixelunit,
-        #               'PhysicalSizeY': pixelsize,
-        #               'PhysicalSizeYUnit': pixelunit,
-        #           }
-        # }
         options = dict(
             photometric=photometric,
             tile=tile,
