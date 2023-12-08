@@ -45,7 +45,7 @@ from ._checks import check_raw
 from ._scanorama import scanorama
 from ._widgets import (_annotation_widget, _create_points_layer,
                        _initialize_point_widgets)
-from .dataclasses import AnnotationData, BoundariesData, ImageData
+from .dataclasses import AnnotationData, BoundariesData, ImageData, CellData
 
 # make sure that image does not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
 SHRT_MAX = 2**15-1 # 32767
@@ -138,25 +138,31 @@ class XeniumData:
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + images_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
             
-        if hasattr(self, "matrix"):
-            matrix_repr = self.matrix.__repr__()
+        if hasattr(self, "cells"):
+            cells_repr = self.cells.__repr__()
             repr = (
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} matrix{tf.ResetAll}\n{tf.SPACER}   " + matrix_repr.replace("\n", "\n\t   ")
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} cells{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
+            
+        # if hasattr(self, "matrix"):
+        #     matrix_repr = self.matrix.__repr__()
+        #     repr = (
+        #         repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} matrix{tf.ResetAll}\n{tf.SPACER}   " + matrix_repr.replace("\n", "\n\t   ")
+        #     )
         
         if hasattr(self, "transcripts"):
             trans_repr = f"DataFrame with shape {self.transcripts.shape[0]} x {self.transcripts.shape[1]}"
             
             repr = (
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.LightCyan+tf.Bold} transcripts{tf.ResetAll}\n\t   " + trans_repr
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.LightCyan+tf.Bold} transcripts{tf.ResetAll}\n{tf.SPACER}   " + trans_repr
             )
             
-        if hasattr(self, "boundaries"):
-            bound_repr = self.boundaries.__repr__()
-            repr = (
-                #repr + f"\n{tf.Bold}Images:{tf.ResetAll} "
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + bound_repr.replace("\n", f"\n{tf.SPACER}   ")
-            )
+        # if hasattr(self, "boundaries"):
+        #     bound_repr = self.boundaries.__repr__()
+        #     repr = (
+        #         #repr + f"\n{tf.Bold}Images:{tf.ResetAll} "
+        #         repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + bound_repr.replace("\n", f"\n{tf.SPACER}   ")
+        #     )
             
         if hasattr(self, "annotations"):
             annot_repr = self.annotations.__repr__()
@@ -177,6 +183,21 @@ class XeniumData:
         print(f"\t\tSave metadata to {metadata_path}", flush=True)
         with open(metadata_path, "w") as metafile:
             metafile.write(metadata_json)
+
+    def _read_matrix(self):
+        if self.from_xeniumdata:
+            # check if matrix data is stored in this XeniumData
+            if "matrix" not in self.xd_metadata:
+                raise ModalityNotFoundError(modality="matrix")
+            
+            # read matrix data
+            print("Reading matrix...", flush=True)
+            matrix = sc.read(self.path / self.xd_metadata["matrix"])
+        else:
+            print("Reading matrix...", flush=True)
+            matrix = _read_matrix_from_xenium(path=self.path, metadata=self.metadata)
+            
+        return matrix
 
     def assign_annotations(self, 
                 annotation_labels: str = "all",
@@ -563,9 +584,9 @@ class XeniumData:
             if new_metadata.keys() == self.annotations.metadata.keys():
                 self.annotations.metadata = new_metadata
 
-    def read_boundaries(self,
+    def _read_boundaries(self,
                         files: List[str] = ["cell_boundaries.parquet", "nucleus_boundaries.parquet"],
-                        labels: List[str] = ["cells", "nuclei"]
+                        labels: List[str] = ["cellular", "nuclear"]
                         ):
         if self.from_xeniumdata:
             # check if matrix data is stored in this XeniumData
@@ -582,11 +603,22 @@ class XeniumData:
             
         # read boundaries data
         print("Reading boundaries...", flush=True)
-        self.boundaries = BoundariesData(path=self.path,
-                                        files=files,
-                                        labels=labels,
-                                        pixel_size=self.metadata["pixel_size"]
-                                        )
+        boundaries = BoundariesData(path=self.path,
+                                    files=files,
+                                    labels=labels,
+                                    pixel_size=self.metadata["pixel_size"]
+                                    )
+        
+        return boundaries
+
+    def read_cells(self):
+        if self.from_xeniumdata:
+            #TODO: Setup this part
+            pass
+        else:
+            matrix = self._read_matrix()
+            boundaries = self._read_boundaries()
+            self.cells = CellData(matrix=matrix, boundaries=boundaries)
 
     def read_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
@@ -628,53 +660,6 @@ class XeniumData:
         # load image into ImageData object
         print("Reading images...", flush=True)
         self.images = ImageData(self.path, img_files, img_names)
-
-    def read_matrix(self, 
-                    read_cells: bool = True
-                    ):
-        if self.from_xeniumdata:
-            # check if matrix data is stored in this XeniumData
-            if "matrix" not in self.xd_metadata:
-                raise ModalityNotFoundError(modality="matrix")
-            
-            # read matrix data
-            print("Reading matrix...", flush=True)
-            self.matrix = sc.read(self.path / self.xd_metadata["matrix"])
-        else:
-            print("Reading matrix...", flush=True)
-            # extract parameters from metadata
-            pixel_size = self.metadata["pixel_size"]
-            cf_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
-            cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
-            
-            with warnings.catch_warnings():
-                warnings.simplefilter(action='ignore', category=FutureWarning)
-                # read matrix data
-                self.matrix = sc.read_10x_h5(cf_h5_path)
-            
-            if read_cells:
-                # read cell information
-                cells_zarr_path = self.path / self.metadata["xenium_explorer_files"]["cells_zarr_filepath"]
-                cells_parquet_path = cells_zarr_path.parent / cells_zarr_path.name.replace(".zarr.zip", ".parquet")
-                cells = pd.read_parquet(cells_parquet_path)
-                
-                # transform cell ids from bytes to str
-                cells = cells.set_index("cell_id")
-
-                # make sure that the indices are decoded strings
-                if is_numeric_dtype(cells.index):
-                    cells.index = cells.index.astype(str)
-                else:
-                    cells.index = decode_robust_series(cells.index)
-                
-                # add information to anndata observations
-                self.matrix.obs = pd.merge(left=self.matrix.obs, right=cells, left_index=True, right_index=True)
-            
-            # transfer coordinates to .obsm
-            coord_cols = ["x_centroid", "y_centroid"]
-            self.matrix.obsm["spatial"] = self.matrix.obs[coord_cols].values
-            self.matrix.obsm["spatial"] /= pixel_size
-            self.matrix.obs.drop(coord_cols, axis=1, inplace=True)
 
     def read_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
@@ -1422,3 +1407,39 @@ class XeniumData:
                     # add annotations
                     self.annotations.add_annotation(data=annot_df, label=annot_label, verbose=True)                       
  
+ 
+def _read_matrix_from_xenium(path, metadata):
+    # extract parameters from metadata
+    pixel_size = metadata["pixel_size"]
+    cf_zarr_path = path / metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
+    cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter(action='ignore', category=FutureWarning)
+        # read matrix data
+        adata = sc.read_10x_h5(cf_h5_path)
+
+    # read cell information
+    cells_zarr_path = path / metadata["xenium_explorer_files"]["cells_zarr_filepath"]
+    cells_parquet_path = cells_zarr_path.parent / cells_zarr_path.name.replace(".zarr.zip", ".parquet")
+    cells = pd.read_parquet(cells_parquet_path)
+
+    # transform cell ids from bytes to str
+    cells = cells.set_index("cell_id")
+
+    # make sure that the indices are decoded strings
+    if is_numeric_dtype(cells.index):
+        cells.index = cells.index.astype(str)
+    else:
+        cells.index = decode_robust_series(cells.index)
+
+    # add information to anndata observations
+    adata.obs = pd.merge(left=adata.obs, right=cells, left_index=True, right_index=True)
+
+    # transfer coordinates to .obsm
+    coord_cols = ["x_centroid", "y_centroid"]
+    adata.obsm["spatial"] = adata.obs[coord_cols].values
+    adata.obsm["spatial"] /= pixel_size
+    adata.obs.drop(coord_cols, axis=1, inplace=True)
+    
+    return adata

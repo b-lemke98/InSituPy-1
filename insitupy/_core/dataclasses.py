@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple, Union
 import geopandas as gpd
 import pandas as pd
 import xmltodict
+from anndata import AnnData
 from parse import *
 from shapely import Polygon
 from tifffile import TiffFile, imread
@@ -111,7 +112,121 @@ class AnnotationData:
             if verbose:
                 # report
                 print(f"Added {new_n - old_n} new annotations to {existing_str}label '{label}'")
+      
+class BoundariesData:
+    '''
+    Object to read and load boundaries of cells and nuclei.
+    '''
+    def __init__(self, 
+                 path: Union[str, os.PathLike, Path],
+                 files: List[Union[str, os.PathLike, Path]],
+                 labels: List[str],
+                 pixel_size: Optional[float] = None
+                 ):
+        self.labels = labels
+        for n, f in zip(labels, files):
+            # generate paths
+            filepath = Path(os.path.normpath(path / f))
             
+            # load dataframe
+            bounddf = pd.read_parquet(filepath)
+            
+            # decode columns
+            bounddf = bounddf.apply(lambda x: decode_robust_series(x), axis=0)
+            
+            if pixel_size is not None:
+                # convert coordinates into pixel coordinates
+                coord_cols = ["vertex_x", "vertex_y"]
+                bounddf[coord_cols] = bounddf[coord_cols].apply(lambda x: x / pixel_size)
+                            
+            # add to object
+            setattr(self, n, bounddf)
+        
+    def __repr__(self):
+        # repr_strings = [f"{tf.SPACER+tf.Bold+a+tf.ResetAll}" for a in self.labels]
+        # s = "\n".join(repr_strings)
+        # repr = f"{tf.Purple+tf.Bold}boundaries{tf.ResetAll}\n{s}"
+        repr = f"BoundariesData object with {tf.Bold}cellular{tf.ResetAll} and {tf.Bold}nuclear{tf.ResetAll} boundaries"
+        return repr
+    
+    def sync_to_matrix(self,
+                       cell_ids: List[str],
+                       xlim: Tuple[int, int],
+                       ylim: Tuple[int, int]
+                       ):
+        '''
+        Synchronize the BoundariesData object to match the cells in self.matrix.
+        '''
+        # make sure cell ids are a list
+        cell_ids = convert_to_list(cell_ids)
+        
+        for n in ["cells", "nuclei"]:
+            # get dataframe
+            df = getattr(self, n)
+            
+            # filter dataframe
+            df.loc[df["cell_id"].isin(cell_ids), :]
+            
+            # re-center to 0
+            df["vertex_x"] -= xlim[0]
+            df["vertex_y"] -= ylim[0]
+            
+            # add to object
+            setattr(self, n, df)
+            
+                
+    def convert_to_geopandas(self):
+        for n in ["cells", "nuclei"]:
+            print(f"Converting `{n}` to GeoPandas DataFrame with shapely objects.")
+            # retrief dataframe with boundary coordinates
+            df = getattr(self, n)
+            
+            # convert xy coordinates into shapely Point objects
+            df["geometry"] = gpd.points_from_xy(df["vertex_x"], df["vertex_y"])
+            del df["vertex_x"], df["vertex_y"]
+
+            # convert points into polygon objects per cell id
+            df = df.groupby("cell_id")['geometry'].apply(lambda x: Polygon(x.tolist()))
+            df.index = decode_robust_series(df.index)  # convert byte strings in index
+            
+            # add to object
+            setattr(self, n, pd.DataFrame(df))
+
+class CellData:
+    '''
+    Data object containing an AnnData object and a boundary object which are kept in sync.
+    '''
+    def __init__(self, 
+               matrix: AnnData,
+               boundaries: Optional[BoundariesData]
+               ):
+        self.matrix = matrix
+        
+        if boundaries is not None:
+            self.boundaries = boundaries
+            self.entries = ["matrix", "boundaries"]
+        else:
+            self.boundaries = None
+            self.entries = ["matrix"]
+    
+    def __repr__(self):
+        repr = (
+            f"{tf.Bold+'matrix'+tf.ResetAll}\n"
+            f"{tf.SPACER+self.matrix.__repr__()}"
+        )
+        
+        if self.boundaries is not None:
+            repr += (
+                f"\n{tf.Bold+'boundaries'+tf.ResetAll}\n"
+                f"{tf.SPACER+self.boundaries.__repr__()}"
+            )
+            
+        # repr_strings = [f"{tf.Bold+a+tf.ResetAll}" for a in self.entries]
+        # s = "\n".join(repr_strings)
+        # repr = f"{tf.Purple+tf.Bold}cells{tf.ResetAll}\n{s}"
+        return repr
+        
+    
 class ImageData:
     '''
     Object to read and load images.
@@ -220,80 +335,3 @@ class ImageData:
             # add cropped pyramid to object
             setattr(self, n, cropped_pyramid)
         
-            
-class BoundariesData:
-    '''
-    Object to read and load boundaries of cells and nuclei.
-    '''
-    def __init__(self, 
-                 path: Union[str, os.PathLike, Path],
-                 files: List[Union[str, os.PathLike, Path]],
-                 labels: List[str],
-                 pixel_size: Optional[float] = None
-                 ):
-        for n, f in zip(labels, files):
-            # generate paths
-            filepath = Path(os.path.normpath(path / f))
-            
-            # load dataframe
-            bounddf = pd.read_parquet(filepath)
-            
-            # decode columns
-            bounddf = bounddf.apply(lambda x: decode_robust_series(x), axis=0)
-            
-            if pixel_size is not None:
-                # convert coordinates into pixel coordinates
-                coord_cols = ["vertex_x", "vertex_y"]
-                bounddf[coord_cols] = bounddf[coord_cols].apply(lambda x: x / pixel_size)
-                            
-            # add to object
-            setattr(self, n, bounddf)
-        
-    def __repr__(self):
-        repr_strings = [f"{tf.Bold+a+tf.ResetAll}" for a in ["cells", "nuclei"]]
-        s = "\n".join(repr_strings)
-        repr = f"{tf.Purple+tf.Bold}boundaries{tf.ResetAll}\n{s}"
-        return repr
-    
-    def sync_to_matrix(self,
-                       cell_ids: List[str],
-                       xlim: Tuple[int, int],
-                       ylim: Tuple[int, int]
-                       ):
-        '''
-        Synchronize the BoundariesData object to match the cells in self.matrix.
-        '''
-        # make sure cell ids are a list
-        cell_ids = convert_to_list(cell_ids)
-        
-        for n in ["cells", "nuclei"]:
-            # get dataframe
-            df = getattr(self, n)
-            
-            # filter dataframe
-            df.loc[df["cell_id"].isin(cell_ids), :]
-            
-            # re-center to 0
-            df["vertex_x"] -= xlim[0]
-            df["vertex_y"] -= ylim[0]
-            
-            # add to object
-            setattr(self, n, df)
-            
-                
-    def convert_to_geopandas(self):
-        for n in ["cells", "nuclei"]:
-            print(f"Converting `{n}` to GeoPandas DataFrame with shapely objects.")
-            # retrief dataframe with boundary coordinates
-            df = getattr(self, n)
-            
-            # convert xy coordinates into shapely Point objects
-            df["geometry"] = gpd.points_from_xy(df["vertex_x"], df["vertex_y"])
-            del df["vertex_x"], df["vertex_y"]
-
-            # convert points into polygon objects per cell id
-            df = df.groupby("cell_id")['geometry'].apply(lambda x: Polygon(x.tolist()))
-            df.index = decode_robust_series(df.index)  # convert byte strings in index
-            
-            # add to object
-            setattr(self, n, pd.DataFrame(df))
