@@ -1,4 +1,6 @@
 import os
+from copy import deepcopy
+from os.path import relpath
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
@@ -10,13 +12,16 @@ from parse import *
 from shapely import Polygon
 from tifffile import TiffFile, imread
 
+from insitupy import __version__
+
 from ..utils.geo import parse_geopandas
-from ..utils.read import load_pyramid
+from ..utils.io import check_overwrite, load_pyramid, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
+from ._mixins import DeepCopyMixin
 
 
-class AnnotationData:
+class AnnotationData(DeepCopyMixin):
     '''
     Object to store annotations.
     '''
@@ -113,7 +118,7 @@ class AnnotationData:
                 # report
                 print(f"Added {new_n - old_n} new annotations to {existing_str}label '{label}'")
       
-class BoundariesData:
+class BoundariesData(DeepCopyMixin):
     '''
     Object to read and load boundaries of cells and nuclei.
     '''
@@ -138,7 +143,7 @@ class BoundariesData:
                 # convert coordinates into pixel coordinates
                 coord_cols = ["vertex_x", "vertex_y"]
                 bounddf[coord_cols] = bounddf[coord_cols].apply(lambda x: x / pixel_size)
-                            
+            
             # add to object
             setattr(self, n, bounddf)
         
@@ -192,7 +197,7 @@ class BoundariesData:
             # add to object
             setattr(self, n, pd.DataFrame(df))
 
-class CellData:
+class CellData(DeepCopyMixin):
     '''
     Data object containing an AnnData object and a boundary object which are kept in sync.
     '''
@@ -225,9 +230,119 @@ class CellData:
         # s = "\n".join(repr_strings)
         # repr = f"{tf.Purple+tf.Bold}cells{tf.ResetAll}\n{s}"
         return repr
+    
+    def copy(self):
+        '''
+        Function to generate a deep copy of the current object.
+        '''
+        
+        return deepcopy(self)
+    
+    def save(self, 
+             path: Union[str, os.PathLike, Path],
+             overwrite: bool = False
+             ):
+        
+        path = Path(path)
+        metadata = {}
+        
+        # check if the output file should be overwritten
+        check_overwrite(path, overwrite=overwrite)
+        
+        # create path for matrix
+        mtx_path = path / "matrix"
+        mtx_path.mkdir(parents=True, exist_ok=True) # create directory
+        
+        # write matrix to file
+        mtx_file = mtx_path / "matrix.h5ad"
+        self.matrix.write(mtx_file)
+        metadata["matrix"] = Path(relpath(mtx_file, path)).as_posix()
+        
+        # save boundaries
+        try:
+            boundaries = self.boundaries
+        except AttributeError:
+            pass
+        else:
+            bound_path = (path / "boundaries")
+            bound_path.mkdir(parents=True, exist_ok=True) # create directory
+            
+            metadata["boundaries"] = {}
+            for n in ["cellular", "nuclear"]:
+                bound_df = getattr(boundaries, n)
+                bound_file = bound_path / f"{n}.parquet"
+                bound_df.to_parquet(bound_file)
+                metadata["boundaries"][n] = Path(relpath(bound_file, path)).as_posix()
+                
+        # add insitupy version to metadata
+        metadata["version"] = __version__
+        
+        # save metadata
+        write_dict_to_json(dictionary=metadata, file=path / ".celldata")
+            
+    
+    def sync_cell_ids(self):
+        '''
+        Function to synchronize matrix and boundaries of CellData.
+        
+        Procedure:
+        1. Select matrix cell IDs
+        2. Check if all matrix cell IDs are in boundaries
+            - if not all are in boundaries, throw error saying that those will also be removed
+        3. Select only matrix cell IDs which are also in boundaries and filter for them
+        '''
+        # get cell IDs from matrix
+        cell_ids = self.matrix.obs_names
+        
+        try:
+            boundaries = self.boundaries
+        except AttributeError:
+            print('No `boundaries` attribute found in CellData found.')
+            pass
+        else:
+            for n in ["cellular", "nuclear"]:
+                # get dataframe
+                df = getattr(boundaries, n)
+                
+                # filter dataframe
+                df.loc[df["cell_id"].isin(cell_ids), :]
+                
+                # add to object
+                setattr(self.boundaries, n, df)
+            
+    def shift(self, 
+              x: Union[int, float], 
+              y: Union[int, float]
+              ):
+        '''
+        Function to shift the coordinates of both matrix and boundaries data by certain values x/y.
+        '''
+        
+        # move origin again to 0 by subtracting the lower limits from the coordinates
+        cell_coords = self.cells.matrix.obsm['spatial'].copy()
+        cell_coords[:, 0] += x
+        cell_coords[:, 1] += y
+        self.cells.matrix.obsm['spatial'] = cell_coords
+        
+        try:
+            boundaries = self.boundaries
+        except AttributeError:
+            print('No `boundaries` attribute found in CellData found.')
+            pass
+        else:
+            for n in ["cellular", "nuclear"]:
+                # get dataframe
+                df = getattr(boundaries, n)
+                
+                # re-center to 0
+                df["vertex_x"] += x
+                df["vertex_y"] += y
+                
+                # add to object
+                setattr(self.boundaries, n, df)
         
     
-class ImageData:
+class ImageData(DeepCopyMixin):
     '''
     Object to read and load images.
     '''

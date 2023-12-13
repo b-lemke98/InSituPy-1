@@ -1,0 +1,60 @@
+import json
+import os
+from pathlib import Path
+from typing import Union
+
+import dask.array as da
+import zarr
+import shutil
+
+
+def load_pyramid(store):
+    '''
+    Function to load pyramid.
+    From: https://www.youtube.com/watch?v=8TlAAZcJnvA
+    '''
+    # Open store (root group)
+    grp = zarr.open(store, mode='r')
+
+    # Read multiscale metadata
+    datasets = grp.attrs["multiscales"][0]["datasets"]
+
+    return [
+        da.from_zarr(store, component=d["path"])
+        for d in datasets
+    ]
+    
+def read_json(
+    file: Union[str, os.PathLike, Path],
+    ) -> dict:
+    '''
+    Function to load json files as dictionary.
+    '''
+    # load metadata file
+    with open(file, "r") as metafile:
+        metadata = json.load(metafile)
+        
+    return metadata
+
+def write_dict_to_json(
+    dictionary: dict,
+    file: Union[str, os.PathLike, Path],
+    ):
+    dict_json = json.dumps(dictionary, indent=4)
+    with open(file, "w") as metafile:
+        metafile.write(dict_json)
+        
+def check_overwrite(path, overwrite):
+    path = Path(path)
+    if path.exists():
+        if overwrite:
+            if path.is_dir():
+                shutil.rmtree(path) # delete directory
+            elif path.is_file():
+                path.unlink() # delete file
+            else:
+                raise ValueError(f"Path is neither a directory nor a file. What is it? {str(path)}")
+        else:
+            raise FileExistsError(f"The output file already exists at {path}. To overwrite it, please set the `overwrite` parameter to True."
+)
+    
