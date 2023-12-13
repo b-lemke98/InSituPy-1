@@ -1,3 +1,5 @@
+from .utils.utils import convert_to_list
+
 class ModuleNotFoundOnWindows(ModuleNotFoundError):
     '''
     Code from https://github.com/theislab/scib/blob/main/scib/exceptions.py
@@ -138,10 +140,11 @@ class ModalityNotFoundError(Exception):
         self.message = f"No `{modality}` modality found."
         super().__init__(self.message)
         
-class InvalidFileEndingError(Exception):
-    def __init__(self, allowed_endings, received_ending, message=None):
+class InvalidSuffixError(Exception):
+    def __init__(self, allowed_suffixes, received_suffix, message=None):
+        allowed_suffixes = convert_to_list(allowed_suffixes)
         if message is None:
-            message = f"Invalid file ending. Allowed endings: {', '.join(allowed_endings)}. Received: {received_ending}"
+            message = f"Invalid file ending. Allowed endings: {', '.join(allowed_suffixes)}. Received: {received_suffix}"
         self.message = message
         super().__init__(self.message)
         

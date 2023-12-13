@@ -34,7 +34,7 @@ from insitupy import __version__
 from .._exceptions import (ModalityNotFoundError, NotOneElementError,
                            UnknownOptionError, WrongNapariLayerTypeError,
                            XeniumDataMissingObject,
-                           XeniumDataRepeatedCropError)
+                           XeniumDataRepeatedCropError, InvalidSuffixError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
 from ..image.io import write_ome_tiff
 from ..utils.geo import write_qupath_geojson
@@ -68,7 +68,7 @@ def _read_boundaries_from_xenium(
     # generate path for files
     files = [path / f for f in files]
     
-    boundaries = read_to_boundariesdata(
+    boundaries = read_boundaries(
         files=files,
         labels=labels
     )
@@ -112,13 +112,17 @@ def _read_matrix_from_xenium(path, metadata):
     
     return adata
 
-def read_to_boundariesdata(
+def read_boundaries(
     files: List[Union[str, os.PathLike, Path]],
     labels: List[str],
     pixel_size: Union[float, int] = 1
     ) -> BoundariesData:
     dataframes = {}
     for n, f in zip(labels, files):
+        # check the file suffix
+        if not f.suffix == ".parquet":
+            InvalidSuffixError(allowed_suffixes=[".parquet"], received_suffix=f.suffix)
+        
         # load dataframe
         df = pd.read_parquet(f)
 
@@ -134,7 +138,7 @@ def read_to_boundariesdata(
     boundaries = BoundariesData(dataframes=dataframes)
     return boundaries
 
-def read_to_celldata(
+def read_celldata(
     path: Union[str, os.PathLike, Path],
     ) -> CellData:
     # read metadata
@@ -751,7 +755,7 @@ class XeniumData:
                 cells_path = self.xd_metadata["cells"]
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
-            self.cells = read_to_celldata(path=self.path / cells_path, 
+            self.cells = read_celldata(path=self.path / cells_path, 
                                        pixel_size=self.metadata["pixel_size"])
         else:
             matrix = matrix = _read_matrix_from_xenium(path=self.path, metadata=self.metadata)
