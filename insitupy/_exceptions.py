@@ -137,3 +137,11 @@ class ModalityNotFoundError(Exception):
                  ):
         self.message = f"No `{modality}` modality found."
         super().__init__(self.message)
+        
+class InvalidFileEndingError(Exception):
+    def __init__(self, allowed_endings, received_ending, message=None):
+        if message is None:
+            message = f"Invalid file ending. Allowed endings: {', '.join(allowed_endings)}. Received: {received_ending}"
+        self.message = message
+        super().__init__(self.message)
+        

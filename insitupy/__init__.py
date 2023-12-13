@@ -5,7 +5,7 @@ __version__ = "1.2.1"
 from . import image as im
 from . import utils
 from ._core.dataclasses import AnnotationData, BoundariesData, ImageData
-from ._core.xeniumdata import XeniumData, read_celldata
+from ._core.xeniumdata import XeniumData, read_to_celldata
 
 __all__ = [
     "XeniumData",

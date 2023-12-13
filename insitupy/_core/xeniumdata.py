@@ -51,6 +51,113 @@ from .dataclasses import AnnotationData, BoundariesData, CellData, ImageData
 SHRT_MAX = 2**15-1 # 32767
 SHRT_MIN = -(2**15-1) # -32767
 
+def _read_boundaries_from_xenium(
+    path: Union[str, os.PathLike, Path],
+    pixel_size: [float, int]
+    ):        
+    # # read boundaries data
+    # boundaries = BoundariesData(path=path,
+    #                             files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"],
+    #                             labels=["cellular", "nuclear"],
+    #                             pixel_size=pixel_size
+    #                             )
+    path = Path(path)
+    files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"]
+    labels=["cellular", "nuclear"]
+    
+    # generate path for files
+    files = [path / f for f in files]
+    
+    boundaries = read_to_boundariesdata(
+        files=files,
+        labels=labels
+    )
+    
+    return boundaries
+
+
+def _read_matrix_from_xenium(path, metadata):
+    # extract parameters from metadata
+    pixel_size = metadata["pixel_size"]
+    cf_zarr_path = path / metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
+    cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter(action='ignore', category=FutureWarning)
+        # read matrix data
+        adata = sc.read_10x_h5(cf_h5_path)
+
+    # read cell information
+    cells_zarr_path = path / metadata["xenium_explorer_files"]["cells_zarr_filepath"]
+    cells_parquet_path = cells_zarr_path.parent / cells_zarr_path.name.replace(".zarr.zip", ".parquet")
+    cells = pd.read_parquet(cells_parquet_path)
+
+    # transform cell ids from bytes to str
+    cells = cells.set_index("cell_id")
+
+    # make sure that the indices are decoded strings
+    if is_numeric_dtype(cells.index):
+        cells.index = cells.index.astype(str)
+    else:
+        cells.index = decode_robust_series(cells.index)
+
+    # add information to anndata observations
+    adata.obs = pd.merge(left=adata.obs, right=cells, left_index=True, right_index=True)
+
+    # transfer coordinates to .obsm
+    coord_cols = ["x_centroid", "y_centroid"]
+    adata.obsm["spatial"] = adata.obs[coord_cols].values
+    adata.obsm["spatial"] /= pixel_size
+    adata.obs.drop(coord_cols, axis=1, inplace=True)
+    
+    return adata
+
+def read_to_boundariesdata(
+    files: List[Union[str, os.PathLike, Path]],
+    labels: List[str],
+    pixel_size: Union[float, int] = 1
+    ) -> BoundariesData:
+    dataframes = {}
+    for n, f in zip(labels, files):
+        # load dataframe
+        df = pd.read_parquet(f)
+
+        # decode columns
+        df = df.apply(lambda x: decode_robust_series(x), axis=0)
+
+        if pixel_size is not None:
+            # convert coordinates into pixel coordinates
+            coord_cols = ["vertex_x", "vertex_y"]
+            df[coord_cols] = df[coord_cols].apply(lambda x: x / pixel_size)
+        dataframes[n] = df
+        
+    boundaries = BoundariesData(dataframes=dataframes)
+    return boundaries
+
+def read_to_celldata(
+    path: Union[str, os.PathLike, Path],
+    ) -> CellData:
+    # read metadata
+    path = Path(path)
+    celldata_metadata = read_json(path / ".celldata")
+    
+    # read matrix data
+    matrix = sc.read(path / celldata_metadata["matrix"])
+    
+    # read boundaries data
+    labels = convert_to_list(celldata_metadata["boundaries"].keys())
+    files = convert_to_list(celldata_metadata["boundaries"].values())
+    
+    boundaries = BoundariesData(path=path,
+                            files=files,
+                            labels=labels,
+                            pixel_size=celldata_metadata["pixel_size"]
+                            )
+    
+    # create CellData object
+    celldata = CellData(matrix=matrix, boundaries=boundaries, pixel_size=celldata_metadata["pixel_size"])
+    
+    return celldata
 
 class XeniumData:
     #TODO: Docstring of XeniumData
@@ -644,7 +751,7 @@ class XeniumData:
                 cells_path = self.xd_metadata["cells"]
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
-            self.cells = read_celldata(path=self.path / cells_path, 
+            self.cells = read_to_celldata(path=self.path / cells_path, 
                                        pixel_size=self.metadata["pixel_size"])
         else:
             matrix = matrix = _read_matrix_from_xenium(path=self.path, metadata=self.metadata)
@@ -1474,79 +1581,3 @@ class XeniumData:
                     # add annotations
                     self.annotations.add_annotation(data=annot_df, label=annot_label, verbose=True)                       
  
-def _read_boundaries_from_xenium(
-    path: Union[str, os.PathLike, Path],
-    pixel_size: [float, int]
-    ):        
-    # read boundaries data
-    boundaries = BoundariesData(path=path,
-                                files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"],
-                                labels=["cellular", "nuclear"],
-                                pixel_size=pixel_size
-                                )
-    
-    return boundaries
-
-
-def _read_matrix_from_xenium(path, metadata):
-    # extract parameters from metadata
-    pixel_size = metadata["pixel_size"]
-    cf_zarr_path = path / metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
-    cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
-
-    with warnings.catch_warnings():
-        warnings.simplefilter(action='ignore', category=FutureWarning)
-        # read matrix data
-        adata = sc.read_10x_h5(cf_h5_path)
-
-    # read cell information
-    cells_zarr_path = path / metadata["xenium_explorer_files"]["cells_zarr_filepath"]
-    cells_parquet_path = cells_zarr_path.parent / cells_zarr_path.name.replace(".zarr.zip", ".parquet")
-    cells = pd.read_parquet(cells_parquet_path)
-
-    # transform cell ids from bytes to str
-    cells = cells.set_index("cell_id")
-
-    # make sure that the indices are decoded strings
-    if is_numeric_dtype(cells.index):
-        cells.index = cells.index.astype(str)
-    else:
-        cells.index = decode_robust_series(cells.index)
-
-    # add information to anndata observations
-    adata.obs = pd.merge(left=adata.obs, right=cells, left_index=True, right_index=True)
-
-    # transfer coordinates to .obsm
-    coord_cols = ["x_centroid", "y_centroid"]
-    adata.obsm["spatial"] = adata.obs[coord_cols].values
-    adata.obsm["spatial"] /= pixel_size
-    adata.obs.drop(coord_cols, axis=1, inplace=True)
-    
-    return adata
-
-def read_celldata(
-    path: Union[str, os.PathLike, Path],
-    ):
-    # read metadata
-    path = Path(path)
-    celldata_metadata = read_json(path / ".celldata")
-    
-    # read matrix data
-    matrix = sc.read(path / celldata_metadata["matrix"])
-    
-    # read boundaries data
-    labels = convert_to_list(celldata_metadata["boundaries"].keys())
-    files = convert_to_list(celldata_metadata["boundaries"].values())
-    
-    boundaries = BoundariesData(path=path,
-                            files=files,
-                            labels=labels,
-                            pixel_size=celldata_metadata["pixel_size"]
-                            )
-    
-    # create CellData object
-    celldata = CellData(matrix=matrix, boundaries=boundaries, pixel_size=celldata_metadata["pixel_size"])
-    
-    return celldata
-
-

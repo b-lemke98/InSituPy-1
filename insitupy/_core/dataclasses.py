@@ -122,30 +122,27 @@ class BoundariesData(DeepCopyMixin):
     '''
     Object to read and load boundaries of cells and nuclei.
     '''
-    def __init__(self, 
-                 path: Union[str, os.PathLike, Path],
-                 files: List[Union[str, os.PathLike, Path]],
-                 labels: List[str],
-                 pixel_size: Optional[float] = None
+    def __init__(self,
+                 dataframes: Union[dict, List[str]],
+                 labels: Optional[List[str]] = None
                  ):
         self.labels = labels
-        for n, f in zip(labels, files):
-            # generate paths
-            filepath = Path(os.path.normpath(path / f))
-            
-            # load dataframe
-            bounddf = pd.read_parquet(filepath)
-            
-            # decode columns
-            bounddf = bounddf.apply(lambda x: decode_robust_series(x), axis=0)
-            
-            if pixel_size is not None:
-                # convert coordinates into pixel coordinates
-                coord_cols = ["vertex_x", "vertex_y"]
-                bounddf[coord_cols] = bounddf[coord_cols].apply(lambda x: x / pixel_size)
-            
+        if isinstance(dataframes, dict):
+            # extract keys from dictionary
+            labels = dataframes.keys()
+            dataframes = dataframes.values()
+        elif isinstance(dataframes, list):
+            if labels is None:
+                raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
+        else:
+            raise ValueError(f"Argument 'dataframes' has unknown file type ({type(dataframes)}). Expected to be a list or dictionary.")
+        
+        for n, df in zip(labels, dataframes):
             # add to object
-            setattr(self, n, bounddf)
+            setattr(self, n, df)
+            
+        # save the name of the labels in the object
+        self.labels = labels
         
     def __repr__(self):
         # repr_strings = [f"{tf.SPACER+tf.Bold+a+tf.ResetAll}" for a in self.labels]
@@ -154,13 +151,13 @@ class BoundariesData(DeepCopyMixin):
         repr = f"BoundariesData object with {tf.Bold}cellular{tf.ResetAll} and {tf.Bold}nuclear{tf.ResetAll} boundaries"
         return repr
     
-    def sync_to_matrix(self,
-                       cell_ids: List[str],
-                       xlim: Tuple[int, int],
-                       ylim: Tuple[int, int]
-                       ):
+    def crop(self,
+             cell_ids: List[str],
+             xlim: Tuple[int, int],
+             ylim: Tuple[int, int]
+             ):
         '''
-        Synchronize the BoundariesData object to match the cells in self.matrix.
+        Crop the BoundariesData object.
         '''
         # make sure cell ids are a list
         cell_ids = convert_to_list(cell_ids)
@@ -180,8 +177,8 @@ class BoundariesData(DeepCopyMixin):
             setattr(self, n, df)
             
                 
-    def convert_to_geopandas(self):
-        for n in ["cells", "nuclei"]:
+    def convert_to_shapely_objects(self):
+        for n in self.labels:
             print(f"Converting `{n}` to GeoPandas DataFrame with shapely objects.")
             # retrief dataframe with boundary coordinates
             df = getattr(self, n)
