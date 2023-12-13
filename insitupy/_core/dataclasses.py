@@ -203,9 +203,11 @@ class CellData(DeepCopyMixin):
     '''
     def __init__(self, 
                matrix: AnnData,
-               boundaries: Optional[BoundariesData]
+               boundaries: Optional[BoundariesData],
+               pixel_size: Union[float, int] = 1
                ):
         self.matrix = matrix
+        self.pixel_size = pixel_size
         
         if boundaries is not None:
             self.boundaries = boundaries
@@ -274,7 +276,8 @@ class CellData(DeepCopyMixin):
                 bound_df.to_parquet(bound_file)
                 metadata["boundaries"][n] = Path(relpath(bound_file, path)).as_posix()
                 
-        # add insitupy version to metadata
+        # add more things to metadata
+        metadata["pixel_size"] = self.pixel_size
         metadata["version"] = __version__
         
         # save metadata

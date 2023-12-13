@@ -672,7 +672,7 @@ class XeniumData:
         else:
             matrix = self._read_matrix()
             boundaries = self._read_boundaries()
-            self.cells = CellData(matrix=matrix, boundaries=boundaries)
+            self.cells = CellData(matrix=matrix, boundaries=boundaries, pixel_size=self.metadata["pixel_size"])
 
     def read_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
@@ -1536,13 +1536,13 @@ def _read_matrix_from_xenium(path, metadata):
 
 def read_celldata(
     path: Union[str, os.PathLike, Path],
-    pixel_size: Union[int, float] = 1
     ):
     # read metadata
+    path = Path(path)
     celldata_metadata = read_json(path / ".celldata")
     
     # read matrix data
-    matrix = sc.read(celldata_metadata["matrix"])
+    matrix = sc.read(path / celldata_metadata["matrix"])
     
     # read boundaries data
     labels = convert_to_list(celldata_metadata["boundaries"].keys())
@@ -1551,10 +1551,11 @@ def read_celldata(
     boundaries = BoundariesData(path=path,
                             files=files,
                             labels=labels,
-                            pixel_size=metadata["pixel_size"]
+                            pixel_size=celldata_metadata["pixel_size"]
                             )
     
-    celldata = CellData(matrix=matrix, boundaries=boundaries)
+    # create CellData object
+    celldata = CellData(matrix=matrix, boundaries=boundaries, pixel_size=celldata_metadata["pixel_size"])
     
     return celldata
 
