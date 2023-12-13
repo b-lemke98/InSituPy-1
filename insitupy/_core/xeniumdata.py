@@ -635,32 +635,9 @@ class XeniumData:
             if new_metadata.keys() == self.annotations.metadata.keys():
                 self.annotations.metadata = new_metadata
 
-    def _read_matrix(self):
-        print("Reading matrix...", flush=True)
-        matrix = _read_matrix_from_xenium(path=self.path, metadata=self.metadata)
-            
-        return matrix
-
-    def _read_boundaries(self,
-                        files: List[str] = ["cell_boundaries.parquet", "nucleus_boundaries.parquet"],
-                        labels: List[str] = ["cellular", "nuclear"]
-                        ):
-
-        # convert arguments to lists
-        labels = convert_to_list(labels)
-        files = convert_to_list(files)
-            
-        # read boundaries data
-        print("Reading boundaries...", flush=True)
-        boundaries = BoundariesData(path=self.path,
-                                    files=files,
-                                    labels=labels,
-                                    pixel_size=self.metadata["pixel_size"]
-                                    )
-        
-        return boundaries
 
     def read_cells(self):
+        print("Reading cells...", flush=True)
         if self.from_xeniumdata:
             #TODO: Implement this part with a read_celldata() function
             try:
@@ -670,8 +647,8 @@ class XeniumData:
             self.cells = read_celldata(path=self.path / cells_path, 
                                        pixel_size=self.metadata["pixel_size"])
         else:
-            matrix = self._read_matrix()
-            boundaries = self._read_boundaries()
+            matrix = matrix = _read_matrix_from_xenium(path=self.path, metadata=self.metadata)
+            boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=self.metadata["pixel_size"])
             self.cells = CellData(matrix=matrix, boundaries=boundaries, pixel_size=self.metadata["pixel_size"])
 
     def read_images(self,
@@ -1497,7 +1474,20 @@ class XeniumData:
                     # add annotations
                     self.annotations.add_annotation(data=annot_df, label=annot_label, verbose=True)                       
  
- 
+def _read_boundaries_from_xenium(
+    path: Union[str, os.PathLike, Path],
+    pixel_size: [float, int]
+    ):        
+    # read boundaries data
+    boundaries = BoundariesData(path=path,
+                                files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"],
+                                labels=["cellular", "nuclear"],
+                                pixel_size=pixel_size
+                                )
+    
+    return boundaries
+
+
 def _read_matrix_from_xenium(path, metadata):
     # extract parameters from metadata
     pixel_size = metadata["pixel_size"]
