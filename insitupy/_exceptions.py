@@ -140,11 +140,11 @@ class ModalityNotFoundError(Exception):
         self.message = f"No `{modality}` modality found."
         super().__init__(self.message)
         
-class InvalidSuffixError(Exception):
-    def __init__(self, allowed_suffixes, received_suffix, message=None):
-        allowed_suffixes = convert_to_list(allowed_suffixes)
+class InvalidFileTypeError(Exception):
+    def __init__(self, allowed_types, received_type, message=None):
+        allowed_types = convert_to_list(allowed_types)
         if message is None:
-            message = f"Invalid file ending. Allowed endings: {', '.join(allowed_suffixes)}. Received: {received_suffix}"
+            message = f"Invalid file type. Allowed file types: {', '.join(allowed_types)}. Received: {received_type}"
         self.message = message
         super().__init__(self.message)
         

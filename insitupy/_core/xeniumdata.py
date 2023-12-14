@@ -34,7 +34,7 @@ from insitupy import __version__
 from .._exceptions import (ModalityNotFoundError, NotOneElementError,
                            UnknownOptionError, WrongNapariLayerTypeError,
                            XeniumDataMissingObject,
-                           XeniumDataRepeatedCropError, InvalidSuffixError)
+                           XeniumDataRepeatedCropError, InvalidFileTypeError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
 from ..image.io import write_ome_tiff
 from ..utils.geo import write_qupath_geojson
@@ -121,7 +121,7 @@ def read_boundaries(
     for n, f in zip(labels, files):
         # check the file suffix
         if not f.suffix == ".parquet":
-            InvalidSuffixError(allowed_suffixes=[".parquet"], received_suffix=f.suffix)
+            InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
         
         # load dataframe
         df = pd.read_parquet(f)
