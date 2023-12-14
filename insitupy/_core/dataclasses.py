@@ -14,6 +14,7 @@ from tifffile import TiffFile, imread
 
 from insitupy import __version__
 
+from .._exceptions import InvalidFileTypeError
 from ..utils.geo import parse_geopandas
 from ..utils.io import check_overwrite, load_pyramid, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
@@ -117,40 +118,81 @@ class AnnotationData(DeepCopyMixin):
             if verbose:
                 # report
                 print(f"Added {new_n - old_n} new annotations to {existing_str}label '{label}'")
-      
+
 class BoundariesData(DeepCopyMixin):
     '''
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self,
-                 dataframes: Union[dict, List[str]],
-                 labels: Optional[List[str]] = None
-                 ):
-        self.labels = labels
-        if isinstance(dataframes, dict):
-            # extract keys from dictionary
-            labels = dataframes.keys()
-            dataframes = dataframes.values()
-        elif isinstance(dataframes, list):
-            if labels is None:
-                raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
-        else:
-            raise ValueError(f"Argument 'dataframes' has unknown file type ({type(dataframes)}). Expected to be a list or dictionary.")
-        
-        for n, df in zip(labels, dataframes):
-            # add to object
-            setattr(self, n, df)
-            
-        # save the name of the labels in the object
-        self.labels = labels
+                #  files: Optional[Union[str, os.PathLike, Path]] = None,
+                #  dataframes: Optional[Union[dict, List[str]]] = None,
+                #  labels: Optional[List[str]] = [],
+                pixel_size: Union[float, int]
+                ):
+        self.pixel_size = pixel_size
+        self.labels = []
+        # # save the name of the labels in the object
+        # self.labels = labels
         
     def __repr__(self):
-        # repr_strings = [f"{tf.SPACER+tf.Bold+a+tf.ResetAll}" for a in self.labels]
-        # s = "\n".join(repr_strings)
-        # repr = f"{tf.Purple+tf.Bold}boundaries{tf.ResetAll}\n{s}"
-        repr = f"BoundariesData object with {tf.Bold}cellular{tf.ResetAll} and {tf.Bold}nuclear{tf.ResetAll} boundaries"
+        if len(self.labels) == 0:
+            repr = f"Empty BoundariesData object"
+        else:
+            repr = f"BoundariesData object with {len(self.labels)} entries:"
+            for l in self.labels:
+                repr += f"\n{tf.SPACER+tf.Bold+l+tf.ResetAll}"
         return repr
     
+    def read_boundaries(self,
+        files: Union[str, os.PathLike, Path, List],
+        labels: Optional[Union[str, List[str]]] = None,
+    ):
+        
+        # generate dataframes
+        dataframes = {}
+        for n, f in zip(labels, files):
+            # check the file suffix
+            if not f.suffix == ".parquet":
+                InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
+            
+            # load dataframe
+            df = pd.read_parquet(f)
+
+            # decode columns
+            df = df.apply(lambda x: decode_robust_series(x), axis=0)
+
+            # convert coordinates into pixel coordinates
+            coord_cols = ["vertex_x", "vertex_y"]
+            df[coord_cols] = df[coord_cols].apply(lambda x: x / self.pixel_size)
+            dataframes[n] = df
+            
+        # add dictionary with boundaries to BoundariesData object
+        self.add_boundaries(dataframes=dataframes)
+        
+    def add_boundaries(self,
+                       dataframes: Optional[Union[dict, List[str]]] = None,
+                       labels: Optional[List[str]] = [],
+                       overwrite: bool = False
+                       ):
+        if dataframes is not None:
+            if isinstance(dataframes, dict):
+                # extract keys from dictionary
+                labels = dataframes.keys()
+                dataframes = dataframes.values()
+            elif isinstance(dataframes, list):
+                if labels is None:
+                    raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
+            else:
+                raise ValueError(f"Argument 'dataframes' has unknown file type ({type(dataframes)}). Expected to be a list or dictionary.")
+            
+            for l, df in zip(labels, dataframes):
+                if l not in self.labels or overwrite:
+                    # add to object
+                    setattr(self, l, df)
+                    self.labels.append(l)
+                else:
+                    raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
+                
     def crop(self,
              cell_ids: List[str],
              xlim: Tuple[int, int],
@@ -220,14 +262,9 @@ class CellData(DeepCopyMixin):
         )
         
         if self.boundaries is not None:
-            repr += (
-                f"\n{tf.Bold+'boundaries'+tf.ResetAll}\n"
-                f"{tf.SPACER+self.boundaries.__repr__()}"
-            )
+            bound_repr = self.boundaries.__repr__()
             
-        # repr_strings = [f"{tf.Bold+a+tf.ResetAll}" for a in self.entries]
-        # s = "\n".join(repr_strings)
-        # repr = f"{tf.Purple+tf.Bold}cells{tf.ResetAll}\n{s}"
+            repr += f"\n{tf.Bold+'boundaries'+tf.ResetAll}\n" + tf.SPACER + bound_repr.replace("\n", f"\n{tf.SPACER}")
         return repr
     
     def copy(self):
@@ -450,3 +487,28 @@ class ImageData(DeepCopyMixin):
             # add cropped pyramid to object
             setattr(self, n, cropped_pyramid)
         
+# def read_boundaries(
+#     files: List[Union[str, os.PathLike, Path]],
+#     labels: List[str],
+#     pixel_size: Union[float, int] = 1
+#     ) -> BoundariesData:
+#     dataframes = {}
+#     for n, f in zip(labels, files):
+#         # check the file suffix
+#         if not f.suffix == ".parquet":
+#             InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
+        
+#         # load dataframe
+#         df = pd.read_parquet(f)
+
+#         # decode columns
+#         df = df.apply(lambda x: decode_robust_series(x), axis=0)
+
+#         if pixel_size is not None:
+#             # convert coordinates into pixel coordinates
+#             coord_cols = ["vertex_x", "vertex_y"]
+#             df[coord_cols] = df[coord_cols].apply(lambda x: x / pixel_size)
+#         dataframes[n] = df
+        
+#     boundaries = BoundariesData(dataframes=dataframes)
+#     return boundaries

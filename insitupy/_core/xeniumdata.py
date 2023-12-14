@@ -68,10 +68,14 @@ def _read_boundaries_from_xenium(
     # generate path for files
     files = [path / f for f in files]
     
-    boundaries = read_boundaries(
-        files=files,
-        labels=labels
-    )
+    # read boundaries
+    boundaries = BoundariesData(pixel_size=pixel_size)
+    boundaries.read_boundaries(files=files, labels=labels)
+    # boundaries = read_boundaries(
+    #     files=files,
+    #     labels=labels,
+    #     pixel_size=pixel_size
+    # )
     
     return boundaries
 
@@ -112,32 +116,6 @@ def _read_matrix_from_xenium(path, metadata):
     
     return adata
 
-def read_boundaries(
-    files: List[Union[str, os.PathLike, Path]],
-    labels: List[str],
-    pixel_size: Union[float, int] = 1
-    ) -> BoundariesData:
-    dataframes = {}
-    for n, f in zip(labels, files):
-        # check the file suffix
-        if not f.suffix == ".parquet":
-            InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
-        
-        # load dataframe
-        df = pd.read_parquet(f)
-
-        # decode columns
-        df = df.apply(lambda x: decode_robust_series(x), axis=0)
-
-        if pixel_size is not None:
-            # convert coordinates into pixel coordinates
-            coord_cols = ["vertex_x", "vertex_y"]
-            df[coord_cols] = df[coord_cols].apply(lambda x: x / pixel_size)
-        dataframes[n] = df
-        
-    boundaries = BoundariesData(dataframes=dataframes)
-    return boundaries
-
 def read_celldata(
     path: Union[str, os.PathLike, Path],
     ) -> CellData:
@@ -149,14 +127,16 @@ def read_celldata(
     matrix = sc.read(path / celldata_metadata["matrix"])
     
     # read boundaries data
-    labels = convert_to_list(celldata_metadata["boundaries"].keys())
-    files = convert_to_list(celldata_metadata["boundaries"].values())
+    labels = [path / f for f in convert_to_list(celldata_metadata["boundaries"].keys())]
+    files = [path / f for f in convert_to_list(celldata_metadata["boundaries"].values())]
     
-    boundaries = BoundariesData(path=path,
-                            files=files,
-                            labels=labels,
-                            pixel_size=celldata_metadata["pixel_size"]
-                            )
+    boundaries = BoundariesData(pixel_size=celldata_metadata["pixel_size"])
+    boundaries.read_boundaries(files=files, labels=labels)
+    # boundaries = BoundariesData(path=path,
+    #                         files=files,
+    #                         labels=labels,
+    #                         pixel_size=celldata_metadata["pixel_size"]
+    #                         )
     
     # create CellData object
     celldata = CellData(matrix=matrix, boundaries=boundaries, pixel_size=celldata_metadata["pixel_size"])
