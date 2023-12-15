@@ -1,12 +1,13 @@
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Union
 
 import dask.array as da
 import zarr
-import shutil
 
+from .utils import nested_dict_numpy_to_list
 
 def load_pyramid(store):
     '''
@@ -40,9 +41,18 @@ def write_dict_to_json(
     dictionary: dict,
     file: Union[str, os.PathLike, Path],
     ):
-    dict_json = json.dumps(dictionary, indent=4)
-    with open(file, "w") as metafile:
-        metafile.write(dict_json)
+    try:
+        dict_json = json.dumps(dictionary, indent=4)
+        with open(file, "w") as metafile:
+                metafile.write(dict_json)
+    except TypeError:
+        # one reason for this type error could be that there are ndarrays in the dict
+        # convert them to lists
+        nested_dict_numpy_to_list(dictionary)
+        
+        dict_json = json.dumps(dictionary, indent=4)
+        with open(file, "w") as metafile:
+                metafile.write(dict_json)
         
 def check_overwrite(path, overwrite):
     path = Path(path)

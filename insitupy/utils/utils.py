@@ -1,3 +1,4 @@
+from numpy import ndarray
 from pandas.api.types import is_numeric_dtype, is_string_dtype
 
 
@@ -125,3 +126,9 @@ def convert_to_list(elem):
     '''
     return [elem] if isinstance(elem, str) else list(elem)
 
+def nested_dict_numpy_to_list(dictionary):
+    for key, value in dictionary.items():
+        if isinstance(value, ndarray):
+            dictionary[key] = value.tolist()
+        elif isinstance(value, dict):
+            nested_dict_numpy_to_list(value)
