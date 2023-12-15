@@ -42,12 +42,6 @@ class AnnotationData(DeepCopyMixin):
             
     def __repr__(self):
         if len(self.metadata) > 0:
-            # repr_strings = [f"{tf.Bold}{a}:{tf.ResetAll}\t{b} annotations, {len(c)} classes {*c,} {d}" for a,b,c,d in zip(self.labels, 
-            #                                                                                         self.n_annotations, 
-            #                                                                                         self.classes,
-            #                                                                                         self.analyzed
-            #                                                                                         )]
-            
             repr_strings = [
                 f'{tf.Bold}{l}:{tf.ResetAll}\t{m["n_annotations"]} annotations, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
                 ]
@@ -124,15 +118,10 @@ class BoundariesData(DeepCopyMixin):
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self,
-                #  files: Optional[Union[str, os.PathLike, Path]] = None,
-                #  dataframes: Optional[Union[dict, List[str]]] = None,
-                #  labels: Optional[List[str]] = [],
                 pixel_size: Union[float, int]
                 ):
         self.pixel_size = pixel_size
         self.labels = []
-        # # save the name of the labels in the object
-        # self.labels = labels
         
     def __repr__(self):
         if len(self.labels) == 0:
@@ -487,28 +476,3 @@ class ImageData(DeepCopyMixin):
             # add cropped pyramid to object
             setattr(self, n, cropped_pyramid)
         
-# def read_boundaries(
-#     files: List[Union[str, os.PathLike, Path]],
-#     labels: List[str],
-#     pixel_size: Union[float, int] = 1
-#     ) -> BoundariesData:
-#     dataframes = {}
-#     for n, f in zip(labels, files):
-#         # check the file suffix
-#         if not f.suffix == ".parquet":
-#             InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
-        
-#         # load dataframe
-#         df = pd.read_parquet(f)
-
-#         # decode columns
-#         df = df.apply(lambda x: decode_robust_series(x), axis=0)
-
-#         if pixel_size is not None:
-#             # convert coordinates into pixel coordinates
-#             coord_cols = ["vertex_x", "vertex_y"]
-#             df[coord_cols] = df[coord_cols].apply(lambda x: x / pixel_size)
-#         dataframes[n] = df
-        
-#     boundaries = BoundariesData(dataframes=dataframes)
-#     return boundaries

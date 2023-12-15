@@ -4,7 +4,7 @@ import json
 import os
 import shutil
 import warnings
-from os.path import relpath, abspath
+from os.path import abspath, relpath
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 from uuid import uuid4
@@ -31,14 +31,14 @@ from shapely.geometry.polygon import LinearRing, Polygon
 
 from insitupy import __version__
 
-from .._exceptions import (ModalityNotFoundError, NotOneElementError,
-                           UnknownOptionError, WrongNapariLayerTypeError,
-                           XeniumDataMissingObject,
-                           XeniumDataRepeatedCropError, InvalidFileTypeError)
+from .._exceptions import (InvalidFileTypeError, ModalityNotFoundError,
+                           NotOneElementError, UnknownOptionError,
+                           WrongNapariLayerTypeError, XeniumDataMissingObject,
+                           XeniumDataRepeatedCropError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
 from ..image.io import write_ome_tiff
 from ..utils.geo import write_qupath_geojson
-from ..utils.io import read_json, check_overwrite, write_dict_to_json
+from ..utils.io import check_overwrite, read_json, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._checks import check_raw
@@ -47,20 +47,12 @@ from ._widgets import (_annotation_widget, _create_points_layer,
                        _initialize_point_widgets)
 from .dataclasses import AnnotationData, BoundariesData, CellData, ImageData
 
-# make sure that image does not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
-SHRT_MAX = 2**15-1 # 32767
-SHRT_MIN = -(2**15-1) # -32767
 
 def _read_boundaries_from_xenium(
     path: Union[str, os.PathLike, Path],
     pixel_size: [float, int]
     ):        
     # # read boundaries data
-    # boundaries = BoundariesData(path=path,
-    #                             files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"],
-    #                             labels=["cellular", "nuclear"],
-    #                             pixel_size=pixel_size
-    #                             )
     path = Path(path)
     files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"]
     labels=["cellular", "nuclear"]
@@ -71,11 +63,6 @@ def _read_boundaries_from_xenium(
     # read boundaries
     boundaries = BoundariesData(pixel_size=pixel_size)
     boundaries.read_boundaries(files=files, labels=labels)
-    # boundaries = read_boundaries(
-    #     files=files,
-    #     labels=labels,
-    #     pixel_size=pixel_size
-    # )
     
     return boundaries
 
@@ -132,11 +119,6 @@ def read_celldata(
     
     boundaries = BoundariesData(pixel_size=celldata_metadata["pixel_size"])
     boundaries.read_boundaries(files=files, labels=labels)
-    # boundaries = BoundariesData(path=path,
-    #                         files=files,
-    #                         labels=labels,
-    #                         pixel_size=celldata_metadata["pixel_size"]
-    #                         )
     
     # create CellData object
     celldata = CellData(matrix=matrix, boundaries=boundaries, pixel_size=celldata_metadata["pixel_size"])
@@ -272,48 +254,6 @@ class XeniumData:
         print(f"\t\tSave metadata to {metadata_path}", flush=True)
         with open(metadata_path, "w") as metafile:
             metafile.write(metadata_json)
-
-    # def _read_matrix(self):
-    #     if self.from_xeniumdata:          
-    #         try:
-    #             # read matrix data
-    #             print("Reading matrix...", flush=True)
-    #             matrix = sc.read(self.path / self.xd_metadata["cells"] / "matrix")
-    #         except KeyError:
-    #             raise ModalityNotFoundError(modality="matrix")
-    #     else:
-    #         print("Reading matrix...", flush=True)
-    #         matrix = _read_matrix_from_xenium(path=self.path, metadata=self.metadata)
-            
-    #     return matrix
-
-    # def _read_boundaries(self,
-    #                     files: List[str] = ["cell_boundaries.parquet", "nucleus_boundaries.parquet"],
-    #                     labels: List[str] = ["cellular", "nuclear"]
-    #                     ):
-    #     if self.from_xeniumdata:
-    #         # check if matrix data is stored in this XeniumData
-    #         if "boundaries" not in self.xd_metadata:
-    #             raise ModalityNotFoundError(modality="boundaries")
-            
-    #         # get path and names of boundary files
-    #         labels = self.xd_metadata["boundaries"].keys()
-    #         files = [self.xd_metadata["boundaries"][n] for n in labels]
-
-    #     # convert arguments to lists
-    #     labels = convert_to_list(labels)
-    #     files = convert_to_list(files)
-            
-    #     # read boundaries data
-    #     print("Reading boundaries...", flush=True)
-    #     boundaries = BoundariesData(path=self.path,
-    #                                 files=files,
-    #                                 labels=labels,
-    #                                 pixel_size=self.metadata["pixel_size"]
-    #                                 )
-        
-    #     return boundaries
-
 
     def assign_annotations(self, 
                 annotation_labels: str = "all",
@@ -471,26 +411,6 @@ class XeniumData:
             
             # shift coordinates to correct for change of coordinates during cropping
             _self.cells.shift(x=-xlim[0], y=-ylim[0])
-            
-        # if hasattr(_self, "matrix"):
-        #     # infer mask from cell coordinates
-        #     cell_coords = _self.cells.matrix.obsm['spatial'].copy()
-        #     xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
-        #     ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
-        #     mask = xmask & ymask
-            
-        #     # select 
-        #     _self.cells.matrix = _self.cells.matrix[mask, :].copy()
-            
-        #     # move origin again to 0 by subtracting the lower limits from the coordinates
-        #     cell_coords = _self.cells.matrix.obsm['spatial'].copy()
-        #     cell_coords[:, 0] -= xlim[0]
-        #     cell_coords[:, 1] -= ylim[0]
-        #     _self.cells.matrix.obsm['spatial'] = cell_coords
-        
-        # # synchronize other data modalities to match the anndata matrix
-        # if hasattr(_self, "boundaries"):
-        #     _self.boundaries.sync_to_matrix(cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim)
             
         if hasattr(_self, "transcripts"):
             # infer mask for selection
@@ -1115,18 +1035,7 @@ class XeniumData:
         
         # check overwrite
         check_overwrite(path=path, overwrite=overwrite)
-        
-        # # check overwrite
-        # if path.exists():
-        #     if overwrite:
-        #         shutil.rmtree(path) # delete directory
-        #         if zip:
-        #             zippath = path.with_suffix(".zip")
-        #             if zippath.exists():
-        #                 zippath.unlink() # remove zip file
-        #     else:
-        #         raise FileExistsError("Output file exists already ({}).\nFor overwriting it, select `overwrite=True`".format(path))
-        
+
         # check if the output directory is going to be zipped or not
         if path.suffix == ".zip":
             zip_output = True
@@ -1187,12 +1096,6 @@ class XeniumData:
             # save cells to path and write info to metadata
             cells.save(cells_path)
             metadata["cells"] = Path(relpath(cells_path, path)).as_posix()
-
-            # mtx_path = cells_path / "matrix"
-            # mtx_path.mkdir(parents=True, exist_ok=True) # create directory
-            # mtx_file = mtx_path / "matrix.h5ad"
-            # self.cells.matrix.write(mtx_file)
-            # metadata["matrix"] = Path(relpath(mtx_file, path)).as_posix()
             
         # save transcripts
         if hasattr(self, "transcripts"):
@@ -1201,18 +1104,6 @@ class XeniumData:
             trans_file = trans_path / "transcripts.parquet"
             self.transcripts.to_parquet(trans_file)
             metadata["transcripts"] = Path(relpath(trans_file, path)).as_posix()
-            
-        # # save boundaries
-        # if hasattr(self, "boundaries"):
-        #     bound_path = (path / "boundaries")
-        #     bound_path.mkdir(parents=True, exist_ok=True) # create directory
-            
-        #     metadata["boundaries"] = {}
-        #     for n in ["cells", "nuclei"]:
-        #         bound_df = getattr(self.boundaries, n)
-        #         bound_file = bound_path / f"{n}.parquet"
-        #         bound_df.to_parquet(bound_file)
-        #         metadata["boundaries"][n] = Path(relpath(bound_file, path)).as_posix()
                 
         # save annotations
         if hasattr(self, "annotations"):
@@ -1231,11 +1122,6 @@ class XeniumData:
             # save AnnotationData metadata
             annot_meta_path = annot_path / "annotations_metadata.json"
             write_dict_to_json(dictionary=self.annotations.metadata, file=annot_meta_path)
-            
-            # annot_meta_json = json.dumps(self.annotations.metadata, indent=4)
-            
-            # with open(annot_path / "annotations_metadata.json", "w") as annot_metafile:
-            #     annot_metafile.write(annot_meta_json)
                 
         # save version of InSituPy
         metadata["version"] = __version__
@@ -1243,18 +1129,10 @@ class XeniumData:
         # write Xeniumdata metadata to json file
         xd_metadata_path = path / ".xeniumdata"
         write_dict_to_json(dictionary=metadata, file=xd_metadata_path)
-        
-        # metadata_json = json.dumps(metadata, indent=4)
-        # with open(metadata_path, "w") as metafile:
-        #     metafile.write(metadata_json)
             
         # write Xenium metadata to json file
         metadata_path = path / "xenium.json"
         write_dict_to_json(dictionary=self.metadata, file=metadata_path)
-        
-        # metadata_json = json.dumps(self.metadata, indent=4)
-        # with open(metadata_path, "w") as metafile:
-        #     metafile.write(metadata_json)
             
         # Optionally: zip the resulting directory
         if zip_output:
