@@ -127,7 +127,7 @@ def read_celldata(
     matrix = sc.read(path / celldata_metadata["matrix"])
     
     # read boundaries data
-    labels = [path / f for f in convert_to_list(celldata_metadata["boundaries"].keys())]
+    labels = convert_to_list(celldata_metadata["boundaries"].keys())
     files = [path / f for f in convert_to_list(celldata_metadata["boundaries"].values())]
     
     boundaries = BoundariesData(pixel_size=celldata_metadata["pixel_size"])
@@ -204,7 +204,7 @@ class XeniumData:
             self.slide_id = p_parsed.named["slide_id"]
             self.sample_id = p_parsed.named["sample_id"]
         else:
-            self.matrix = matrix
+            self.cells.matrix = matrix
             self.slide_id = ""
             self.sample_id = ""
             self.path = Path("unknown/unknown")
@@ -234,7 +234,7 @@ class XeniumData:
             )
             
         # if hasattr(self, "matrix"):
-        #     matrix_repr = self.matrix.__repr__()
+        #     matrix_repr = self.cells.matrix.__repr__()
         #     repr = (
         #         repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} matrix{tf.ResetAll}\n{tf.SPACER}   " + matrix_repr.replace("\n", "\n\t   ")
         #     )
@@ -324,8 +324,8 @@ class XeniumData:
         Annotation information is added to the DataFrame in `.obs`.
         '''
         # assert that prerequisites are met
-        assert hasattr(self, "matrix"), "No .matrix attribute available. Run `read_matrix()`."
-        assert hasattr(self, "annotations"), "No .matrix attribute available. Run `read_matrix()`."
+        assert hasattr(self, "cells"), "No .cells attribute available. Run `read_cells()`."
+        assert hasattr(self, "annotations"), "No .annotations attribute available. Run `read_annotations()`."
         
         if annotation_labels == "all":
             annotation_labels = self.annotations.metadata.keys()
@@ -334,7 +334,7 @@ class XeniumData:
         annotation_labels = convert_to_list(annotation_labels)
         
         # convert coordinates into shapely Point objects
-        points = [Point(elem) for elem in self.matrix.obsm["spatial"]]
+        points = [Point(elem) for elem in self.cells.matrix.obsm["spatial"]]
 
         # iterate through annotation labels
         for annotation_label in annotation_labels:
@@ -365,15 +365,15 @@ class XeniumData:
                 
             # convert into pandas dataframe
             df = pd.DataFrame(df)
-            df.index = self.matrix.obs_names
+            df.index = self.cells.matrix.obs_names
             
             # create annotation from annotation masks
             df[f"annotation-{annotation_label}"] = [" & ".join(annot_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
             
             if add_annotation_masks:
-                self.matrix.obs = pd.merge(left=self.matrix.obs, right=df, left_index=True, right_index=True)
+                self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df, left_index=True, right_index=True)
             else:
-                self.matrix.obs = pd.merge(left=self.matrix.obs, right=df.iloc[:, -1], left_index=True, right_index=True)
+                self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df.iloc[:, -1], left_index=True, right_index=True)
                 
             # save that the current label was analyzed
             self.annotations.metadata[annotation_label]["analyzed"] = tf.TICK
@@ -474,23 +474,23 @@ class XeniumData:
             
         # if hasattr(_self, "matrix"):
         #     # infer mask from cell coordinates
-        #     cell_coords = _self.matrix.obsm['spatial'].copy()
+        #     cell_coords = _self.cells.matrix.obsm['spatial'].copy()
         #     xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
         #     ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
         #     mask = xmask & ymask
             
         #     # select 
-        #     _self.matrix = _self.matrix[mask, :].copy()
+        #     _self.cells.matrix = _self.cells.matrix[mask, :].copy()
             
         #     # move origin again to 0 by subtracting the lower limits from the coordinates
-        #     cell_coords = _self.matrix.obsm['spatial'].copy()
+        #     cell_coords = _self.cells.matrix.obsm['spatial'].copy()
         #     cell_coords[:, 0] -= xlim[0]
         #     cell_coords[:, 1] -= ylim[0]
-        #     _self.matrix.obsm['spatial'] = cell_coords
+        #     _self.cells.matrix.obsm['spatial'] = cell_coords
         
         # # synchronize other data modalities to match the anndata matrix
         # if hasattr(_self, "boundaries"):
-        #     _self.boundaries.sync_to_matrix(cell_ids=_self.matrix.obs_names, xlim=xlim, ylim=ylim)
+        #     _self.boundaries.sync_to_matrix(cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim)
             
         if hasattr(_self, "transcripts"):
             # infer mask for selection
@@ -528,7 +528,8 @@ class XeniumData:
                 # update metadata
                 new_metadata[n] = {}
                 new_metadata[n]["n_annotations"] = len(annotdf)
-                new_metadata[n]["classes"] = annotdf.name.unique()
+                new_metadata[n]["classes"] = annotdf.name.unique().tolist()
+                new_metadata[n]["analyzed"] = _self.annotations.metadata[n]["analyzed"]  # analyzed information is just copied
             
             _self.annotations.metadata = new_metadata
                 
@@ -587,7 +588,7 @@ class XeniumData:
         else:
             print("Calculate highly-variable genes per batch key {} using {} flavor...".format(hvg_batch_key, hvg_flavor)) if verbose else None
 
-        sc.pp.highly_variable_genes(self.matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
+        sc.pp.highly_variable_genes(self.cells.matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
 
 
     def normalize(self,
@@ -612,24 +613,24 @@ class XeniumData:
                 It does not return any value.
         """
         # check if the matrix consists of raw integer counts
-        check_raw(self.matrix.X)
+        check_raw(self.cells.matrix.X)
 
         # store raw counts in layer
         print("Store raw counts in anndata.layers['counts']...") if verbose else None
-        self.matrix.layers['counts'] = self.matrix.X.copy()
+        self.cells.matrix.layers['counts'] = self.cells.matrix.X.copy()
 
         # preprocessing according to napari tutorial in squidpy
         print(f"Normalization, {transformation_method}-transformation...") if verbose else None
-        sc.pp.normalize_total(self.matrix)
-        self.matrix.layers['norm_counts'] = self.matrix.X.copy()
+        sc.pp.normalize_total(self.cells.matrix)
+        self.cells.matrix.layers['norm_counts'] = self.cells.matrix.X.copy()
         
         # transform either using log transformation or square root transformation
         if transformation_method == "log1p":
-            sc.pp.log1p(self.matrix)
+            sc.pp.log1p(self.cells.matrix)
         elif transformation_method == "sqrt":
             # Suggested in stlearn tutorial (https://stlearn.readthedocs.io/en/latest/tutorials/Xenium_PSTS.html)
-            X = self.matrix.X.toarray()   
-            self.matrix.X = csr_matrix(np.sqrt(X) + np.sqrt(X + 1))
+            X = self.cells.matrix.X.toarray()   
+            self.cells.matrix.X = csr_matrix(np.sqrt(X) + np.sqrt(X + 1))
         else:
             raise ValueError(f'`transformation_method` is not one of ["log1p", "sqrt"]')
         
@@ -735,8 +736,7 @@ class XeniumData:
                 cells_path = self.xd_metadata["cells"]
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
-            self.cells = read_celldata(path=self.path / cells_path, 
-                                       pixel_size=self.metadata["pixel_size"])
+            self.cells = read_celldata(path=self.path / cells_path)
         else:
             matrix = matrix = _read_matrix_from_xenium(path=self.path, metadata=self.metadata)
             boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=self.metadata["pixel_size"])
@@ -845,36 +845,36 @@ class XeniumData:
         if batch_correction_key is None:
             # dimensionality reduction
             print("Dimensionality reduction...") if verbose else None
-            sc.pp.pca(self.matrix)
+            sc.pp.pca(self.cells.matrix)
             if umap:
-                sc.pp.neighbors(self.matrix)
-                sc.tl.umap(self.matrix)
+                sc.pp.neighbors(self.cells.matrix)
+                sc.tl.umap(self.cells.matrix)
             if tsne:
-                sc.tl.tsne(self.matrix, n_jobs=tsne_jobs, learning_rate=tsne_lr)
+                sc.tl.tsne(self.cells.matrix, n_jobs=tsne_jobs, learning_rate=tsne_lr)
 
         else:
             # PCA
-            sc.pp.pca(self.matrix)
+            sc.pp.pca(self.cells.matrix)
 
             neigh_uncorr_key = 'neighbors_uncorrected'
-            sc.pp.neighbors(self.matrix, key_added=neigh_uncorr_key)
+            sc.pp.neighbors(self.cells.matrix, key_added=neigh_uncorr_key)
 
             # clustering
-            sc.tl.leiden(self.matrix, neighbors_key=neigh_uncorr_key, key_added='leiden_uncorrected')  
+            sc.tl.leiden(self.cells.matrix, neighbors_key=neigh_uncorr_key, key_added='leiden_uncorrected')  
 
             # batch correction
             print(f"Batch correction using scanorama for {batch_correction_key}...") if verbose else None
-            hvgs = list(self.matrix.var_names[self.matrix.var['highly_variable']])
-            self.matrix = scanorama(self.matrix, batch_key=batch_correction_key, hvg=hvgs, verbose=False, **kwargs)
+            hvgs = list(self.cells.matrix.var_names[self.cells.matrix.var['highly_variable']])
+            self.cells.matrix = scanorama(self.cells.matrix, batch_key=batch_correction_key, hvg=hvgs, verbose=False, **kwargs)
 
             # find neighbors
-            sc.pp.neighbors(self.matrix, use_rep="X_scanorama")
-            sc.tl.umap(self.matrix)
-            sc.tl.tsne(self.matrix, use_rep="X_scanorama")
+            sc.pp.neighbors(self.cells.matrix, use_rep="X_scanorama")
+            sc.tl.umap(self.cells.matrix)
+            sc.tl.tsne(self.cells.matrix, use_rep="X_scanorama")
 
         # clustering
         print("Leiden clustering...") if verbose else None
-        sc.tl.leiden(self.matrix)
+        sc.tl.leiden(self.cells.matrix)
 
 
     def register_images(self,
@@ -1095,6 +1095,9 @@ class XeniumData:
                     del imreg_complete, imreg_selected, image, template, nuclei_img
                 gc.collect()
 
+        # read images
+        self.read_images()
+
     def save(self,
             path: Union[str, os.PathLike, Path],
             overwrite: bool = False,
@@ -1188,7 +1191,7 @@ class XeniumData:
             # mtx_path = cells_path / "matrix"
             # mtx_path.mkdir(parents=True, exist_ok=True) # create directory
             # mtx_file = mtx_path / "matrix.h5ad"
-            # self.matrix.write(mtx_file)
+            # self.cells.matrix.write(mtx_file)
             # metadata["matrix"] = Path(relpath(mtx_file, path)).as_posix()
             
         # save transcripts
@@ -1226,10 +1229,13 @@ class XeniumData:
                 metadata["annotations"][n] = Path(relpath(annot_file, path)).as_posix()
                 
             # save AnnotationData metadata
-            annot_meta_json = json.dumps(self.annotations.metadata, indent=4)
+            annot_meta_path = annot_path / "annotations_metadata.json"
+            write_dict_to_json(dictionary=self.annotations.metadata, file=annot_meta_path)
             
-            with open(annot_path / "annotations_metadata.json", "w") as annot_metafile:
-                annot_metafile.write(annot_meta_json)
+            # annot_meta_json = json.dumps(self.annotations.metadata, indent=4)
+            
+            # with open(annot_path / "annotations_metadata.json", "w") as annot_metafile:
+            #     annot_metafile.write(annot_meta_json)
                 
         # save version of InSituPy
         metadata["version"] = __version__

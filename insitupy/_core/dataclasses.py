@@ -356,10 +356,10 @@ class CellData(DeepCopyMixin):
         '''
         
         # move origin again to 0 by subtracting the lower limits from the coordinates
-        cell_coords = self.cells.matrix.obsm['spatial'].copy()
+        cell_coords = self.matrix.obsm['spatial'].copy()
         cell_coords[:, 0] += x
         cell_coords[:, 1] += y
-        self.cells.matrix.obsm['spatial'] = cell_coords
+        self.matrix.obsm['spatial'] = cell_coords
         
         try:
             boundaries = self.boundaries
