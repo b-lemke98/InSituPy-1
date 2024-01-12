@@ -6,6 +6,7 @@ from . import image as im
 from . import utils
 from ._core.dataclasses import AnnotationData, BoundariesData, ImageData
 from ._core.xeniumdata import XeniumData
+from . import datasets as ds
 
 __all__ = [
     "XeniumData",
