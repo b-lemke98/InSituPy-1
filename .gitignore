@@ -141,3 +141,5 @@ dmypy.json
 *.out
 out/
 demo_dataset/
+
+.DS_Store
