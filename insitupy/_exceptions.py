@@ -1,3 +1,5 @@
+from .utils.utils import convert_to_list
+
 class ModuleNotFoundOnWindows(ModuleNotFoundError):
     '''
     Code from https://github.com/theislab/scib/blob/main/scib/exceptions.py
@@ -137,3 +139,12 @@ class ModalityNotFoundError(Exception):
                  ):
         self.message = f"No `{modality}` modality found."
         super().__init__(self.message)
+        
+class InvalidFileTypeError(Exception):
+    def __init__(self, allowed_types, received_type, message=None):
+        allowed_types = convert_to_list(allowed_types)
+        if message is None:
+            message = f"Invalid file type. Allowed file types: {', '.join(allowed_types)}. Received: {received_type}"
+        self.message = message
+        super().__init__(self.message)
+        

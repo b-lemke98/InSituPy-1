@@ -1,21 +1,28 @@
 import os
+from copy import deepcopy
+from os.path import relpath
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import geopandas as gpd
 import pandas as pd
 import xmltodict
+from anndata import AnnData
 from parse import *
 from shapely import Polygon
 from tifffile import TiffFile, imread
 
+from insitupy import __version__
+
+from .._exceptions import InvalidFileTypeError
 from ..utils.geo import parse_geopandas
-from ..utils.read import load_pyramid
+from ..utils.io import check_overwrite, load_pyramid, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
+from ._mixins import DeepCopyMixin
 
 
-class AnnotationData:
+class AnnotationData(DeepCopyMixin):
     '''
     Object to store annotations.
     '''
@@ -35,12 +42,6 @@ class AnnotationData:
             
     def __repr__(self):
         if len(self.metadata) > 0:
-            # repr_strings = [f"{tf.Bold}{a}:{tf.ResetAll}\t{b} annotations, {len(c)} classes {*c,} {d}" for a,b,c,d in zip(self.labels, 
-            #                                                                                         self.n_annotations, 
-            #                                                                                         self.classes,
-            #                                                                                         self.analyzed
-            #                                                                                         )]
-            
             repr_strings = [
                 f'{tf.Bold}{l}:{tf.ResetAll}\t{m["n_annotations"]} annotations, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
                 ]
@@ -111,8 +112,263 @@ class AnnotationData:
             if verbose:
                 # report
                 print(f"Added {new_n - old_n} new annotations to {existing_str}label '{label}'")
+
+class BoundariesData(DeepCopyMixin):
+    '''
+    Object to read and load boundaries of cells and nuclei.
+    '''
+    def __init__(self,
+                pixel_size: Union[float, int]
+                ):
+        self.pixel_size = pixel_size
+        self.labels = []
+        
+    def __repr__(self):
+        if len(self.labels) == 0:
+            repr = f"Empty BoundariesData object"
+        else:
+            repr = f"BoundariesData object with {len(self.labels)} entries:"
+            for l in self.labels:
+                repr += f"\n{tf.SPACER+tf.Bold+l+tf.ResetAll}"
+        return repr
+    
+    def read_boundaries(self,
+        files: Union[str, os.PathLike, Path, List],
+        labels: Optional[Union[str, List[str]]] = None,
+    ):
+        
+        # generate dataframes
+        dataframes = {}
+        for n, f in zip(labels, files):
+            # check the file suffix
+            if not f.suffix == ".parquet":
+                InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
             
-class ImageData:
+            # load dataframe
+            df = pd.read_parquet(f)
+
+            # decode columns
+            df = df.apply(lambda x: decode_robust_series(x), axis=0)
+
+            # convert coordinates into pixel coordinates
+            coord_cols = ["vertex_x", "vertex_y"]
+            df[coord_cols] = df[coord_cols].apply(lambda x: x / self.pixel_size)
+            dataframes[n] = df
+            
+        # add dictionary with boundaries to BoundariesData object
+        self.add_boundaries(dataframes=dataframes)
+        
+    def add_boundaries(self,
+                       dataframes: Optional[Union[dict, List[str]]] = None,
+                       labels: Optional[List[str]] = [],
+                       overwrite: bool = False
+                       ):
+        if dataframes is not None:
+            if isinstance(dataframes, dict):
+                # extract keys from dictionary
+                labels = dataframes.keys()
+                dataframes = dataframes.values()
+            elif isinstance(dataframes, list):
+                if labels is None:
+                    raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
+            else:
+                raise ValueError(f"Argument 'dataframes' has unknown file type ({type(dataframes)}). Expected to be a list or dictionary.")
+            
+            for l, df in zip(labels, dataframes):
+                if l not in self.labels or overwrite:
+                    # add to object
+                    setattr(self, l, df)
+                    self.labels.append(l)
+                else:
+                    raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
+                
+    def crop(self,
+             cell_ids: List[str],
+             xlim: Tuple[int, int],
+             ylim: Tuple[int, int]
+             ):
+        '''
+        Crop the BoundariesData object.
+        '''
+        # make sure cell ids are a list
+        cell_ids = convert_to_list(cell_ids)
+        
+        for n in ["cells", "nuclei"]:
+            # get dataframe
+            df = getattr(self, n)
+            
+            # filter dataframe
+            df.loc[df["cell_id"].isin(cell_ids), :]
+            
+            # re-center to 0
+            df["vertex_x"] -= xlim[0]
+            df["vertex_y"] -= ylim[0]
+            
+            # add to object
+            setattr(self, n, df)
+            
+                
+    def convert_to_shapely_objects(self):
+        for n in self.labels:
+            print(f"Converting `{n}` to GeoPandas DataFrame with shapely objects.")
+            # retrief dataframe with boundary coordinates
+            df = getattr(self, n)
+            
+            # convert xy coordinates into shapely Point objects
+            df["geometry"] = gpd.points_from_xy(df["vertex_x"], df["vertex_y"])
+            del df["vertex_x"], df["vertex_y"]
+
+            # convert points into polygon objects per cell id
+            df = df.groupby("cell_id")['geometry'].apply(lambda x: Polygon(x.tolist()))
+            df.index = decode_robust_series(df.index)  # convert byte strings in index
+            
+            # add to object
+            setattr(self, n, pd.DataFrame(df))
+
+class CellData(DeepCopyMixin):
+    '''
+    Data object containing an AnnData object and a boundary object which are kept in sync.
+    '''
+    def __init__(self, 
+               matrix: AnnData,
+               boundaries: Optional[BoundariesData],
+               pixel_size: Union[float, int] = 1
+               ):
+        self.matrix = matrix
+        self.pixel_size = pixel_size
+        
+        if boundaries is not None:
+            self.boundaries = boundaries
+            self.entries = ["matrix", "boundaries"]
+        else:
+            self.boundaries = None
+            self.entries = ["matrix"]
+    
+    def __repr__(self):
+        repr = (
+            f"{tf.Bold+'matrix'+tf.ResetAll}\n"
+            f"{tf.SPACER+self.matrix.__repr__()}"
+        )
+        
+        if self.boundaries is not None:
+            bound_repr = self.boundaries.__repr__()
+            
+            repr += f"\n{tf.Bold+'boundaries'+tf.ResetAll}\n" + tf.SPACER + bound_repr.replace("\n", f"\n{tf.SPACER}")
+        return repr
+    
+    def copy(self):
+        '''
+        Function to generate a deep copy of the current object.
+        '''
+        
+        return deepcopy(self)
+    
+    def save(self, 
+             path: Union[str, os.PathLike, Path],
+             overwrite: bool = False
+             ):
+        
+        path = Path(path)
+        metadata = {}
+        
+        # check if the output file should be overwritten
+        check_overwrite(path, overwrite=overwrite)
+        
+        # create path for matrix
+        mtx_path = path / "matrix"
+        mtx_path.mkdir(parents=True, exist_ok=True) # create directory
+        
+        # write matrix to file
+        mtx_file = mtx_path / "matrix.h5ad"
+        self.matrix.write(mtx_file)
+        metadata["matrix"] = Path(relpath(mtx_file, path)).as_posix()
+        
+        # save boundaries
+        try:
+            boundaries = self.boundaries
+        except AttributeError:
+            pass
+        else:
+            bound_path = (path / "boundaries")
+            bound_path.mkdir(parents=True, exist_ok=True) # create directory
+            
+            metadata["boundaries"] = {}
+            for n in ["cellular", "nuclear"]:
+                bound_df = getattr(boundaries, n)
+                bound_file = bound_path / f"{n}.parquet"
+                bound_df.to_parquet(bound_file)
+                metadata["boundaries"][n] = Path(relpath(bound_file, path)).as_posix()
+                
+        # add more things to metadata
+        metadata["pixel_size"] = self.pixel_size
+        metadata["version"] = __version__
+        
+        # save metadata
+        write_dict_to_json(dictionary=metadata, file=path / ".celldata")
+            
+    
+    def sync_cell_ids(self):
+        '''
+        Function to synchronize matrix and boundaries of CellData.
+        
+        Procedure:
+        1. Select matrix cell IDs
+        2. Check if all matrix cell IDs are in boundaries
+            - if not all are in boundaries, throw error saying that those will also be removed
+        3. Select only matrix cell IDs which are also in boundaries and filter for them
+        '''
+        # get cell IDs from matrix
+        cell_ids = self.matrix.obs_names
+        
+        try:
+            boundaries = self.boundaries
+        except AttributeError:
+            print('No `boundaries` attribute found in CellData found.')
+            pass
+        else:
+            for n in ["cellular", "nuclear"]:
+                # get dataframe
+                df = getattr(boundaries, n)
+                
+                # filter dataframe
+                df.loc[df["cell_id"].isin(cell_ids), :]
+                
+                # add to object
+                setattr(self.boundaries, n, df)
+            
+    def shift(self, 
+              x: Union[int, float], 
+              y: Union[int, float]
+              ):
+        '''
+        Function to shift the coordinates of both matrix and boundaries data by certain values x/y.
+        '''
+        
+        # move origin again to 0 by subtracting the lower limits from the coordinates
+        cell_coords = self.matrix.obsm['spatial'].copy()
+        cell_coords[:, 0] += x
+        cell_coords[:, 1] += y
+        self.matrix.obsm['spatial'] = cell_coords
+        
+        try:
+            boundaries = self.boundaries
+        except AttributeError:
+            print('No `boundaries` attribute found in CellData found.')
+            pass
+        else:
+            for n in ["cellular", "nuclear"]:
+                # get dataframe
+                df = getattr(boundaries, n)
+                
+                # re-center to 0
+                df["vertex_x"] += x
+                df["vertex_y"] += y
+                
+                # add to object
+                setattr(self.boundaries, n, df)
+        
+    
+class ImageData(DeepCopyMixin):
     '''
     Object to read and load images.
     '''
@@ -220,80 +476,3 @@ class ImageData:
             # add cropped pyramid to object
             setattr(self, n, cropped_pyramid)
         
-            
-class BoundariesData:
-    '''
-    Object to read and load boundaries of cells and nuclei.
-    '''
-    def __init__(self, 
-                 path: Union[str, os.PathLike, Path],
-                 files: List[Union[str, os.PathLike, Path]],
-                 labels: List[str],
-                 pixel_size: Optional[float] = None
-                 ):
-        for n, f in zip(labels, files):
-            # generate paths
-            filepath = Path(os.path.normpath(path / f))
-            
-            # load dataframe
-            bounddf = pd.read_parquet(filepath)
-            
-            # decode columns
-            bounddf = bounddf.apply(lambda x: decode_robust_series(x), axis=0)
-            
-            if pixel_size is not None:
-                # convert coordinates into pixel coordinates
-                coord_cols = ["vertex_x", "vertex_y"]
-                bounddf[coord_cols] = bounddf[coord_cols].apply(lambda x: x / pixel_size)
-                            
-            # add to object
-            setattr(self, n, bounddf)
-        
-    def __repr__(self):
-        repr_strings = [f"{tf.Bold+a+tf.ResetAll}" for a in ["cells", "nuclei"]]
-        s = "\n".join(repr_strings)
-        repr = f"{tf.Purple+tf.Bold}boundaries{tf.ResetAll}\n{s}"
-        return repr
-    
-    def sync_to_matrix(self,
-                       cell_ids: List[str],
-                       xlim: Tuple[int, int],
-                       ylim: Tuple[int, int]
-                       ):
-        '''
-        Synchronize the BoundariesData object to match the cells in self.matrix.
-        '''
-        # make sure cell ids are a list
-        cell_ids = convert_to_list(cell_ids)
-        
-        for n in ["cells", "nuclei"]:
-            # get dataframe
-            df = getattr(self, n)
-            
-            # filter dataframe
-            df.loc[df["cell_id"].isin(cell_ids), :]
-            
-            # re-center to 0
-            df["vertex_x"] -= xlim[0]
-            df["vertex_y"] -= ylim[0]
-            
-            # add to object
-            setattr(self, n, df)
-            
-                
-    def convert_to_geopandas(self):
-        for n in ["cells", "nuclei"]:
-            print(f"Converting `{n}` to GeoPandas DataFrame with shapely objects.")
-            # retrief dataframe with boundary coordinates
-            df = getattr(self, n)
-            
-            # convert xy coordinates into shapely Point objects
-            df["geometry"] = gpd.points_from_xy(df["vertex_x"], df["vertex_y"])
-            del df["vertex_x"], df["vertex_y"]
-
-            # convert points into polygon objects per cell id
-            df = df.groupby("cell_id")['geometry'].apply(lambda x: Polygon(x.tolist()))
-            df.index = decode_robust_series(df.index)  # convert byte strings in index
-            
-            # add to object
-            setattr(self, n, pd.DataFrame(df))
