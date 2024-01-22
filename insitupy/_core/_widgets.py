@@ -1,7 +1,8 @@
-from typing import Tuple
+from typing import Tuple, List
 
 import napari
 import numpy as np
+import pandas as pd
 from anndata import AnnData
 from magicgui import magic_factory, magicgui
 from magicgui.widgets import FunctionGui
@@ -13,16 +14,21 @@ from ..utils.palettes import CustomPalettes
 
 
 def _create_points_layer(points, 
-                         color_value, 
+                         color_values, 
                          name, 
-                         pixel_size,
-                         size_factor: int = 30,
+                         point_size: int = 6, # is in scale unit (so mostly µm)
                          opacity: float = 1,
                          visible: bool = True,
                          edge_width: float = 0
                          ) -> LayerDataTuple:
+    
+    # remove entries with NaN
+    mask = pd.notnull(color_values)
+    color_values = color_values[mask]
+    points = points[mask]
+
     # check if the data should be plotted categorical or continous
-    if is_numeric_dtype(color_value):
+    if is_numeric_dtype(color_values):
         categorical = False # if the data is numeric it should be plotted continous
     else:
         categorical = True # if the data is not numeric it should be plotted categorically
@@ -38,16 +44,16 @@ def _create_points_layer(points,
         color_mode = "colormap"
         color_map = "viridis"
         color_cycle = None
-        climits = [0, np.percentile(color_value, 95)]
+        climits = [0, np.percentile(color_values, 95)]
     
     # generate point layer
     layer = (
         points, 
         {
             'name': name,
-            'properties': {"color_value": color_value},
+            'properties': {"color_value": color_values},
             'symbol': 'o',
-            'size': size_factor * pixel_size,
+            'size': point_size,
             'face_color': {
                 "color_mode": color_mode, # workaround (see https://github.com/napari/napari/issues/6433)
                 "colors": "color_value"
@@ -65,15 +71,15 @@ def _create_points_layer(points,
 
 def _initialize_point_widgets(
     adata: AnnData,
-    pixel_size: float
-    ) -> Tuple[FunctionGui, FunctionGui]:
+    viewer: napari.Viewer
+    ) -> List[FunctionGui]:
         
     # get available genes
     genes = adata.var_names.tolist()
     obses = adata.obs.columns.tolist()
     
     # get point coordinates
-    points = np.flip(adata.obsm["spatial"].copy(), axis=1) * pixel_size # switch x and y (napari uses [row,column])
+    points = np.flip(adata.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
     
     # get expression matrix
     if issparse(adata.X):
@@ -82,44 +88,55 @@ def _initialize_point_widgets(
         X = adata.X
     
     @magicgui(
-            call_button='Add',
-            gene={'choices': genes},
-            )
-    def add_genes(gene=None) -> napari.types.LayerDataTuple:
-        # get expression values
-        geneid = adata.var_names.get_loc(gene)
-        color_value = X[:, geneid]
-        
-        # create points layer
-        layer = _create_points_layer(
-            points=points,
-            color_value=color_value,
-            name=gene,
-            pixel_size=pixel_size,
-            size_factor=30
-        )
-        
-        return layer
-    
-    @magicgui(
         call_button='Add',
-        observation={'choices': obses}
+        gene={'choices': genes, 'label': "Gene:"},
+        observation={'choices': obses, 'label': "Observation:"},
+        size={'label': 'Size [µm]'}
         )
-    def add_observations(observation=None) -> napari.types.LayerDataTuple:
-        # get observation values
-        color_value = adata.obs[observation].values
-        # create points layer
-        layer = _create_points_layer(
-            points=points,
-            color_value=color_value,
-            name=observation,
-            pixel_size=pixel_size,
-            size_factor=30
-        )
+    def add_points_widget(
+        gene=None,
+        observation=None,
+        size=6,
+        viewer=viewer
+        ) -> napari.types.LayerDataTuple:
         
-        return layer
+        layers = []
+        if gene is not None:
+            if gene not in viewer.layers:
+                # get expression values
+                geneid = adata.var_names.get_loc(gene)
+                color_value_gene = X[:, geneid]
+            
+                # create points layer for genes
+                gene_layer = _create_points_layer(
+                    points=points,
+                    color_values=color_value_gene,
+                    name=gene,
+                    point_size=size
+                )
+                layers.append(gene_layer)
+            else:
+                print(f"Key '{gene}' already in layer list.")
+        
+        if (observation is not None):
+            if observation not in viewer.layers:
+                # get observation values
+                color_value_obs = adata.obs[observation].values                
+                
+                # create points layer for observations
+                obs_layer = _create_points_layer(
+                    points=points,
+                    color_values=color_value_obs,
+                    name=observation,
+                    point_size=size,
+                )
+                layers.append(obs_layer)
+            else:
+                print(f"Key '{observation}' already in layer list.")
+                    
+        return layers
     
-    return add_genes, add_observations
+    return add_points_widget #add_genes, add_observations
 
 # def initialize_annotation_widget(
 #     ) -> FunctionGui:

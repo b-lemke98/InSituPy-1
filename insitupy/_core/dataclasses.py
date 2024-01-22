@@ -9,7 +9,7 @@ import pandas as pd
 import xmltodict
 from anndata import AnnData
 from parse import *
-from shapely import Polygon
+from shapely import Polygon, affinity
 from tifffile import TiffFile, imread
 
 from insitupy import __version__
@@ -28,7 +28,8 @@ class AnnotationData(DeepCopyMixin):
     '''
     def __init__(self,
                  annot_files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
-                 annot_labels: Optional[List[str]] = None
+                 annot_labels: Optional[List[str]] = None,
+                 pixel_size: float = 1
                  ) -> None:
         self.metadata = {}
         # self.n_annotations = []
@@ -38,7 +39,7 @@ class AnnotationData(DeepCopyMixin):
         if annot_files is not None:
             for label, file in zip(annot_labels, annot_files):
                 # read annotation and store in dictionary
-                self.add_annotation(data=file, label=label)
+                self.add_annotation(data=file, label=label, pixel_size=pixel_size)
             
     def __repr__(self):
         if len(self.metadata) > 0:
@@ -69,10 +70,14 @@ class AnnotationData(DeepCopyMixin):
                        data: Union[gpd.GeoDataFrame, pd.DataFrame, dict, 
                                    str, os.PathLike, Path],
                        label: str,
+                       pixel_size: Optional[float] = 1,
                        verbose: bool = False
                        ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
+        
+        # convert pixel coordinates to metric units
+        new_df["geometry"] = new_df.geometry.scale(origin=(0,0), xfact=pixel_size, yfact=pixel_size)
 
         if not hasattr(self, label):
             # if label does not exist yet the new df is the whole annotation dataframe
@@ -117,10 +122,7 @@ class BoundariesData(DeepCopyMixin):
     '''
     Object to read and load boundaries of cells and nuclei.
     '''
-    def __init__(self,
-                pixel_size: Union[float, int]
-                ):
-        self.pixel_size = pixel_size
+    def __init__(self):
         self.labels = []
         
     def __repr__(self):
@@ -150,9 +152,7 @@ class BoundariesData(DeepCopyMixin):
             # decode columns
             df = df.apply(lambda x: decode_robust_series(x), axis=0)
 
-            # convert coordinates into pixel coordinates
-            coord_cols = ["vertex_x", "vertex_y"]
-            df[coord_cols] = df[coord_cols].apply(lambda x: x / self.pixel_size)
+            # collect dataframe
             dataframes[n] = df
             
         # add dictionary with boundaries to BoundariesData object
@@ -232,10 +232,8 @@ class CellData(DeepCopyMixin):
     def __init__(self, 
                matrix: AnnData,
                boundaries: Optional[BoundariesData],
-               pixel_size: Union[float, int] = 1
                ):
         self.matrix = matrix
-        self.pixel_size = pixel_size
         
         if boundaries is not None:
             self.boundaries = boundaries
@@ -375,7 +373,8 @@ class ImageData(DeepCopyMixin):
     def __init__(self, 
                  path: Union[str, os.PathLike, Path], 
                  img_files: List[str], 
-                 img_names: List[str], 
+                 img_names: List[str],
+                 pixel_size: float,
                  ):
         # convert arguments to lists
         img_files = convert_to_list(img_files)
@@ -420,9 +419,12 @@ class ImageData(DeepCopyMixin):
             if self.metadata[n]["rgb"]:
                 self.metadata[n]["contrast_limits"] = (0, 255)
             else:
-                self.metadata[n]["contrast_limits"] = (0, int(pyramid[0].max()))                
+                self.metadata[n]["contrast_limits"] = (0, int(pyramid[0].max()))
+                
+            # add universal pixel size to metadata
+            self.metadata[n]['pixel_size'] = pixel_size
+                
         
-            
     def __repr__(self):
         repr_strings = [f"{tf.Bold}{n}:{tf.ResetAll}\t{metadata['shape']}" for n,metadata in self.metadata.items()]
         s = "\n".join(repr_strings)
@@ -447,18 +449,22 @@ class ImageData(DeepCopyMixin):
     def crop(self,
              xlim: Tuple[int, int],
              ylim: Tuple[int, int]
-             ):
+             ):        
+        # extract names from metadata
         names = list(self.metadata.keys())
         for n in names:
             # extract the image pyramid
             pyramid = getattr(self, n)
             
+            # extract pixel size
+            pixel_size = self.metadata[n]['pixel_size']
+            
             # get scale factors between the different pyramid levels
             scale_factors = [1] + [pyramid[i].shape[0] / pyramid[i+1].shape[0] for i in range(len(pyramid)-1)]
             
             cropped_pyramid = []
-            xlim_scaled = xlim
-            ylim_scaled = ylim
+            xlim_scaled = (xlim[0] / pixel_size, xlim[1] / pixel_size) # convert to metric unit
+            ylim_scaled = (ylim[0] / pixel_size, ylim[1] / pixel_size) # convert to metric unit
             for img, sf in zip(pyramid, scale_factors):
                 # do cropping while taking the scale factor into account
                 # scale the x and y limits
@@ -468,7 +474,7 @@ class ImageData(DeepCopyMixin):
                 # do the cropping
                 cropped_pyramid.append(img[ylim_scaled[0]:ylim_scaled[1], xlim_scaled[0]:xlim_scaled[1]])
                 
-            # save cropping in metadata
+            # save cropping properties in metadata
             self.metadata[n]["cropping_xlim"] = xlim
             self.metadata[n]["cropping_ylim"] = ylim
             self.metadata[n]["shape"] = cropped_pyramid[0].shape

@@ -49,9 +49,7 @@ from .dataclasses import AnnotationData, BoundariesData, CellData, ImageData
 
 
 def _read_boundaries_from_xenium(
-    path: Union[str, os.PathLike, Path],
-    pixel_size: [float, int]
-    ):        
+    path: Union[str, os.PathLike, Path]):        
     # # read boundaries data
     path = Path(path)
     files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"]
@@ -61,7 +59,7 @@ def _read_boundaries_from_xenium(
     files = [path / f for f in files]
     
     # read boundaries
-    boundaries = BoundariesData(pixel_size=pixel_size)
+    boundaries = BoundariesData()
     boundaries.read_boundaries(files=files, labels=labels)
     
     return boundaries
@@ -69,7 +67,6 @@ def _read_boundaries_from_xenium(
 
 def _read_matrix_from_xenium(path, metadata):
     # extract parameters from metadata
-    pixel_size = metadata["pixel_size"]
     cf_zarr_path = path / metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
     cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
 
@@ -98,7 +95,7 @@ def _read_matrix_from_xenium(path, metadata):
     # transfer coordinates to .obsm
     coord_cols = ["x_centroid", "y_centroid"]
     adata.obsm["spatial"] = adata.obs[coord_cols].values
-    adata.obsm["spatial"] /= pixel_size
+    adata.obsm["spatial"]
     adata.obs.drop(coord_cols, axis=1, inplace=True)
     
     return adata
@@ -117,11 +114,11 @@ def read_celldata(
     labels = convert_to_list(celldata_metadata["boundaries"].keys())
     files = [path / f for f in convert_to_list(celldata_metadata["boundaries"].values())]
     
-    boundaries = BoundariesData(pixel_size=celldata_metadata["pixel_size"])
+    boundaries = BoundariesData()
     boundaries.read_boundaries(files=files, labels=labels)
     
     # create CellData object
-    celldata = CellData(matrix=matrix, boundaries=boundaries, pixel_size=celldata_metadata["pixel_size"])
+    celldata = CellData(matrix=matrix, boundaries=boundaries)
     
     return celldata
 
@@ -381,6 +378,7 @@ class XeniumData:
             
             # select the shape from list
             crop_window = crop_shape.data[0]
+            crop_window *= self.metadata["pixel_size"] # convert to metric unit (normally µm)
             
             # extract x and y limits from the shape (assuming a rectangle)
             xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
@@ -637,7 +635,7 @@ class XeniumData:
                         files.append(file)
             
         print("Reading annotations...", flush=True)
-        self.annotations = AnnotationData(annot_files=files, annot_labels=labels)
+        self.annotations = AnnotationData(annot_files=files, annot_labels=labels, pixel_size=self.metadata['pixel_size'])
         
         if self.from_xeniumdata:
             # read saved metadata
@@ -659,8 +657,8 @@ class XeniumData:
             self.cells = read_celldata(path=self.path / cells_path)
         else:
             matrix = matrix = _read_matrix_from_xenium(path=self.path, metadata=self.metadata)
-            boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=self.metadata["pixel_size"])
-            self.cells = CellData(matrix=matrix, boundaries=boundaries, pixel_size=self.metadata["pixel_size"])
+            boundaries = _read_boundaries_from_xenium(path=self.path)
+            self.cells = CellData(matrix=matrix, boundaries=boundaries)
 
     def read_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
@@ -701,7 +699,7 @@ class XeniumData:
             
         # load image into ImageData object
         print("Reading images...", flush=True)
-        self.images = ImageData(self.path, img_files, img_names)
+        self.images = ImageData(self.path, img_files, img_names, pixel_size=self.metadata['pixel_size'])
 
     def read_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
@@ -722,9 +720,6 @@ class XeniumData:
             # decode columns
             self.transcripts = self.transcripts.apply(lambda x: decode_robust_series(x), axis=0)
             
-            # convert coordinates into pixel coordinates
-            coord_cols = ["x_location", "y_location", "z_location"]
-            self.transcripts[coord_cols] = self.transcripts[coord_cols].apply(lambda x: x / self.metadata["pixel_size"])
 
     def reduce_dimensions(self,
                         umap: bool = True, 
@@ -1145,13 +1140,14 @@ class XeniumData:
         annotation_labels: Optional[str] = None,
         show_images: bool = True,
         show_cells: bool = False,
+        point_size: int = 6,
         scalebar: bool = True,
         pixel_size: float = None, # if none, extract from metadata
         unit: str = "µm",
         cmap_annotations: str ="Dark2",
         grayscale_colormap: List[str] = ["red", "green", "cyan", "magenta", "yellow", "gray"],
         return_viewer: bool = False,
-        widgets_max_width: int = 170
+        widgets_max_width: int = 200
         ):
         # get information about pixel size
         if (pixel_size is None) & (scalebar):
@@ -1211,7 +1207,7 @@ class XeniumData:
                 
                 # get point coordinates
                 points = np.flip(cells.matrix.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
-                points *= pixel_size # convert to length unit (e.g. µm)
+                #points *= pixel_size # convert to length unit (e.g. µm)
             
                 # get expression matrix
                 if issparse(cells.matrix.X):
@@ -1232,10 +1228,9 @@ class XeniumData:
                     # create points layer
                     layer = _create_points_layer(
                         points=points,
-                        color_value=color_value,
+                        color_values=color_value,
                         name=k,
-                        pixel_size=pixel_size,
-                        size_factor=30,
+                        point_size=point_size,
                         visible=pvis
                     )
                     
@@ -1288,7 +1283,7 @@ class XeniumData:
                             # in shapely objects, leading sometimes to visualization bugs in napari
                             exterior_array = np.array([p.exterior.coords.xy[1].tolist()[:-1],
                                                     p.exterior.coords.xy[0].tolist()[:-1]]).T
-                            exterior_array *= pixel_size # convert to length unit
+                            #exterior_array *= pixel_size # convert to length unit
                             shape_list.append(exterior_array)  # collect shape
                             color_list.append(hexcolor)  # collect corresponding color
                             uid_list.append(uid)  # collect corresponding unique id
@@ -1301,7 +1296,7 @@ class XeniumData:
                                     if isinstance(linear_ring, LinearRing):
                                         interior_array = np.array([linear_ring.coords.xy[1].tolist()[:-1],
                                                                 linear_ring.coords.xy[0].tolist()[:-1]]).T
-                                        interior_array *= pixel_size # convert to length unit
+                                        #interior_array *= pixel_size # convert to length unit
                                         shape_list.append(interior_array)  # collect shape
                                         color_list.append(hexcolor)  # collect corresponding color
                                         uid_list.append(uid)  # collect corresponding unique id
@@ -1328,23 +1323,17 @@ class XeniumData:
             pass
         else:
             # initialize the widgets
-            add_genes, add_observations = _initialize_point_widgets(
-                adata=cells.matrix,
-                pixel_size=pixel_size
+            add_points_widget = _initialize_point_widgets(
+                adata=cells.matrix, viewer=self.viewer
                 )
             
-            # set maximum height of widget to prevent the widget from having a large distance
-            add_genes.max_height = 100
-            add_observations.max_height = 100
-            add_genes.max_width = widgets_max_width
-            add_observations.max_width = widgets_max_width
+            add_points_widget.max_height = 150
+            add_points_widget.max_width = widgets_max_width
             
             # add widgets to napari window
-            self.viewer.window.add_dock_widget(add_genes, name="Genes", area="right")
-            self.viewer.window.add_dock_widget(add_observations, name="Observations", area="right")
+            self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
         
         # add annotation widget to napari
-        #annotation_widget = initialize_annotation_widget()
         annot_widget = _annotation_widget()
         annot_widget.max_height = 100
         annot_widget.max_width = widgets_max_width
@@ -1410,7 +1399,6 @@ class XeniumData:
         except AttributeError as e:
             print(f"{str(e)}. Use `.show()` first to open a napari viewer.")
             
-        # extract pixel_size
         # iterate through layers and save them as annotation if they meet requirements
         layers = viewer.layers
         collection_dict = {}
@@ -1432,7 +1420,7 @@ class XeniumData:
                     colors = layer.edge_color.tolist()
                     
                     # scale coordinates
-                    shapes = [elem / self.metadata["pixel_size"] for elem in shapes]
+                    #shapes = [elem / self.metadata["pixel_size"] for elem in shapes]
                     
                     # build annotation GeoDataFrame
                     annot_df = {
