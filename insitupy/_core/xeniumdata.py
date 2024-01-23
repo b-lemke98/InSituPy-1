@@ -1323,15 +1323,19 @@ class XeniumData:
             pass
         else:
             # initialize the widgets
-            add_points_widget = _initialize_point_widgets(
+            add_points_widget, locate_cells_widget = _initialize_point_widgets(
                 adata=cells.matrix, viewer=self.viewer
                 )
             
+            # set layout of widgets
             add_points_widget.max_height = 150
             add_points_widget.max_width = widgets_max_width
+            locate_cells_widget.max_height = 150
+            locate_cells_widget.max_width = widgets_max_width
             
             # add widgets to napari window
             self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
+            self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate", area="right")
         
         # add annotation widget to napari
         annot_widget = _annotation_widget()

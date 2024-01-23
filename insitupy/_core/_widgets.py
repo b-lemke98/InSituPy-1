@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 import napari
 import numpy as np
@@ -19,7 +19,8 @@ def _create_points_layer(points,
                          point_size: int = 6, # is in scale unit (so mostly µm)
                          opacity: float = 1,
                          visible: bool = True,
-                         edge_width: float = 0
+                         edge_width: float = 0,
+                         edge_color: str = 'red'
                          ) -> LayerDataTuple:
     
     # remove entries with NaN
@@ -63,7 +64,8 @@ def _create_points_layer(points,
             'face_contrast_limits': climits,
             'opacity': opacity,
             'visible': visible,
-            'edge_width': edge_width
+            'edge_width': edge_width,
+            'edge_color': edge_color
             }, 
         'points'
         )
@@ -73,10 +75,6 @@ def _initialize_point_widgets(
     adata: AnnData,
     viewer: napari.Viewer
     ) -> List[FunctionGui]:
-        
-    # get available genes
-    genes = adata.var_names.tolist()
-    obses = adata.obs.columns.tolist()
     
     # get point coordinates
     points = np.flip(adata.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
@@ -89,8 +87,8 @@ def _initialize_point_widgets(
     
     @magicgui(
         call_button='Add',
-        gene={'choices': genes, 'label': "Gene:"},
-        observation={'choices': obses, 'label': "Observation:"},
+        gene={'choices': adata.var_names.tolist(), 'label': "Gene:"},
+        observation={'choices': adata.obs.columns.tolist(), 'label': "Observation:"},
         size={'label': 'Size [µm]'}
         )
     def add_points_widget(
@@ -104,8 +102,8 @@ def _initialize_point_widgets(
         if gene is not None:
             if gene not in viewer.layers:
                 # get expression values
-                geneid = adata.var_names.get_loc(gene)
-                color_value_gene = X[:, geneid]
+                gene_loc = adata.var_names.get_loc(gene)
+                color_value_gene = X[:, gene_loc]
             
                 # create points layer for genes
                 gene_layer = _create_points_layer(
@@ -136,7 +134,42 @@ def _initialize_point_widgets(
                     
         return layers
     
-    return add_points_widget #add_genes, add_observations
+    @magicgui(
+        call_button='Go!',
+        cell={'label': "Cells:"},
+        zoom={'label': 'Zoom:'},
+        highlight={'label': 'Highlight'}
+        )
+    def locate_cells_widget(
+        cell="",
+        zoom=5,
+        highlight=True,
+        viewer=viewer
+    ) -> Optional[napari.types.LayerDataTuple]:
+        if cell in adata.obs_names.astype(str):
+            # get location of selected cell
+            cell_loc = adata.obs_names.get_loc(cell)
+            cell_position = points[cell_loc]
+        
+            # move center of camera to cell position
+            viewer.camera.center = (0, cell_position[0], cell_position[1])
+            viewer.camera.zoom = zoom
+            
+            if highlight:
+                viewer.add_points(
+                    data=np.array([cell_position]),
+                    name=f"cell-{cell}",
+                    size=6,
+                    face_color=[0,0,0,0],
+                    opacity=1,
+                    edge_color='red',
+                    edge_width=0.1
+                )
+        else:
+            print(f"Cell '{cell}' not found in `xeniumdata.cells.matrix.obs_names()`.")
+        
+    
+    return add_points_widget, locate_cells_widget #add_genes, add_observations
 
 # def initialize_annotation_widget(
 #     ) -> FunctionGui:
