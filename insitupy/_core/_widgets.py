@@ -1,11 +1,13 @@
 from typing import Tuple, List, Optional
 
+import matplotlib
 import napari
 import numpy as np
 import pandas as pd
 from anndata import AnnData
 from magicgui import magic_factory, magicgui
 from magicgui.widgets import FunctionGui
+from matplotlib.colors import rgb2hex
 from napari.types import LayerDataTuple
 from pandas.api.types import is_numeric_dtype
 from scipy.sparse import issparse
@@ -82,6 +84,9 @@ def _initialize_point_widgets(
     
     # get point coordinates
     points = np.flip(adata.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
+    
+    # get colormap for regions
+    cmap = matplotlib.colormaps["tab10"]
     
     # get expression matrix
     if issparse(adata.X):
@@ -180,7 +185,7 @@ def _initialize_point_widgets(
         pass
     
     # extract region keys
-    region_keys = xdata.regions.metadata.keys()
+    region_keys = list(xdata.regions.metadata.keys())
     first_region_key = list(region_keys)[0] # for dropdown menu
     first_regions = xdata.regions.metadata[first_region_key]['classes']
     
@@ -192,39 +197,63 @@ def _initialize_point_widgets(
     def move_to_region_widget(
         key, region
         ):
-        # get geopandas dataframe with regions
-        reg_df = getattr(xdata.regions, key)
+        layer_name = f"region-{key}"
         
-        # iterate through shapes and collect them as list
-        shapes_list = []
-        uids_list = []
-        for uid, row in reg_df.iterrows():
-            # get coordinates
-            polygon = row["geometry"]
+        if layer_name not in viewer.layers:
+            # get geopandas dataframe with regions
+            reg_df = getattr(xdata.regions, key)
             
-            if isinstance(polygon, MultiPolygon):
-                raise TypeError("Region is a shapely 'MultiPolygon'. This is not supported in regions. Make sure to only have simple polygons as regions.")
+            # iterate through shapes and collect them as list
+            shapes_list = []
+            uids_list = []
+            names_list = []
+            for uid, row in reg_df.iterrows():
+                # get coordinates
+                polygon = row["geometry"]
+                
+                if isinstance(polygon, MultiPolygon):
+                    raise TypeError("Region is a shapely 'MultiPolygon'. This is not supported in regions. Make sure to only have simple polygons as regions.")
+                
+                # extract exterior coordinates from shapely object
+                # Note: the last coordinate is removed since it is identical with the first
+                # in shapely objects, leading sometimes to visualization bugs in napari
+                exterior_array = np.array([polygon.exterior.coords.xy[1].tolist()[:-1],
+                                        polygon.exterior.coords.xy[0].tolist()[:-1]]).T
+                
+                # collect data
+                shapes_list.append(exterior_array)
+                uids_list.append(uid)
+                names_list.append(row["name"])
+                
+            # determine hexcolor for this region key
+            hexcolor = rgb2hex([elem / 255 for elem in cmap(region_keys.index(key))])
+            hexcolor = rgb2hex(cmap(region_keys.index(key)))
             
-            # extract exterior coordinates from shapely object
-            # Note: the last coordinate is removed since it is identical with the first
-            # in shapely objects, leading sometimes to visualization bugs in napari
-            exterior_array = np.array([polygon.exterior.coords.xy[1].tolist()[:-1],
-                                    polygon.exterior.coords.xy[0].tolist()[:-1]]).T
-            shapes_list.append(exterior_array)
-            uids_list.append(uid)
-        
-        viewer.add_shapes(
-            shapes_list,
-            name=f"region-{key}",
-            properties={
-                'uid': uids_list
-            },
-            shape_type="polygon",
-            edge_width=10,
-            face_color='transparent'
-            )
+            text = {
+                'string': '{name}',
+                'anchor': 'upper_left',
+                #'translation': [-5, 0],
+                'size': 8,
+                'color': hexcolor,
+                }
             
-        print(key + region)
+            viewer.add_shapes(
+                shapes_list,
+                name=layer_name,
+                properties={
+                    'uid': uids_list,
+                    'name': names_list
+                },
+                shape_type="polygon",
+                edge_width=10,
+                edge_color=hexcolor,
+                face_color='transparent',
+                text=text
+                )
+            
+            # restore original configuration of dropdown lists
+            move_to_region_widget.key.value = first_region_key
+            move_to_region_widget.region.choices = first_regions
     
     @move_to_region_widget.key.changed.connect
     def update_region_on_key_change(event=None):
