@@ -27,8 +27,8 @@ class AnnotationData(DeepCopyMixin):
     Object to store annotations.
     '''
     def __init__(self,
-                 annot_files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
-                 annot_labels: Optional[List[str]] = None,
+                 files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
+                 labels: Optional[List[str]] = None,
                  pixel_size: float = 1
                  ) -> None:
         self.metadata = {}
@@ -36,8 +36,8 @@ class AnnotationData(DeepCopyMixin):
         # self.classes = []
         # self.analyzed = []
         
-        if annot_files is not None:
-            for label, file in zip(annot_labels, annot_files):
+        if files is not None:
+            for label, file in zip(labels, files):
                 # read annotation and store in dictionary
                 self.add_annotation(data=file, label=label, pixel_size=pixel_size)
             
@@ -117,6 +117,20 @@ class AnnotationData(DeepCopyMixin):
             if verbose:
                 # report
                 print(f"Added {new_n - old_n} new annotations to {existing_str}label '{label}'")
+                
+class RegionsData(AnnotationData):
+    def __repr__(self):
+        if len(self.metadata) > 0:
+            repr_strings = [
+                f'{tf.Bold}{l}:{tf.ResetAll}\t{m["n_annotations"]} regions {m["analyzed"]}' for l, m in self.metadata.items()
+                ]
+            
+            s = "\n".join(repr_strings)
+        else:
+            s = ""
+        repr = f"{tf.Yellow+tf.Bold}regions{tf.ResetAll}\n{s}"
+        return repr
+
 
 class BoundariesData(DeepCopyMixin):
     '''

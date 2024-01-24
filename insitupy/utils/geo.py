@@ -52,12 +52,16 @@ def read_qupath_geojson(file: Union[str, os.PathLike, Path]) -> pd.DataFrame:
     # Read the GeoJSON file into a GeoDataFrame
     dataframe = geopandas.read_file(file)
 
-    # Flatten the "classification" column into separate "name" and "color" columns
-    dataframe["name"] = [elem["name"] for elem in dataframe["classification"]]
-    dataframe["color"] = [elem["color"] for elem in dataframe["classification"]]
+    # annotation geojsons contain a classification column where each entry is a dict with name and color of the annotation
+    if "classification" in dataframe.columns:
+        # Flatten the "classification" column into separate "name" and "color" columns
+        dataframe["name"] = [elem["name"] for elem in dataframe["classification"]]
+        dataframe["color"] = [elem["color"] for elem in dataframe["classification"]]
 
-    # Remove the redundant "classification" column
-    dataframe = dataframe.drop(["classification"], axis=1)
+        # Remove the redundant "classification" column
+        dataframe = dataframe.drop(["classification"], axis=1)
+        
+    # Exported TMA cores instead contain the columns 'name' and 'isMissing'. These we just leave.
 
     # Return the transformed DataFrame
     return dataframe

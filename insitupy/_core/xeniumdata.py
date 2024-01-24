@@ -45,7 +45,7 @@ from ._checks import check_raw
 from ._scanorama import scanorama
 from ._widgets import (_annotation_widget, _create_points_layer,
                        _initialize_point_widgets)
-from .dataclasses import AnnotationData, BoundariesData, CellData, ImageData
+from .dataclasses import AnnotationData, BoundariesData, CellData, ImageData, RegionsData
 
 
 def _read_boundaries_from_xenium(
@@ -202,7 +202,6 @@ class XeniumData:
         if hasattr(self, "images"):
             images_repr = self.images.__repr__()
             repr = (
-                #repr + f"\n{tf.Bold}Images:{tf.ResetAll} "
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + images_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
                         
@@ -211,12 +210,6 @@ class XeniumData:
             repr = (
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} cells{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
-            
-        # if hasattr(self, "matrix"):
-        #     matrix_repr = self.cells.matrix.__repr__()
-        #     repr = (
-        #         repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} matrix{tf.ResetAll}\n{tf.SPACER}   " + matrix_repr.replace("\n", "\n\t   ")
-        #     )
         
         if hasattr(self, "transcripts"):
             trans_repr = f"DataFrame with shape {self.transcripts.shape[0]} x {self.transcripts.shape[1]}"
@@ -225,17 +218,16 @@ class XeniumData:
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Purple+tf.Bold} transcripts{tf.ResetAll}\n{tf.SPACER}   " + trans_repr
             )
             
-        # if hasattr(self, "boundaries"):
-        #     bound_repr = self.boundaries.__repr__()
-        #     repr = (
-        #         #repr + f"\n{tf.Bold}Images:{tf.ResetAll} "
-        #         repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + bound_repr.replace("\n", f"\n{tf.SPACER}   ")
-        #     )
-            
         if hasattr(self, "annotations"):
             annot_repr = self.annotations.__repr__()
             repr = (
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + annot_repr.replace("\n", f"\n{tf.SPACER}   ")
+            )
+    
+        if hasattr(self, "regions"):
+            region_repr = self.regions.__repr__()
+            repr = (
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + region_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
         return repr
 
@@ -265,7 +257,7 @@ class XeniumData:
         assert hasattr(self, "annotations"), "No .annotations attribute available. Run `read_annotations()`."
         
         if annotation_labels == "all":
-            annotation_labels = self.annotations.metadata.keys()
+            annotation_labels = self.regions.metadata.keys()
             
         # make sure annotation labels are a list
         annotation_labels = convert_to_list(annotation_labels)
@@ -277,7 +269,7 @@ class XeniumData:
         for annotation_label in annotation_labels:
             print(f"Assigning label '{annotation_label}'...")
             # extract pandas dataframe of current label
-            annot = getattr(self.annotations, annotation_label)
+            annot = getattr(self.regions, annotation_label)
             
             # get unique list of annotation names
             annot_names = annot.name.unique()
@@ -313,7 +305,7 @@ class XeniumData:
                 self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df.iloc[:, -1], left_index=True, right_index=True)
                 
             # save that the current label was analyzed
-            self.annotations.metadata[annotation_label]["analyzed"] = tf.TICK
+            self.regions.metadata[annotation_label]["analyzed"] = tf.TICK
         
     def copy(self):
         '''
@@ -430,8 +422,8 @@ class XeniumData:
             limit_poly = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
             
             new_metadata = {}
-            for i, n in enumerate(_self.annotations.metadata.keys()):
-                annotdf = getattr(_self.annotations, n)
+            for i, n in enumerate(_self.regions.metadata.keys()):
+                annotdf = getattr(_self.regions, n)
                 
                 # select annotations that intersect with the selected area
                 mask = [limit_poly.intersects(elem) for elem in annotdf["geometry"]]
@@ -441,15 +433,15 @@ class XeniumData:
                 annotdf["geometry"] = annotdf["geometry"].apply(affinity.translate, xoff=-xlim[0], yoff=-ylim[0])
                 
                 # add new dataframe back to annotations object
-                setattr(_self.annotations, n, annotdf)
+                setattr(_self.regions, n, annotdf)
                 
                 # update metadata
                 new_metadata[n] = {}
                 new_metadata[n]["n_annotations"] = len(annotdf)
                 new_metadata[n]["classes"] = annotdf.name.unique().tolist()
-                new_metadata[n]["analyzed"] = _self.annotations.metadata[n]["analyzed"]  # analyzed information is just copied
+                new_metadata[n]["analyzed"] = _self.regions.metadata[n]["analyzed"]  # analyzed information is just copied
             
-            _self.annotations.metadata = new_metadata
+            _self.regions.metadata = new_metadata
                 
         # add information about cropping to metadata
         _self.metadata["cropping_xlim"] = xlim
@@ -599,12 +591,12 @@ class XeniumData:
                 print(err)
 
     def read_annotations(self,
-                    annotation_dir: Union[str, os.PathLike, Path] = None, # "../annotations",
+                    annotations_dir: Union[str, os.PathLike, Path] = None, # "../annotations",
                     suffix: str = ".geojson",
-                    pattern_annotation_file: str = "annotation-{slide_id}__{sample_id}__{name}"
+                    pattern_annotations_file: str = "annotations-{slide_id}__{sample_id}__{name}"
                     ):
         if self.from_xeniumdata:
-            # check if matrix data is stored in this XeniumData
+            # check if annotations data is stored in this XeniumData
             if "annotations" not in self.xd_metadata:
                 raise ModalityNotFoundError(modality="annotations")
             
@@ -613,37 +605,84 @@ class XeniumData:
             files = [self.path / self.xd_metadata["annotations"][n] for n in labels]
             
         else:
-            if annotation_dir is None:
+            if annotations_dir is None:
                 raise ModalityNotFoundError(modality="annotations")
             else:
                 # convert to Path
-                annotation_dir = Path(annotation_dir)
+                annotations_dir = Path(annotations_dir)
                 
                 # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
-                if not annotation_dir.is_dir():
-                    annotation_dir = Path(os.path.normpath(self.path / annotation_dir))
-                    if not annotation_dir.is_dir():
-                        raise FileNotFoundError(f"`annot_path` {annotation_dir} is neither a direct path nor a relative path.")
+                if not annotations_dir.is_dir():
+                    annotations_dir = Path(os.path.normpath(self.path / annotations_dir))
+                    if not annotations_dir.is_dir():
+                        raise FileNotFoundError(f"`annotations_dir` {annotations_dir} is neither a direct path nor a relative path.")
                 
                 # get list annotation files that match the current slide id and sample id
                 files = []
                 labels = []
-                for file in annotation_dir.glob(f"*{suffix}"):
+                for file in annotations_dir.glob(f"*{suffix}"):
                     if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
-                        parsed = parse(pattern_annotation_file, file.stem)
+                        parsed = parse(pattern_annotations_file, file.stem)
                         labels.append(parsed.named["name"])
                         files.append(file)
             
         print("Reading annotations...", flush=True)
-        self.annotations = AnnotationData(annot_files=files, annot_labels=labels, pixel_size=self.metadata['pixel_size'])
+        self.annotations = AnnotationData(files=files, labels=labels, pixel_size=self.metadata['pixel_size'])
         
         if self.from_xeniumdata:
             # read saved metadata
             new_metadata = read_json(self.path / "annotations" / "annotations_metadata.json")
             
             # if keys in stored metadata fit to loaded metadata substitute use the stored metadata
-            if new_metadata.keys() == self.annotations.metadata.keys():
-                self.annotations.metadata = new_metadata
+            if new_metadata.keys() == self.regions.metadata.keys():
+                self.regions.metadata = new_metadata
+                
+    def read_regions(self,
+                    regions_dir: Union[str, os.PathLike, Path] = None, # "../regions",
+                    suffix: str = ".geojson",
+                    pattern_regions_file: str = "regions-{slide_id}__{sample_id}__{name}"
+                    ):
+        if self.from_xeniumdata:
+            # check if regions data is stored in this XeniumData
+            if "regions" not in self.xd_metadata:
+                raise ModalityNotFoundError(modality="regions")
+            
+            # get path and names of annotation files
+            labels = self.xd_metadata["regions"].keys()
+            files = [self.path / self.xd_metadata["regions"][n] for n in labels]
+            
+        else:
+            if regions_dir is None:
+                raise ModalityNotFoundError(modality="regions")
+            else:
+                # convert to Path
+                regions_dir = Path(regions_dir)
+                
+                # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
+                if not regions_dir.is_dir():
+                    regions_dir = Path(os.path.normpath(self.path / regions_dir))
+                    if not regions_dir.is_dir():
+                        raise FileNotFoundError(f"`regions_dir` {regions_dir} is neither a direct path nor a relative path.")
+                
+                # get list annotation files that match the current slide id and sample id
+                files = []
+                labels = []
+                for file in regions_dir.glob(f"*{suffix}"):
+                    if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
+                        parsed = parse(pattern_regions_file, file.stem)
+                        labels.append(parsed.named["name"])
+                        files.append(file)
+            
+        print("Reading regions...", flush=True)
+        self.regions = RegionsData(files=files, labels=labels, pixel_size=self.metadata['pixel_size'])
+        
+        if self.from_xeniumdata:
+            # read saved metadata
+            new_metadata = read_json(self.path / "regions" / "regions_metadata.json")
+            
+            # if keys in stored metadata fit to loaded metadata substitute use the stored metadata
+            if new_metadata.keys() == self.regions.metadata.keys():
+                self.regions.metadata = new_metadata
 
 
     def read_cells(self):
@@ -1106,8 +1145,8 @@ class XeniumData:
             annot_path.mkdir(parents=True, exist_ok=True) # create directory
             
             metadata["annotations"] = {}
-            for n in self.annotations.metadata.keys():
-                annot_df = getattr(self.annotations, n)
+            for n in self.regions.metadata.keys():
+                annot_df = getattr(self.regions, n)
                 # annot_file = annot_path / f"{n}.parquet"
                 # annot_df.to_parquet(annot_file)
                 annot_file = annot_path / f"{n}.geojson"
@@ -1116,7 +1155,7 @@ class XeniumData:
                 
             # save AnnotationData metadata
             annot_meta_path = annot_path / "annotations_metadata.json"
-            write_dict_to_json(dictionary=self.annotations.metadata, file=annot_meta_path)
+            write_dict_to_json(dictionary=self.regions.metadata, file=annot_meta_path)
                 
         # save version of InSituPy
         metadata["version"] = __version__
@@ -1245,10 +1284,10 @@ class XeniumData:
             cc_annot = cmap_annot.colors
             
             if annotation_labels == "all":
-                annotation_labels = self.annotations.metadata.keys()
+                annotation_labels = self.regions.metadata.keys()
             annotation_labels = convert_to_list(annotation_labels)
             for annotation_label in annotation_labels:
-                annot_df = getattr(self.annotations, annotation_label)
+                annot_df = getattr(self.regions, annotation_label)
                 
                 # get classes
                 classes = annot_df['name'].unique()
@@ -1264,7 +1303,7 @@ class XeniumData:
                     uid_list = []
                     type_list = [] # list to store whether the polygon is exterior or interior
                     for uid, row in class_df.iterrows():
-                        # get metadata
+                        # get coordinates
                         polygon = row["geometry"]
                         #uid = row["id"]
                         hexcolor = rgb2hex([elem / 255 for elem in row["color"]])
@@ -1323,19 +1362,20 @@ class XeniumData:
             pass
         else:
             # initialize the widgets
-            add_points_widget, locate_cells_widget = _initialize_point_widgets(
-                adata=cells.matrix, viewer=self.viewer
-                )
-            
-            # set layout of widgets
-            add_points_widget.max_height = 150
-            add_points_widget.max_width = widgets_max_width
-            locate_cells_widget.max_height = 150
-            locate_cells_widget.max_width = widgets_max_width
+            add_points_widget, locate_cells_widget, move_to_region_widget = _initialize_point_widgets(xdata=self)
             
             # add widgets to napari window
             self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
+            add_points_widget.max_height = 150
+            add_points_widget.max_width = widgets_max_width
+            
             self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate", area="right")
+            locate_cells_widget.max_height = 150
+            locate_cells_widget.max_width = widgets_max_width
+            
+            self.viewer.window.add_dock_widget(move_to_region_widget, name="Regions", area="right")
+            move_to_region_widget.max_height = 150
+            move_to_region_widget.max_width = widgets_max_width
         
         # add annotation widget to napari
         annot_widget = _annotation_widget()
@@ -1417,7 +1457,7 @@ class XeniumData:
                     
                     # if the XeniumData object does not has an annotations attribute, initialize it
                     if not hasattr(self, "annotations"):
-                        self.annotations = AnnotationData() # initialize empty object
+                        self.regions = AnnotationData() # initialize empty object
                     
                     # extract shapes coordinates and colors
                     shapes = layer.data
@@ -1439,5 +1479,5 @@ class XeniumData:
                     annot_df = GeoDataFrame(annot_df, geometry="geometry")
                     
                     # add annotations
-                    self.annotations.add_annotation(data=annot_df, label=annot_label, verbose=True)                       
+                    self.regions.add_annotation(data=annot_df, label=annot_label, verbose=True)                       
  

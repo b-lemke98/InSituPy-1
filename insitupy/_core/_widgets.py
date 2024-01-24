@@ -9,6 +9,7 @@ from magicgui.widgets import FunctionGui
 from napari.types import LayerDataTuple
 from pandas.api.types import is_numeric_dtype
 from scipy.sparse import issparse
+from shapely.geometry.multipolygon import MultiPolygon
 
 from ..utils.palettes import CustomPalettes
 
@@ -72,9 +73,12 @@ def _create_points_layer(points,
     return layer
 
 def _initialize_point_widgets(
-    adata: AnnData,
-    viewer: napari.Viewer
+    xdata # xenium data object
     ) -> List[FunctionGui]:
+    
+    # access adata and viewer from xeniumdata
+    adata = xdata.cells.matrix
+    viewer = xdata.viewer
     
     # get point coordinates
     points = np.flip(adata.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
@@ -135,16 +139,16 @@ def _initialize_point_widgets(
         return layers
     
     @magicgui(
-        call_button='Go!',
+        call_button='Show',
         cell={'label': "Cells:"},
         zoom={'label': 'Zoom:'},
         highlight={'label': 'Highlight'}
         )
-    def locate_cells_widget(
+    def move_to_cell_widget(
         cell="",
         zoom=5,
         highlight=True,
-        viewer=viewer
+        #viewer=viewer
     ) -> Optional[napari.types.LayerDataTuple]:
         if cell in adata.obs_names.astype(str):
             # get location of selected cell
@@ -156,20 +160,78 @@ def _initialize_point_widgets(
             viewer.camera.zoom = zoom
             
             if highlight:
-                viewer.add_points(
-                    data=np.array([cell_position]),
-                    name=f"cell-{cell}",
-                    size=6,
-                    face_color=[0,0,0,0],
-                    opacity=1,
-                    edge_color='red',
-                    edge_width=0.1
-                )
+                name = f"cell-{cell}"
+                if name not in viewer.layers:
+                    viewer.add_points(
+                        data=np.array([cell_position]),
+                        name=name,
+                        size=6,
+                        face_color=[0,0,0,0],
+                        opacity=1,
+                        edge_color='red',
+                        edge_width=0.1
+                    )
         else:
             print(f"Cell '{cell}' not found in `xeniumdata.cells.matrix.obs_names()`.")
+    
+    def _update_region_on_key_change(widget):
+        current_key = widget.key.value
+        widget.region.choices = sorted(xdata.regions.metadata[current_key]['classes'])
+        pass
+    
+    # extract region keys
+    region_keys = xdata.regions.metadata.keys()
+    first_region_key = list(region_keys)[0] # for dropdown menu
+    first_regions = xdata.regions.metadata[first_region_key]['classes']
+    
+    @magicgui(
+        call_button='Show',
+        key={"choices": region_keys, "label": "Key:"},
+        region={"choices": first_regions, "label": "Regions:"}
+    )
+    def move_to_region_widget(
+        key, region
+        ):
+        # get geopandas dataframe with regions
+        reg_df = getattr(xdata.regions, key)
+        
+        # iterate through shapes and collect them as list
+        shapes_list = []
+        uids_list = []
+        for uid, row in reg_df.iterrows():
+            # get coordinates
+            polygon = row["geometry"]
+            
+            if isinstance(polygon, MultiPolygon):
+                raise TypeError("Region is a shapely 'MultiPolygon'. This is not supported in regions. Make sure to only have simple polygons as regions.")
+            
+            # extract exterior coordinates from shapely object
+            # Note: the last coordinate is removed since it is identical with the first
+            # in shapely objects, leading sometimes to visualization bugs in napari
+            exterior_array = np.array([polygon.exterior.coords.xy[1].tolist()[:-1],
+                                    polygon.exterior.coords.xy[0].tolist()[:-1]]).T
+            shapes_list.append(exterior_array)
+            uids_list.append(uid)
+        
+        viewer.add_shapes(
+            shapes_list,
+            name=f"region-{key}",
+            properties={
+                'uid': uids_list
+            },
+            shape_type="polygon",
+            edge_width=10,
+            face_color='transparent'
+            )
+            
+        print(key + region)
+    
+    @move_to_region_widget.key.changed.connect
+    def update_region_on_key_change(event=None):
+        _update_region_on_key_change(move_to_region_widget)
         
     
-    return add_points_widget, locate_cells_widget #add_genes, add_observations
+    return add_points_widget, move_to_cell_widget, move_to_region_widget #add_genes, add_observations
 
 # def initialize_annotation_widget(
 #     ) -> FunctionGui:
@@ -186,9 +248,9 @@ def _initialize_point_widgets(
 #     return annotation_widget
 
 @magic_factory(
-        call_button='Add annotation layer',
-        annot_label={'label': 'Label:'},
-        class_name={'label': 'Class:'}
+    call_button='Add annotation layer',
+    annot_label={'label': 'Label:'},
+    class_name={'label': 'Class:'}
     )
 def _annotation_widget(
     annot_label: str = "",
