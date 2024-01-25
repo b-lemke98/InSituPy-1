@@ -257,7 +257,7 @@ class XeniumData:
         assert hasattr(self, "annotations"), "No .annotations attribute available. Run `read_annotations()`."
         
         if annotation_labels == "all":
-            annotation_labels = self.regions.metadata.keys()
+            annotation_labels = self.annotations.metadata.keys()
             
         # make sure annotation labels are a list
         annotation_labels = convert_to_list(annotation_labels)
@@ -269,7 +269,7 @@ class XeniumData:
         for annotation_label in annotation_labels:
             print(f"Assigning label '{annotation_label}'...")
             # extract pandas dataframe of current label
-            annot = getattr(self.regions, annotation_label)
+            annot = getattr(self.annotations, annotation_label)
             
             # get unique list of annotation names
             annot_names = annot.name.unique()
@@ -305,7 +305,7 @@ class XeniumData:
                 self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df.iloc[:, -1], left_index=True, right_index=True)
                 
             # save that the current label was analyzed
-            self.regions.metadata[annotation_label]["analyzed"] = tf.TICK
+            self.annotations.metadata[annotation_label]["analyzed"] = tf.TICK
         
     def copy(self):
         '''
@@ -422,8 +422,8 @@ class XeniumData:
             limit_poly = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
             
             new_metadata = {}
-            for i, n in enumerate(_self.regions.metadata.keys()):
-                annotdf = getattr(_self.regions, n)
+            for i, n in enumerate(_self.annotations.metadata.keys()):
+                annotdf = getattr(_self.annotations, n)
                 
                 # select annotations that intersect with the selected area
                 mask = [limit_poly.intersects(elem) for elem in annotdf["geometry"]]
@@ -433,15 +433,15 @@ class XeniumData:
                 annotdf["geometry"] = annotdf["geometry"].apply(affinity.translate, xoff=-xlim[0], yoff=-ylim[0])
                 
                 # add new dataframe back to annotations object
-                setattr(_self.regions, n, annotdf)
+                setattr(_self.annotations, n, annotdf)
                 
                 # update metadata
                 new_metadata[n] = {}
                 new_metadata[n]["n_annotations"] = len(annotdf)
                 new_metadata[n]["classes"] = annotdf.name.unique().tolist()
-                new_metadata[n]["analyzed"] = _self.regions.metadata[n]["analyzed"]  # analyzed information is just copied
+                new_metadata[n]["analyzed"] = _self.annotations.metadata[n]["analyzed"]  # analyzed information is just copied
             
-            _self.regions.metadata = new_metadata
+            _self.annotations.metadata = new_metadata
                 
         # add information about cropping to metadata
         _self.metadata["cropping_xlim"] = xlim
@@ -634,8 +634,8 @@ class XeniumData:
             new_metadata = read_json(self.path / "annotations" / "annotations_metadata.json")
             
             # if keys in stored metadata fit to loaded metadata substitute use the stored metadata
-            if new_metadata.keys() == self.regions.metadata.keys():
-                self.regions.metadata = new_metadata
+            if new_metadata.keys() == self.annotations.metadata.keys():
+                self.annotations.metadata = new_metadata
                 
     def read_regions(self,
                     regions_dir: Union[str, os.PathLike, Path] = None, # "../regions",
@@ -1145,8 +1145,8 @@ class XeniumData:
             annot_path.mkdir(parents=True, exist_ok=True) # create directory
             
             metadata["annotations"] = {}
-            for n in self.regions.metadata.keys():
-                annot_df = getattr(self.regions, n)
+            for n in self.annotations.metadata.keys():
+                annot_df = getattr(self.annotations, n)
                 # annot_file = annot_path / f"{n}.parquet"
                 # annot_df.to_parquet(annot_file)
                 annot_file = annot_path / f"{n}.geojson"
@@ -1155,7 +1155,7 @@ class XeniumData:
                 
             # save AnnotationData metadata
             annot_meta_path = annot_path / "annotations_metadata.json"
-            write_dict_to_json(dictionary=self.regions.metadata, file=annot_meta_path)
+            write_dict_to_json(dictionary=self.annotations.metadata, file=annot_meta_path)
                 
         # save version of InSituPy
         metadata["version"] = __version__
@@ -1284,10 +1284,10 @@ class XeniumData:
             cc_annot = cmap_annot.colors
             
             if annotation_labels == "all":
-                annotation_labels = self.regions.metadata.keys()
+                annotation_labels = self.annotations.metadata.keys()
             annotation_labels = convert_to_list(annotation_labels)
             for annotation_label in annotation_labels:
-                annot_df = getattr(self.regions, annotation_label)
+                annot_df = getattr(self.annotations, annotation_label)
                 
                 # get classes
                 classes = annot_df['name'].unique()
@@ -1362,7 +1362,7 @@ class XeniumData:
             pass
         else:
             # initialize the widgets
-            add_points_widget, locate_cells_widget, move_to_region_widget = _initialize_point_widgets(xdata=self)
+            add_points_widget, locate_cells_widget, add_region_widget = _initialize_point_widgets(xdata=self)
             
             # add widgets to napari window
             if add_points_widget is not None:
@@ -1375,10 +1375,10 @@ class XeniumData:
                 locate_cells_widget.max_height = 150
                 locate_cells_widget.max_width = widgets_max_width
             
-            if move_to_region_widget is not None:
-                self.viewer.window.add_dock_widget(move_to_region_widget, name="Regions", area="right")
-                move_to_region_widget.max_height = 150
-                move_to_region_widget.max_width = widgets_max_width
+            if add_region_widget is not None:
+                self.viewer.window.add_dock_widget(add_region_widget, name="Regions", area="right")
+                add_region_widget.max_height = 150
+                add_region_widget.max_width = widgets_max_width
         
         # add annotation widget to napari
         annot_widget = _annotation_widget()
@@ -1460,7 +1460,7 @@ class XeniumData:
                     
                     # if the XeniumData object does not has an annotations attribute, initialize it
                     if not hasattr(self, "annotations"):
-                        self.regions = AnnotationData() # initialize empty object
+                        self.annotations = AnnotationData() # initialize empty object
                     
                     # extract shapes coordinates and colors
                     shapes = layer.data
@@ -1482,5 +1482,5 @@ class XeniumData:
                     annot_df = GeoDataFrame(annot_df, geometry="geometry")
                     
                     # add annotations
-                    self.regions.add_annotation(data=annot_df, label=annot_label, verbose=True)                       
+                    self.annotations.add_annotation(data=annot_df, label=annot_label, verbose=True)                       
  
