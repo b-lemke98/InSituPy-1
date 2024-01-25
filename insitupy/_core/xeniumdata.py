@@ -1365,17 +1365,20 @@ class XeniumData:
             add_points_widget, locate_cells_widget, move_to_region_widget = _initialize_point_widgets(xdata=self)
             
             # add widgets to napari window
-            self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
-            add_points_widget.max_height = 150
-            add_points_widget.max_width = widgets_max_width
+            if add_points_widget is not None:
+                self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
+                add_points_widget.max_height = 150
+                add_points_widget.max_width = widgets_max_width
             
-            self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate", area="right")
-            locate_cells_widget.max_height = 150
-            locate_cells_widget.max_width = widgets_max_width
+            if locate_cells_widget is not None:
+                self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate", area="right")
+                locate_cells_widget.max_height = 150
+                locate_cells_widget.max_width = widgets_max_width
             
-            self.viewer.window.add_dock_widget(move_to_region_widget, name="Regions", area="right")
-            move_to_region_widget.max_height = 150
-            move_to_region_widget.max_width = widgets_max_width
+            if move_to_region_widget is not None:
+                self.viewer.window.add_dock_widget(move_to_region_widget, name="Regions", area="right")
+                move_to_region_widget.max_height = 150
+                move_to_region_widget.max_width = widgets_max_width
         
         # add annotation widget to napari
         annot_widget = _annotation_widget()
