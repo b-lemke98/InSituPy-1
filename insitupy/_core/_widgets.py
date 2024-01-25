@@ -12,8 +12,10 @@ from napari.types import LayerDataTuple
 from pandas.api.types import is_numeric_dtype
 from scipy.sparse import issparse
 from shapely.geometry.multipolygon import MultiPolygon
+from shapely.geometry.polygon import LinearRing, Polygon
 
 from ..utils.palettes import CustomPalettes
+from ..utils.utils import convert_to_list
 
 
 def _create_points_layer(points, 
@@ -185,7 +187,7 @@ def _initialize_point_widgets(
                 print(f"Cell '{cell}' not found in `xeniumdata.cells.matrix.obs_names()`.")
     
     if not hasattr(xdata, "regions"):
-        move_to_region_widget = None
+        add_region_widget = None
     else:
         # get colormap for regions
         cmap_regions = matplotlib.colormaps["tab10"]
@@ -198,15 +200,16 @@ def _initialize_point_widgets(
         # extract region keys
         region_keys = list(xdata.regions.metadata.keys())
         first_region_key = list(region_keys)[0] # for dropdown menu
-        first_regions = xdata.regions.metadata[first_region_key]['classes']
+        #first_regions = xdata.regions.metadata[first_region_key]['classes']
         
         @magicgui(
             call_button='Show',
             key={"choices": region_keys, "label": "Key:"},
-            region={"choices": first_regions, "label": "Regions:"}
+            #region={"choices": first_regions, "label": "Regions:"}
         )
-        def move_to_region_widget(
-            key, region
+        def add_region_widget(
+            key, 
+            # region
             ):
             layer_name = f"region-{key}"
             
@@ -263,44 +266,138 @@ def _initialize_point_widgets(
                     )
                 
                 # restore original configuration of dropdown lists
-                move_to_region_widget.key.value = first_region_key
-                move_to_region_widget.region.choices = first_regions
-        
-        @move_to_region_widget.key.changed.connect
+                #add_region_widget.key.value = first_region_key
+                #add_region_widget.region.choices = first_regions
+                
+        @add_region_widget.key.changed.connect
         def update_region_on_key_change(event=None):
-            _update_region_on_key_change(move_to_region_widget)
+            _update_region_on_key_change(add_region_widget)
+            
+    if not hasattr(xdata, "annotations"):
+        add_annotations_widget = None
+    else:
+        # get colorcycle for region annotations
+        cmap_annotations = "Dark2"
+        cmap_annot = matplotlib.colormaps[cmap_annotations]
+        cc_annot = cmap_annot.colors
+        
+        def _update_classes_on_key_change(widget):
+            current_key = widget.key.value
+            print(current_key)
+            widget.annot_class.choices = ["all"] + sorted(xdata.annotations.metadata[current_key]['classes'])
+        
+        # extract region keys
+        annot_keys = list(xdata.annotations.metadata.keys())
+        first_annot_key = list(annot_keys)[0] # for dropdown menu
+        first_classes = ["all"] + sorted(xdata.annotations.metadata[first_annot_key]['classes'])
+        
+        @magicgui(
+            call_button='Show',
+            key={"choices": annot_keys, "label": "Key:"},
+            annot_class={"choices": first_classes, "label": "Class:"}
+        )
+        def add_annotations_widget(key, annot_class):
+            
+            # get annotation dataframe
+            annot_df = getattr(xdata.annotations, key)
+            
+            if annot_class == "all":
+                # get classes
+                classes = annot_df['name'].unique()
+            else:
+                classes = [annot_class]
+            
+            # iterate through classes
+            for cl in classes:
+                
+                layer_name = f"*{cl} ({key})"
+                
+                if layer_name not in viewer.layers:
+                    # get dataframe for this class
+                    class_df = annot_df[annot_df["name"] == cl]
+                    
+                    # iterate through annotations of this class and collect them as list
+                    shape_list = []
+                    color_list = []
+                    uid_list = []
+                    type_list = [] # list to store whether the polygon is exterior or interior
+                    for uid, row in class_df.iterrows():
+                        # get coordinates
+                        polygon = row["geometry"]
+                        #uid = row["id"]
+                        hexcolor = rgb2hex([elem / 255 for elem in row["color"]])
+                        
+                        # check if polygon is a MultiPolygon or just a simple Polygon object
+                        if isinstance(polygon, MultiPolygon):
+                            poly_list = list(polygon.geoms)
+                        elif isinstance(polygon, Polygon):
+                            poly_list = [polygon]
+                        else:
+                            raise ValueError(f"Input must be a Polygon or MultiPolygon object. Received: {type(polygon)}")
+                        
+                        for p in poly_list:
+                            # extract exterior coordinates from shapely object
+                            # Note: the last coordinate is removed since it is identical with the first
+                            # in shapely objects, leading sometimes to visualization bugs in napari
+                            exterior_array = np.array([p.exterior.coords.xy[1].tolist()[:-1],
+                                                    p.exterior.coords.xy[0].tolist()[:-1]]).T
+                            #exterior_array *= pixel_size # convert to length unit
+                            shape_list.append(exterior_array)  # collect shape
+                            color_list.append(hexcolor)  # collect corresponding color
+                            uid_list.append(uid)  # collect corresponding unique id
+                            type_list.append("exterior")
+                            
+                            # if polygon has interiors, plot them as well
+                            # for information on donut-shaped polygons in napari see: https://forum.image.sc/t/is-it-possible-to-generate-doughnut-shapes-in-napari-shapes-layer/88834
+                            if len(p.interiors) > 0:
+                                for linear_ring in p.interiors:
+                                    if isinstance(linear_ring, LinearRing):
+                                        interior_array = np.array([linear_ring.coords.xy[1].tolist()[:-1],
+                                                                linear_ring.coords.xy[0].tolist()[:-1]]).T
+                                        #interior_array *= pixel_size # convert to length unit
+                                        shape_list.append(interior_array)  # collect shape
+                                        color_list.append(hexcolor)  # collect corresponding color
+                                        uid_list.append(uid)  # collect corresponding unique id
+                                        type_list.append("interior")
+                                    else:
+                                        ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
+                        
+                    viewer.add_shapes(shape_list, 
+                                    name=layer_name,
+                                    properties={
+                                        'uid': uid_list, # list with uids
+                                        'type': type_list # list giving information on whether the polygon is interior or exterior
+                                    },
+                                    shape_type='polygon', 
+                                    edge_width=10,
+                                    edge_color=color_list,
+                                    face_color='transparent'
+                                    )
+            
+        # connect key change with update function
+        @add_annotations_widget.key.changed.connect
+        def update_classes_on_key_change(event=None):
+            _update_classes_on_key_change(add_annotations_widget)
+        
         
     
-    return add_points_widget, move_to_cell_widget, move_to_region_widget #add_genes, add_observations
+    return add_points_widget, move_to_cell_widget, add_region_widget, add_annotations_widget #add_genes, add_observations
 
-# def initialize_annotation_widget(
-#     ) -> FunctionGui:
-#     @magicgui(
-#         call_button='Add annotation'
-#     )
-#     def annotation_widget(
-#         Label="test",
-#         Class="blubb"
-#     ):
-#         print(Label)
-#         print(Class)
-    
-#     return annotation_widget
 
 @magic_factory(
     call_button='Add annotation layer',
-    annot_label={'label': 'Label:'},
+    annot_key={'label': 'Key:'},
     class_name={'label': 'Class:'}
     )
 def _annotation_widget(
-    annot_label: str = "",
+    annot_key: str = "",
     class_name: str = ""
 ) -> napari.types.LayerDataTuple:
     # generate name
-    name_pattern: str = "*{class_name} ({annot_label})"
-    name = name_pattern.format(class_name=class_name, annot_label=annot_label)
+    name_pattern: str = "*{class_name} ({annot_key})"
+    name = name_pattern.format(class_name=class_name, annot_key=annot_key)
 
-    if (class_name != "") & (annot_label != ""):
+    if (class_name != "") & (annot_key != ""):
         # generate shapes layer for annotation
         layer = (
             [],
@@ -317,7 +414,6 @@ def _annotation_widget(
             'shapes'
             )
         
-        #annotation_widget.annot_label.value = ""
         _annotation_widget.class_name.value = ""
         
         return layer

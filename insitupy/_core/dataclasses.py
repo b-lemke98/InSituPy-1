@@ -28,7 +28,7 @@ class AnnotationData(DeepCopyMixin):
     '''
     def __init__(self,
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
-                 labels: Optional[List[str]] = None,
+                 keys: Optional[List[str]] = None,
                  pixel_size: float = 1
                  ) -> None:
         self.metadata = {}
@@ -37,9 +37,9 @@ class AnnotationData(DeepCopyMixin):
         # self.analyzed = []
         
         if files is not None:
-            for label, file in zip(labels, files):
+            for key, file in zip(keys, files):
                 # read annotation and store in dictionary
-                self.add_annotation(data=file, label=label, pixel_size=pixel_size)
+                self.add_annotation(data=file, key=key, pixel_size=pixel_size)
             
     def __repr__(self):
         if len(self.metadata) > 0:
@@ -54,22 +54,22 @@ class AnnotationData(DeepCopyMixin):
         return repr
     
     def _update_metadata(self, 
-                         label: str,
+                         key: str,
                          analyzed: bool
                          ):
         # retrieve dataframe
-        annot_df = getattr(self, label)
+        annot_df = getattr(self, key)
         
         # record metadata information
-        self.metadata[label]["n_annotations"] = len(annot_df)  # number of annotations
-        self.metadata[label]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
-        self.metadata[label]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
+        self.metadata[key]["n_annotations"] = len(annot_df)  # number of annotations
+        self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+        self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
         
             
     def add_annotation(self,
                        data: Union[gpd.GeoDataFrame, pd.DataFrame, dict, 
                                    str, os.PathLike, Path],
-                       label: str,
+                       key: str,
                        pixel_size: Optional[float] = 1,
                        verbose: bool = False
                        ):
@@ -79,12 +79,12 @@ class AnnotationData(DeepCopyMixin):
         # convert pixel coordinates to metric units
         new_df["geometry"] = new_df.geometry.scale(origin=(0,0), xfact=pixel_size, yfact=pixel_size)
 
-        if not hasattr(self, label):
-            # if label does not exist yet the new df is the whole annotation dataframe
+        if not hasattr(self, key):
+            # if key does not exist yet the new df is the whole annotation dataframe
             annot_df = new_df
         
             # add new entry to metadata
-            self.metadata[label] = {}
+            self.metadata[key] = {}
             
             # collect additional variables for reporting
             new_annotations_added = True # dataframe will be added later
@@ -93,7 +93,7 @@ class AnnotationData(DeepCopyMixin):
             new_n = len(annot_df)
         else:
             # concatenate the new and old dataframe
-            annot_df = getattr(self, label)
+            annot_df = getattr(self, key)
 
             # concatenate old and new annoation dataframe
             old_n = len(annot_df)
@@ -109,14 +109,14 @@ class AnnotationData(DeepCopyMixin):
                     
         if new_annotations_added:
             # add dataframe to AnnotationData object
-            setattr(self, label, annot_df)
+            setattr(self, key, annot_df)
             
             # update metadata
-            self._update_metadata(label=label, analyzed=False)
+            self._update_metadata(key=key, analyzed=False)
             
             if verbose:
                 # report
-                print(f"Added {new_n - old_n} new annotations to {existing_str}label '{label}'")
+                print(f"Added {new_n - old_n} new annotations to {existing_str}key '{key}'")
                 
 class RegionsData(AnnotationData):
     def __repr__(self):

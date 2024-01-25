@@ -245,7 +245,7 @@ class XeniumData:
             metafile.write(metadata_json)
 
     def assign_annotations(self, 
-                annotation_labels: str = "all",
+                annotation_key: str = "all",
                 add_annotation_masks: bool = False
                 ):
         '''
@@ -256,20 +256,20 @@ class XeniumData:
         assert hasattr(self, "cells"), "No .cells attribute available. Run `read_cells()`."
         assert hasattr(self, "annotations"), "No .annotations attribute available. Run `read_annotations()`."
         
-        if annotation_labels == "all":
-            annotation_labels = self.annotations.metadata.keys()
+        if annotation_key == "all":
+            annotation_key = self.annotations.metadata.keys()
             
-        # make sure annotation labels are a list
-        annotation_labels = convert_to_list(annotation_labels)
+        # make sure annotation keys are a list
+        annotation_key = convert_to_list(annotation_key)
         
         # convert coordinates into shapely Point objects
         points = [Point(elem) for elem in self.cells.matrix.obsm["spatial"]]
 
-        # iterate through annotation labels
-        for annotation_label in annotation_labels:
-            print(f"Assigning label '{annotation_label}'...")
-            # extract pandas dataframe of current label
-            annot = getattr(self.annotations, annotation_label)
+        # iterate through annotation keys
+        for annotation_key in annotation_key:
+            print(f"Assigning key '{annotation_key}'...")
+            # extract pandas dataframe of current key
+            annot = getattr(self.annotations, annotation_key)
             
             # get unique list of annotation names
             annot_names = annot.name.unique()
@@ -297,15 +297,15 @@ class XeniumData:
             df.index = self.cells.matrix.obs_names
             
             # create annotation from annotation masks
-            df[f"annotation-{annotation_label}"] = [" & ".join(annot_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
+            df[f"annotation-{annotation_key}"] = [" & ".join(annot_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
             
             if add_annotation_masks:
                 self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df, left_index=True, right_index=True)
             else:
                 self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df.iloc[:, -1], left_index=True, right_index=True)
                 
-            # save that the current label was analyzed
-            self.annotations.metadata[annotation_label]["analyzed"] = tf.TICK
+            # save that the current key was analyzed
+            self.annotations.metadata[annotation_key]["analyzed"] = tf.TICK
         
     def copy(self):
         '''
@@ -601,8 +601,8 @@ class XeniumData:
                 raise ModalityNotFoundError(modality="annotations")
             
             # get path and names of annotation files
-            labels = self.xd_metadata["annotations"].keys()
-            files = [self.path / self.xd_metadata["annotations"][n] for n in labels]
+            keys = self.xd_metadata["annotations"].keys()
+            files = [self.path / self.xd_metadata["annotations"][n] for n in keys]
             
         else:
             if annotations_dir is None:
@@ -619,15 +619,15 @@ class XeniumData:
                 
                 # get list annotation files that match the current slide id and sample id
                 files = []
-                labels = []
+                keys = []
                 for file in annotations_dir.glob(f"*{suffix}"):
                     if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
                         parsed = parse(pattern_annotations_file, file.stem)
-                        labels.append(parsed.named["name"])
+                        keys.append(parsed.named["name"])
                         files.append(file)
             
         print("Reading annotations...", flush=True)
-        self.annotations = AnnotationData(files=files, labels=labels, pixel_size=self.metadata['pixel_size'])
+        self.annotations = AnnotationData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
         
         if self.from_xeniumdata:
             # read saved metadata
@@ -648,8 +648,8 @@ class XeniumData:
                 raise ModalityNotFoundError(modality="regions")
             
             # get path and names of annotation files
-            labels = self.xd_metadata["regions"].keys()
-            files = [self.path / self.xd_metadata["regions"][n] for n in labels]
+            keys = self.xd_metadata["regions"].keys()
+            files = [self.path / self.xd_metadata["regions"][n] for n in keys]
             
         else:
             if regions_dir is None:
@@ -666,15 +666,15 @@ class XeniumData:
                 
                 # get list annotation files that match the current slide id and sample id
                 files = []
-                labels = []
+                keys = []
                 for file in regions_dir.glob(f"*{suffix}"):
                     if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
                         parsed = parse(pattern_regions_file, file.stem)
-                        labels.append(parsed.named["name"])
+                        keys.append(parsed.named["name"])
                         files.append(file)
             
         print("Reading regions...", flush=True)
-        self.regions = RegionsData(files=files, labels=labels, pixel_size=self.metadata['pixel_size'])
+        self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
         
         if self.from_xeniumdata:
             # read saved metadata
@@ -1176,7 +1176,7 @@ class XeniumData:
 
     def show(self,
         keys: Optional[str] = None,
-        annotation_labels: Optional[str] = None,
+        annotation_keys: Optional[str] = None,
         show_images: bool = True,
         show_cells: bool = False,
         point_size: int = 6,
@@ -1278,16 +1278,16 @@ class XeniumData:
                     self.viewer.add_layer(Layer.create(*layer))            
 
         # optionally add annotations
-        if annotation_labels is not None:        
+        if annotation_keys is not None:        
             # get colorcycle for region annotations
             cmap_annot = matplotlib.colormaps[cmap_annotations]
             cc_annot = cmap_annot.colors
             
-            if annotation_labels == "all":
-                annotation_labels = self.annotations.metadata.keys()
-            annotation_labels = convert_to_list(annotation_labels)
-            for annotation_label in annotation_labels:
-                annot_df = getattr(self.annotations, annotation_label)
+            if annotation_keys == "all":
+                annotation_keys = self.annotations.metadata.keys()
+            annotation_keys = convert_to_list(annotation_keys)
+            for annotation_key in annotation_keys:
+                annot_df = getattr(self.annotations, annotation_key)
                 
                 # get classes
                 classes = annot_df['name'].unique()
@@ -1344,7 +1344,7 @@ class XeniumData:
                                         ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
                         
                     self.viewer.add_shapes(shape_list, 
-                                    name=f"*{cl} ({annotation_label})",
+                                    name=f"*{cl} ({annotation_key})",
                                     properties={
                                         'uid': uid_list, # list with uids
                                         'type': type_list # list giving information on whether the polygon is interior or exterior
@@ -1362,7 +1362,7 @@ class XeniumData:
             pass
         else:
             # initialize the widgets
-            add_points_widget, locate_cells_widget, add_region_widget = _initialize_point_widgets(xdata=self)
+            add_points_widget, locate_cells_widget, add_region_widget, add_annotations_widget = _initialize_point_widgets(xdata=self)
             
             # add widgets to napari window
             if add_points_widget is not None:
@@ -1376,15 +1376,20 @@ class XeniumData:
                 locate_cells_widget.max_width = widgets_max_width
             
             if add_region_widget is not None:
-                self.viewer.window.add_dock_widget(add_region_widget, name="Regions", area="right")
+                self.viewer.window.add_dock_widget(add_region_widget, name="Show regions", area="right")
                 add_region_widget.max_height = 150
                 add_region_widget.max_width = widgets_max_width
+                
+            if add_annotations_widget is not None:
+                self.viewer.window.add_dock_widget(add_annotations_widget, name="Show annotations", area="right")
+                add_annotations_widget.max_height = 150
+                add_annotations_widget.max_width = widgets_max_width
         
         # add annotation widget to napari
         annot_widget = _annotation_widget()
         annot_widget.max_height = 100
         annot_widget.max_width = widgets_max_width
-        self.viewer.window.add_dock_widget(annot_widget, name="Annotations", area="right")
+        self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
         
         # EVENTS
         # Function assign to an layer addition event
@@ -1435,7 +1440,7 @@ class XeniumData:
             return self.viewer
     
     def store_annotations(self,
-                        name_pattern = "*{class_name} ({annot_label})",
+                        name_pattern = "*{class_name} ({annot_key})",
                         uid_col: str = "id"
                         ):
         '''
@@ -1455,7 +1460,7 @@ class XeniumData:
             else:
                 name_parsed = parse(name_pattern, layer.name)
                 if name_parsed is not None:
-                    annot_label = name_parsed.named["annot_label"]
+                    annot_key = name_parsed.named["annot_key"]
                     class_name = name_parsed.named["class_name"]
                     
                     # if the XeniumData object does not has an annotations attribute, initialize it
@@ -1482,5 +1487,5 @@ class XeniumData:
                     annot_df = GeoDataFrame(annot_df, geometry="geometry")
                     
                     # add annotations
-                    self.annotations.add_annotation(data=annot_df, label=annot_label, verbose=True)                       
+                    self.annotations.add_annotation(data=annot_df, key=annot_key, verbose=True)                       
  
