@@ -16,7 +16,7 @@ from insitupy import __version__
 
 from .._exceptions import InvalidFileTypeError
 from ..utils.geo import parse_geopandas
-from ..utils.io import check_overwrite, load_pyramid, write_dict_to_json
+from ..utils.io import check_overwrite_and_remove_if_true, load_pyramid, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._mixins import DeepCopyMixin
@@ -284,7 +284,7 @@ class CellData(DeepCopyMixin):
         metadata = {}
         
         # check if the output file should be overwritten
-        check_overwrite(path, overwrite=overwrite)
+        check_overwrite_and_remove_if_true(path, overwrite=overwrite)
         
         # create path for matrix
         mtx_path = path / "matrix"
@@ -312,7 +312,6 @@ class CellData(DeepCopyMixin):
                 metadata["boundaries"][n] = Path(relpath(bound_file, path)).as_posix()
                 
         # add more things to metadata
-        metadata["pixel_size"] = self.pixel_size
         metadata["version"] = __version__
         
         # save metadata

@@ -2,11 +2,10 @@ import functools as ft
 import gc
 import json
 import os
-import shutil
 import warnings
-from os.path import abspath, relpath
+from os.path import abspath
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 
 import matplotlib
@@ -16,33 +15,34 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
+import shutil
 from anndata import AnnData
 from dask_image.imread import imread
+from datetime import datetime
 from geopandas import GeoDataFrame
-from matplotlib.colors import rgb2hex
 from napari.layers import Layer, Shapes
 from napari.layers.shapes.shapes import Shapes
 from pandas.api.types import is_numeric_dtype
 from parse import *
 from scipy.sparse import csr_matrix, issparse
 from shapely import Point, Polygon, affinity
-from shapely.geometry.multipolygon import MultiPolygon
-from shapely.geometry.polygon import LinearRing, Polygon
+from shapely.geometry.polygon import Polygon
+from uuid import uuid4
 
-from insitupy import __version__
+from insitupy import __version__, __cache__
 
-from .._exceptions import (InvalidFileTypeError, ModalityNotFoundError,
+from .._exceptions import (ModalityNotFoundError,
                            NotOneElementError, UnknownOptionError,
                            WrongNapariLayerTypeError, XeniumDataMissingObject,
                            XeniumDataRepeatedCropError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
-from ..image.io import write_ome_tiff
-from ..utils.geo import write_qupath_geojson
-from ..utils.io import check_overwrite, read_json, write_dict_to_json
+from ..utils.io import check_overwrite_and_remove_if_true, read_json, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
-from ._checks import check_raw
+from ._checks import check_raw, check_zip
 from ._layers import _add_annotations_as_layer
+from ._save import (_save_images, _save_annotations, _save_cells, 
+                    _save_transcripts)
 from ._scanorama import scanorama
 from ._widgets import (_annotation_widget, _create_points_layer,
                        _initialize_point_widgets)
@@ -1069,19 +1069,19 @@ class XeniumData:
         path = Path(path)
         
         # check overwrite
-        check_overwrite(path=path, overwrite=overwrite)
-
-        # check if the output directory is going to be zipped or not
-        if path.suffix == ".zip":
-            zip_output = True
-            path = path.with_suffix("")
-        elif path.suffix == "":
-            zip_output = False
-        else:
-            raise ValueError(f"The specified output path ({path}) must be a valid directory or a zip file. It does not need to exist yet.")
+        check_overwrite_and_remove_if_true(path=path, overwrite=overwrite)
         
+        # check whether to save to zip
+        zip_output = check_zip(path=path)
+        
+        # remove zip if available
+        path_stem = path.parent / path.stem
+        
+        if zip_output:
+            check_overwrite_and_remove_if_true(path=path_stem, overwrite=overwrite)
+
         # create output directory if it does not exist yet
-        path.mkdir(parents=True, exist_ok=True)
+        path_stem.mkdir(parents=True, exist_ok=True)
         
         # create a metadata dictionary
         metadata = {}
@@ -1092,89 +1092,124 @@ class XeniumData:
         metadata["path"] = str(abspath(self.path))
         
         # save images
-        if hasattr(self, "images"):
-            img_path = (path / "images")
-            img_path.mkdir(parents=True, exist_ok=True) # create image directory
-            
-            metadata["images"] = {}
-            for n, img_metadata in self.images.metadata.items():
-                # extract image
-                img = getattr(self.images, n)[0]
-                
-                # get file name for saving
-                filename = Path(img_metadata["file"]).name
-                
-                # retrieve image metadata for saving
-                photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
-                axes = img_metadata['axes']
-                
-                # retrieve OME metadata
-                ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY", "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
-                pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
-                selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
-                
-                # write images as OME-TIFF
-                write_ome_tiff(img_path / filename, img, photometric=photometric, axes=axes, metadata=selected_metadata, overwrite=overwrite)
-                
-                # collect metadata
-                metadata["images"][n] = Path(relpath(img_path / filename, path)).as_posix()
-                
-        # save matrix
+        try:
+            images = self.images
+        except AttributeError:
+            pass
+        else:
+            _save_images(
+                imagedata=images,
+                path=path_stem,
+                metadata=metadata
+                )
+
+        # save cells
         try:
             cells = self.cells
         except AttributeError:
             pass
         else:
-            # create path for cells
-            cells_path = path / "cells"
-            
-            # save cells to path and write info to metadata
-            cells.save(cells_path)
-            metadata["cells"] = Path(relpath(cells_path, path)).as_posix()
+            _save_cells(
+                cells=cells,
+                path=path_stem,
+                metadata=metadata
+            )
             
         # save transcripts
-        if hasattr(self, "transcripts"):
-            trans_path = (path / "transcripts")
-            trans_path.mkdir(parents=True, exist_ok=True) # create directory
-            trans_file = trans_path / "transcripts.parquet"
-            self.transcripts.to_parquet(trans_file)
-            metadata["transcripts"] = Path(relpath(trans_file, path)).as_posix()
+        try:
+            transcripts = self.transcripts
+        except AttributeError:
+            pass
+        else:
+            _save_transcripts(
+                transcripts=transcripts,
+                path=path_stem,
+                metadata=metadata
+                )
                 
+        
         # save annotations
-        if hasattr(self, "annotations"):
-            annot_path = (path / "annotations")
-            annot_path.mkdir(parents=True, exist_ok=True) # create directory
-            
-            metadata["annotations"] = {}
-            for n in self.annotations.metadata.keys():
-                annot_df = getattr(self.annotations, n)
-                # annot_file = annot_path / f"{n}.parquet"
-                # annot_df.to_parquet(annot_file)
-                annot_file = annot_path / f"{n}.geojson"
-                write_qupath_geojson(dataframe=annot_df, file=annot_file)
-                metadata["annotations"][n] = Path(relpath(annot_file, path)).as_posix()
-                
-            # save AnnotationData metadata
-            annot_meta_path = annot_path / "annotations_metadata.json"
-            write_dict_to_json(dictionary=self.annotations.metadata, file=annot_meta_path)
-                
+        try:
+            annotations = self.annotations
+        except AttributeError:
+            pass
+        else:
+            _save_annotations(
+                annotations=annotations,
+                path=path_stem,
+                metadata=metadata
+            )
+
         # save version of InSituPy
         metadata["version"] = __version__
             
         # write Xeniumdata metadata to json file
-        xd_metadata_path = path / ".xeniumdata"
+        xd_metadata_path = path_stem / ".xeniumdata"
         write_dict_to_json(dictionary=metadata, file=xd_metadata_path)
             
         # write Xenium metadata to json file
-        metadata_path = path / "xenium.json"
+        metadata_path = path_stem / "xenium.json"
         write_dict_to_json(dictionary=self.metadata, file=metadata_path)
-            
+        
         # Optionally: zip the resulting directory
         if zip_output:
-            shutil.make_archive(path, 'zip', path, verbose=False)
+            shutil.make_archive(path_stem, 'zip', path_stem, verbose=False)
+            shutil.rmtree(path_stem) # delete directory
+
+    def quicksave(self):
+        # create quicksave directory if it does not exist already
+        quicksave_dir = __cache__ / "quicksaves"
+        quicksave_dir.mkdir(parents=True, exist_ok=True)
+        
+        # create filename
+        current_datetime = datetime.now().strftime("%y%m%d_%H-%M-%S")
+        slide_id = self.slide_id
+        sample_id = self.sample_id
+        uid = str(uuid4())[:8]
+
+        # create output directory
+        outname = f"{slide_id}__{sample_id}__{current_datetime}__{uid}"
+        outdir = quicksave_dir / outname
+        
+        # save annotations
+        try:
+            annotations = self.annotations
+        except AttributeError:
+            pass
+        else:
+            _save_annotations(
+                annotations=annotations,
+                path=outdir,
+                metadata=None
+            )
             
+        # # zip the output
+        shutil.make_archive(outdir, format='zip', root_dir=outdir, verbose=False)
+        shutil.rmtree(outdir) # delete directory
+            
+        
+    def list_quicksaves(self):
+        # create quicksave directory if it does not exist already
+        quicksave_dir = __cache__ / "quicksaves"
+        
+        pattern = "{slide_id}__{sample_id}__{savetime}__{uid}"
 
-
+        # collect results
+        res = {
+            "slide_id": [],
+            "sample_id": [],
+            "savetime": [],
+            "uid": []
+        }
+        for f in quicksave_dir.glob("*"):
+            parse_res = parse(pattern, f.stem).named
+            for key, value in parse_res.items():
+                res[key].append(value)
+            
+        # create and return dataframe
+        return pd.DataFrame(res)
+            
+            
     def show(self,
         keys: Optional[str] = None,
         annotation_keys: Optional[str] = None,
@@ -1308,64 +1343,6 @@ class XeniumData:
                             viewer=self.viewer,
                             layer_name=layer_name
                         )
-                    
-                    # # iterate through annotations of this class and collect them as list
-                    # shape_list = []
-                    # color_list = []
-                    # uid_list = []
-                    # type_list = [] # list to store whether the polygon is exterior or interior
-                    # for uid, row in class_df.iterrows():
-                    #     # get coordinates
-                    #     polygon = row["geometry"]
-                    #     #uid = row["id"]
-                    #     hexcolor = rgb2hex([elem / 255 for elem in row["color"]])
-                        
-                    #     # check if polygon is a MultiPolygon or just a simple Polygon object
-                    #     if isinstance(polygon, MultiPolygon):
-                    #         poly_list = list(polygon.geoms)
-                    #     elif isinstance(polygon, Polygon):
-                    #         poly_list = [polygon]
-                    #     else:
-                    #         raise ValueError(f"Input must be a Polygon or MultiPolygon object. Received: {type(polygon)}")
-                        
-                    #     for p in poly_list:
-                    #         # extract exterior coordinates from shapely object
-                    #         # Note: the last coordinate is removed since it is identical with the first
-                    #         # in shapely objects, leading sometimes to visualization bugs in napari
-                    #         exterior_array = np.array([p.exterior.coords.xy[1].tolist()[:-1],
-                    #                                 p.exterior.coords.xy[0].tolist()[:-1]]).T
-                    #         #exterior_array *= pixel_size # convert to length unit
-                    #         shape_list.append(exterior_array)  # collect shape
-                    #         color_list.append(hexcolor)  # collect corresponding color
-                    #         uid_list.append(uid)  # collect corresponding unique id
-                    #         type_list.append("exterior")
-                            
-                    #         # if polygon has interiors, plot them as well
-                    #         # for information on donut-shaped polygons in napari see: https://forum.image.sc/t/is-it-possible-to-generate-doughnut-shapes-in-napari-shapes-layer/88834
-                    #         if len(p.interiors) > 0:
-                    #             for linear_ring in p.interiors:
-                    #                 if isinstance(linear_ring, LinearRing):
-                    #                     interior_array = np.array([linear_ring.coords.xy[1].tolist()[:-1],
-                    #                                             linear_ring.coords.xy[0].tolist()[:-1]]).T
-                    #                     #interior_array *= pixel_size # convert to length unit
-                    #                     shape_list.append(interior_array)  # collect shape
-                    #                     color_list.append(hexcolor)  # collect corresponding color
-                    #                     uid_list.append(uid)  # collect corresponding unique id
-                    #                     type_list.append("interior")
-                    #                 else:
-                    #                     ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
-                        
-                    # self.viewer.add_shapes(shape_list, 
-                    #                 name=f"*{cl} ({annotation_key})",
-                    #                 properties={
-                    #                     'uid': uid_list, # list with uids
-                    #                     'type': type_list # list giving information on whether the polygon is interior or exterior
-                    #                 },
-                    #                 shape_type='polygon', 
-                    #                 edge_width=10,
-                    #                 edge_color=color_list,
-                    #                 face_color='transparent'
-                    #                 )
                     
         # WIDGETS
         try:

@@ -6,6 +6,10 @@ from . import image as im
 from . import utils
 from ._core.dataclasses import AnnotationData, BoundariesData, ImageData
 from ._core.xeniumdata import XeniumData, read_celldata
+from pathlib import Path
+
+# create cache dir
+__cache__ = Path.home() / ".cache/InSituPy/"
 
 __all__ = [
     "XeniumData",
