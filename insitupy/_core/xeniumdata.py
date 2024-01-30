@@ -29,8 +29,9 @@ from shapely import Point, Polygon, affinity
 from shapely.geometry.polygon import Polygon
 from uuid import uuid4
 
-from insitupy import __version__, __cache__
+from insitupy import __version__
 
+from .._constants import CACHE
 from .._exceptions import (ModalityNotFoundError,
                            NotOneElementError, UnknownOptionError,
                            WrongNapariLayerTypeError, XeniumDataMissingObject,
@@ -1158,7 +1159,7 @@ class XeniumData:
 
     def quicksave(self):
         # create quicksave directory if it does not exist already
-        quicksave_dir = __cache__ / "quicksaves"
+        quicksave_dir = CACHE / "quicksaves"
         quicksave_dir.mkdir(parents=True, exist_ok=True)
         
         # create filename
@@ -1190,7 +1191,7 @@ class XeniumData:
         
     def list_quicksaves(self):
         # create quicksave directory if it does not exist already
-        quicksave_dir = __cache__ / "quicksaves"
+        quicksave_dir = CACHE / "quicksaves"
         
         pattern = "{slide_id}__{sample_id}__{savetime}__{uid}"
 
