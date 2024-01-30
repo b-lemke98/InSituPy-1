@@ -1,14 +1,17 @@
 import os
+import warnings
 from copy import deepcopy
 from os.path import relpath
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import xmltodict
 from anndata import AnnData
 from parse import *
+from shapely.geometry.multipolygon import MultiPolygon
 from shapely import Polygon, affinity
 from tifffile import TiffFile, imread
 
@@ -22,36 +25,44 @@ from ..utils.utils import textformat as tf
 from ._mixins import DeepCopyMixin
 
 
-class AnnotationData(DeepCopyMixin):
+class ShapesData(DeepCopyMixin):
     '''
     Object to store annotations.
     '''
+    default_assert_uniqueness = False
+    shape_name = "shapes"
+    repr_color = tf.Cyan
     def __init__(self,
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
                  keys: Optional[List[str]] = None,
-                 pixel_size: float = 1
+                 pixel_size: float = 1,
+                 assert_uniqueness: Optional[bool] = None
                  ) -> None:
         self.metadata = {}
-        # self.n_annotations = []
-        # self.classes = []
-        # self.analyzed = []
+        
+        if assert_uniqueness is None:
+            assert_uniqueness = self.default_assert_uniqueness
         
         if files is not None:
             for key, file in zip(keys, files):
                 # read annotation and store in dictionary
-                self.add_annotation(data=file, key=key, pixel_size=pixel_size)
-            
+                self.add_annotation(data=file, 
+                                    key=key, 
+                                    pixel_size=pixel_size,
+                                    assert_uniqueness=assert_uniqueness
+                                    )
+                
     def __repr__(self):
         if len(self.metadata) > 0:
             repr_strings = [
-                f'{tf.Bold}{l}:{tf.ResetAll}\t{m["n_annotations"]} annotations, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
+                f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} {self.shape_name}, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
                 ]
             
             s = "\n".join(repr_strings)
         else:
             s = ""
-        repr = f"{tf.Cyan+tf.Bold}annotations{tf.ResetAll}\n{s}"
-        return repr
+        repr = f"{self.repr_color}{tf.Bold}{self.shape_name}{tf.ResetAll}\n{s}"
+        return repr   
     
     def _update_metadata(self, 
                          key: str,
@@ -61,7 +72,7 @@ class AnnotationData(DeepCopyMixin):
         annot_df = getattr(self, key)
         
         # record metadata information
-        self.metadata[key]["n_annotations"] = len(annot_df)  # number of annotations
+        self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
         self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
         self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
         
@@ -71,20 +82,18 @@ class AnnotationData(DeepCopyMixin):
                                    str, os.PathLike, Path],
                        key: str,
                        pixel_size: Optional[float] = 1,
-                       verbose: bool = False
+                       verbose: bool = False,
+                       assert_uniqueness: bool = False
                        ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
         
         # convert pixel coordinates to metric units
         new_df["geometry"] = new_df.geometry.scale(origin=(0,0), xfact=pixel_size, yfact=pixel_size)
-
-        if not hasattr(self, key):
-            # if key does not exist yet the new df is the whole annotation dataframe
-            annot_df = new_df
         
-            # add new entry to metadata
-            self.metadata[key] = {}
+        if not hasattr(self, key):
+            # if key does not exist yet, the new df is the whole annotation dataframe
+            annot_df = new_df
             
             # collect additional variables for reporting
             new_annotations_added = True # dataframe will be added later
@@ -108,29 +117,58 @@ class AnnotationData(DeepCopyMixin):
             existing_str = "existing "
                     
         if new_annotations_added:
-            # add dataframe to AnnotationData object
-            setattr(self, key, annot_df)
+            add = True
+            if assert_uniqueness:
+                if len(annot_df.index.unique()) != len(annot_df.name.unique()):
+                    warnings.warn(message=f"Names of {self.shape_name} for key '{key}' were not unique. Key was skipped.")
+                    add = False
+                else:
+                    if verbose:
+                        print(f"Names of {self.shape_name} for key '{key}' are unique.")
             
-            # update metadata
-            self._update_metadata(key=key, analyzed=False)
+            # check if any of the shapes are shapely MultiPolygons
+            is_not_multipolygon = [not isinstance(p, MultiPolygon) for p in annot_df.geometry]
+            if not np.all(is_not_multipolygon):
+                annot_df = annot_df.loc[is_not_multipolygon]
+                warnings.warn(f"Some {self.shape_name} were a shapely 'MultiPolygon' objects and skipped.")
             
-            if verbose:
-                # report
-                print(f"Added {new_n - old_n} new annotations to {existing_str}key '{key}'")
+            if add:
+                # add dataframe to AnnotationData object
+                setattr(self, key, annot_df)
                 
-class RegionsData(AnnotationData):
-    def __repr__(self):
-        if len(self.metadata) > 0:
-            repr_strings = [
-                f'{tf.Bold}{l}:{tf.ResetAll}\t{m["n_annotations"]} regions {m["analyzed"]}' for l, m in self.metadata.items()
-                ]
-            
-            s = "\n".join(repr_strings)
-        else:
-            s = ""
-        repr = f"{tf.Yellow+tf.Bold}regions{tf.ResetAll}\n{s}"
-        return repr
-
+                # add new entry to metadata
+                self.metadata[key] = {}
+                
+                # update metadata
+                self._update_metadata(key=key, analyzed=False)
+                
+                if verbose:
+                    # report
+                    print(f"Added {new_n - old_n} new {self.shape_name} to {existing_str}key '{key}'")
+        
+class AnnotationsData(ShapesData):
+    def __init__(self,
+                 files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
+                 keys: Optional[List[str]] = None,
+                 pixel_size: float = 1
+                 ) -> None:
+        self.default_assert_uniqueness = False
+        self.shape_name = "annotations"
+        self.repr_color = tf.Cyan
+        
+        ShapesData.__init__(self, files, keys, pixel_size)
+    
+class RegionsData(ShapesData):
+    def __init__(self,
+                 files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
+                 keys: Optional[List[str]] = None,
+                 pixel_size: float = 1
+                 ) -> None:
+        self.default_assert_uniqueness = True
+        self.shape_name = "regions"
+        self.repr_color = tf.Yellow
+        
+        ShapesData.__init__(self, files, keys, pixel_size)
 
 class BoundariesData(DeepCopyMixin):
     '''

@@ -47,7 +47,7 @@ from ._save import (_save_images, _save_annotations, _save_cells,
 from ._scanorama import scanorama
 from ._widgets import (_annotation_widget, _create_points_layer,
                        _initialize_point_widgets)
-from .dataclasses import AnnotationData, BoundariesData, CellData, ImageData, RegionsData
+from .dataclasses import AnnotationsData, BoundariesData, CellData, ImageData, RegionsData
 
 
 def _read_boundaries_from_xenium(
@@ -629,7 +629,7 @@ class XeniumData:
                         files.append(file)
             
         print("Reading annotations...", flush=True)
-        self.annotations = AnnotationData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
+        self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
         
         if self.from_xeniumdata:
             # read saved metadata
@@ -1455,7 +1455,7 @@ class XeniumData:
                     
                     # if the XeniumData object does not has an annotations attribute, initialize it
                     if not hasattr(self, "annotations"):
-                        self.annotations = AnnotationData() # initialize empty object
+                        self.annotations = AnnotationsData() # initialize empty object
                     
                     # extract shapes coordinates and colors
                     shapes = layer.data
