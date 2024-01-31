@@ -18,7 +18,7 @@ from tifffile import TiffFile, imread
 from insitupy import __version__
 
 from .._exceptions import InvalidFileTypeError
-from ..utils.geo import parse_geopandas
+from ..utils.geo import parse_geopandas, write_qupath_geojson
 from ..utils.io import check_overwrite_and_remove_if_true, load_pyramid, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
@@ -145,6 +145,35 @@ class ShapesData(DeepCopyMixin):
                 if verbose:
                     # report
                     print(f"Added {new_n - old_n} new {self.shape_name} to {existing_str}key '{key}'")
+                    
+    def save(self,
+             path: Union[str, os.PathLike, Path],
+             overwrite: bool = False
+             ):
+        path = Path(path)
+        
+        # check if the output file should be overwritten
+        check_overwrite_and_remove_if_true(path, overwrite=overwrite)
+        
+        # create path for matrix
+        annot_path = (path / self.shape_name)
+        annot_path.mkdir(parents=True, exist_ok=True) # create directory
+        
+        # if metadata is not None:
+        #     metadata["annotations"] = {}
+        for n in self.metadata.keys():
+            annot_df = getattr(self, n)
+            # annot_file = annot_path / f"{n}.parquet"
+            # annot_df.to_parquet(annot_file)
+            annot_file = annot_path / f"{n}.geojson"
+            write_qupath_geojson(dataframe=annot_df, file=annot_file)
+            
+            # if metadata is not None:
+            #     metadata["annotations"][n] = Path(relpath(annot_file, path)).as_posix()
+            
+        # save AnnotationData metadata
+        annot_meta_path = annot_path / "annotations_metadata.json"
+        write_dict_to_json(dictionary=annotations.metadata, file=annot_meta_path)
         
 class AnnotationsData(ShapesData):
     def __init__(self,
@@ -367,7 +396,7 @@ class CellData(DeepCopyMixin):
         3. Select only matrix cell IDs which are also in boundaries and filter for them
         '''
         # get cell IDs from matrix
-        cell_ids = self.matrix.obs_names
+        cell_ids = self.matrix.obs_names.astype(str)
         
         try:
             boundaries = self.boundaries
@@ -380,7 +409,7 @@ class CellData(DeepCopyMixin):
                 df = getattr(boundaries, n)
                 
                 # filter dataframe
-                df.loc[df["cell_id"].isin(cell_ids), :]
+                df = df.loc[df["cell_id"].astype(str).isin(cell_ids), :]
                 
                 # add to object
                 setattr(self.boundaries, n, df)

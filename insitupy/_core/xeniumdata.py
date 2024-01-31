@@ -314,11 +314,23 @@ class XeniumData:
         Function to generate a deep copy of the XeniumData object.
         '''
         from copy import deepcopy
-        
+        had_viewer = False
         if hasattr(self, "viewer"):
+            had_viewer = True
+            
+            # make copy of viewer to add it later again
+            viewer_copy = self.viewer.copy()
+            # remove viewer because there is otherwise a error during deepcopy
             del self.viewer
         
-        return deepcopy(self)
+        # make copy
+        self_copy = deepcopy(self)
+        
+        # add viewer again to original object if necessary
+        if had_viewer:
+            self.viewer = viewer_copy
+        
+        return self_copy
     
     def crop(self, 
             shape_layer: Optional[str] = None,
@@ -346,37 +358,31 @@ class XeniumData:
             if xlim is not None or ylim is not None:
                 assert np.all([elem is not None for elem in [xlim, ylim]])
                 use_shape = False
-        
-        # check if the changes are supposed to be made in place or not
-        with_viewer = False
-        if inplace:
-            _self = self
-        else:
-            if hasattr(self, "viewer"):
-                with_viewer = True
-                viewer_copy = self.viewer.copy() # copy viewer to transfer it to new object for cropping
-            _self = self.copy()
-            if with_viewer:
-                _self.viewer = viewer_copy
             
         # assert that either shape_layer is given or xlim/ylim
         assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
         
         if use_shape:
             # extract shape layer for cropping from napari viewer
-            crop_shape = _self.viewer.layers[shape_layer]
+            crop_shape = self.viewer.layers[shape_layer]
             
             # check the structure of the shape object
             if len(crop_shape.data) != 1:
                 raise NotOneElementError(crop_shape.data)
             
             # select the shape from list
-            crop_window = crop_shape.data[0]
+            crop_window = crop_shape.data[0].copy()
             crop_window *= self.metadata["pixel_size"] # convert to metric unit (normally µm)
             
             # extract x and y limits from the shape (assuming a rectangle)
             xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
             ylim = (crop_window[:, 0].min(), crop_window[:, 0].max())
+            
+        # check if the changes are supposed to be made in place or not
+        if inplace:
+            _self = self
+        else:
+            _self = self.copy()
             
         # if the object was previously cropped, check if the current window is identical with the previous one
         if np.all([elem in _self.metadata.keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
@@ -450,9 +456,10 @@ class XeniumData:
         _self.metadata["cropping_ylim"] = ylim
                 
         
-        if not inplace:
+        if inplace:
             if hasattr(self, "viewer"):
                 del _self.viewer # delete viewer
+        else:
             return _self
 
     def hvg(self,
