@@ -1,4 +1,5 @@
 from numpy import ndarray
+import os
 from pandas.api.types import is_numeric_dtype, is_string_dtype
 
 
@@ -124,7 +125,7 @@ def convert_to_list(elem):
     '''
     Return element to list if it is not a list already.
     '''
-    return [elem] if isinstance(elem, str) else list(elem)
+    return [elem] if (isinstance(elem, str) or isinstance(elem, os.PathLike)) else list(elem)
 
 def nested_dict_numpy_to_list(dictionary):
     for key, value in dictionary.items():

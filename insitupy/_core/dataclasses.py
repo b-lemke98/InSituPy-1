@@ -36,8 +36,18 @@ class ShapesData(DeepCopyMixin):
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
                  keys: Optional[List[str]] = None,
                  pixel_size: float = 1,
-                 assert_uniqueness: Optional[bool] = None
+                 assert_uniqueness: Optional[bool] = None,
+                 # shape_name: Optional[str] = None
                  ) -> None:
+        # make sure files and keys are a list
+        files = convert_to_list(files)
+        keys = convert_to_list(keys)
+        assert len(files) == len(keys), "Number of files does not match number of keys."
+        
+        # if shape_name is not None:
+        #     self.shape_name = shape_name
+        
+        # create dictionary for metadata
         self.metadata = {}
         
         if assert_uniqueness is None:
@@ -146,6 +156,39 @@ class ShapesData(DeepCopyMixin):
                     # report
                     print(f"Added {new_n - old_n} new {self.shape_name} to {existing_str}key '{key}'")
                     
+    def crop(self,
+             xlim, ylim
+             ):
+        limit_poly = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
+        
+        new_metadata = {}
+        for i, n in enumerate(self.metadata.keys()):
+            shapesdf = getattr(self, n)
+            
+            # select annotations that intersect with the selected area
+            mask = [limit_poly.intersects(elem) for elem in shapesdf["geometry"]]
+            shapesdf = shapesdf.loc[mask, :].copy()
+            
+            # move origin to zero after cropping
+            shapesdf["geometry"] = shapesdf["geometry"].apply(affinity.translate, xoff=-xlim[0], yoff=-ylim[0])
+            
+            # check if there are annotations left or if it has to be deleted
+            if len(shapesdf) > 0:
+                # add new dataframe back to annotations object
+                setattr(self, n, shapesdf)
+                
+                # update metadata
+                new_metadata[n] = {}
+                new_metadata[n][f"n_{self.shape_name}"] = len(shapesdf)
+                new_metadata[n]["classes"] = shapesdf.name.unique().tolist()
+                new_metadata[n]["analyzed"] = self.metadata[n]["analyzed"]  # analyzed information is just copied
+            
+            else:
+                # delete annotations
+                delattr(self, n)
+
+        self.metadata = new_metadata
+
     def save(self,
              path: Union[str, os.PathLike, Path],
              overwrite: bool = False
@@ -155,25 +198,28 @@ class ShapesData(DeepCopyMixin):
         # check if the output file should be overwritten
         check_overwrite_and_remove_if_true(path, overwrite=overwrite)
         
-        # create path for matrix
-        annot_path = (path / self.shape_name)
-        annot_path.mkdir(parents=True, exist_ok=True) # create directory
+        # create directory
+        path.mkdir(parents=True, exist_ok=True)
+        
+        # # create path for matrix
+        # annot_path = (path / self.shape_name)
+        # annot_path.mkdir(parents=True, exist_ok=True) # create directory
         
         # if metadata is not None:
         #     metadata["annotations"] = {}
         for n in self.metadata.keys():
-            annot_df = getattr(self, n)
+            df = getattr(self, n)
             # annot_file = annot_path / f"{n}.parquet"
             # annot_df.to_parquet(annot_file)
-            annot_file = annot_path / f"{n}.geojson"
-            write_qupath_geojson(dataframe=annot_df, file=annot_file)
+            shapes_file = path / f"{n}.geojson"
+            write_qupath_geojson(dataframe=df, file=shapes_file)
             
             # if metadata is not None:
             #     metadata["annotations"][n] = Path(relpath(annot_file, path)).as_posix()
             
         # save AnnotationData metadata
-        annot_meta_path = annot_path / "annotations_metadata.json"
-        write_dict_to_json(dictionary=annotations.metadata, file=annot_meta_path)
+        shape_meta_path = path / f"metadata.json"
+        write_dict_to_json(dictionary=self.metadata, file=shape_meta_path)
         
 class AnnotationsData(ShapesData):
     def __init__(self,

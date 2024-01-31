@@ -67,25 +67,18 @@ def _save_transcripts(transcripts, path, metadata):
     
 def _save_annotations(annotations, path, metadata):
     annot_path = (path / "annotations")
-    annot_path.mkdir(parents=True, exist_ok=True) # create directory
     
+    # save annotations
+    annotations.save(annot_path)
+        
     if metadata is not None:
-        metadata["annotations"] = {}
-    for n in annotations.metadata.keys():
-        annot_df = getattr(annotations, n)
-        # annot_file = annot_path / f"{n}.parquet"
-        # annot_df.to_parquet(annot_file)
-        annot_file = annot_path / f"{n}.geojson"
-        write_qupath_geojson(dataframe=annot_df, file=annot_file)
+        metadata["annotations"] = Path(relpath(annot_path, path)).as_posix()
+    
+def _save_regions(regions, path, metadata):
+    annot_path = (path / "regions")
+    
+    # save annotations
+    regions.save(annot_path)
         
-        if metadata is not None:
-            metadata["annotations"][n] = Path(relpath(annot_file, path)).as_posix()
-        
-    # save AnnotationData metadata
-    annot_meta_path = annot_path / "annotations_metadata.json"
-    write_dict_to_json(dictionary=annotations.metadata, file=annot_meta_path)
-            
-
-def _save_regions():
-    # TODO: implement save region functionality
-    pass
+    if metadata is not None:
+        metadata["regions"] = Path(relpath(annot_path, path)).as_posix()

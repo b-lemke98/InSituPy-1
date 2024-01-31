@@ -43,7 +43,7 @@ from ..utils.utils import textformat as tf
 from ._checks import check_raw, check_zip
 from ._layers import _add_annotations_as_layer
 from ._save import (_save_images, _save_annotations, _save_cells, 
-                    _save_transcripts)
+                    _save_transcripts, _save_regions)
 from ._scanorama import scanorama
 from ._widgets import (_annotation_widget, _create_points_layer,
                        _initialize_point_widgets)
@@ -123,6 +123,32 @@ def read_celldata(
     celldata = CellData(matrix=matrix, boundaries=boundaries)
     
     return celldata
+
+def read_regionsdata(
+    path: Union[str, os.PathLike, Path],
+):    
+    metadata = read_json(path / "metadata.json")
+    keys = metadata.keys()
+    files = [path / f"{k}.geojson" for k in keys]
+    data = RegionsData(files, keys)
+    
+    # overwrite metadata
+    data.metadata = metadata
+    return data
+
+def read_annotationsdata(
+    path: Union[str, os.PathLike, Path],
+):    
+    metadata = read_json(path / "metadata.json")
+    keys = metadata.keys()
+    files = [path / f"{k}.geojson" for k in keys]
+    data = AnnotationsData(files, keys)
+    
+    # overwrite metadata
+    data.metadata = metadata
+    return data
+
+
 
 class XeniumData:
     #TODO: Docstring of XeniumData
@@ -427,29 +453,10 @@ class XeniumData:
             _self.images.crop(xlim=xlim, ylim=ylim)
         
         if hasattr(_self, "annotations"):
-            limit_poly = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
+            _self.annotations.crop(xlim=xlim, ylim=ylim)
             
-            new_metadata = {}
-            for i, n in enumerate(_self.annotations.metadata.keys()):
-                annotdf = getattr(_self.annotations, n)
-                
-                # select annotations that intersect with the selected area
-                mask = [limit_poly.intersects(elem) for elem in annotdf["geometry"]]
-                annotdf = annotdf.loc[mask, :].copy()
-                
-                # move origin to zero after cropping
-                annotdf["geometry"] = annotdf["geometry"].apply(affinity.translate, xoff=-xlim[0], yoff=-ylim[0])
-                
-                # add new dataframe back to annotations object
-                setattr(_self.annotations, n, annotdf)
-                
-                # update metadata
-                new_metadata[n] = {}
-                new_metadata[n]["n_annotations"] = len(annotdf)
-                new_metadata[n]["classes"] = annotdf.name.unique().tolist()
-                new_metadata[n]["analyzed"] = _self.annotations.metadata[n]["analyzed"]  # analyzed information is just copied
-            
-            _self.annotations.metadata = new_metadata
+        if hasattr(_self, "regions"):
+            _self.regions.crop(xlim=xlim, ylim=ylim)
                 
         # add information about cropping to metadata
         _self.metadata["cropping_xlim"] = xlim
@@ -605,13 +612,19 @@ class XeniumData:
                     pattern_annotations_file: str = "annotations-{slide_id}__{sample_id}__{name}"
                     ):
         if self.from_xeniumdata:
-            # check if annotations data is stored in this XeniumData
-            if "annotations" not in self.xd_metadata:
+            try:
+                p = self.xd_metadata["annotations"]
+            except KeyError:
                 raise ModalityNotFoundError(modality="annotations")
+            self.annotations = read_annotationsdata(path=self.path / p)
             
-            # get path and names of annotation files
-            keys = self.xd_metadata["annotations"].keys()
-            files = [self.path / self.xd_metadata["annotations"][n] for n in keys]
+            # # check if annotations data is stored in this XeniumData
+            # if "annotations" not in self.xd_metadata:
+            #     raise ModalityNotFoundError(modality="annotations")
+            
+            # # get path and names of annotation files
+            # keys = self.xd_metadata["annotations"].keys()
+            # files = [self.path / self.xd_metadata["annotations"][n] for n in keys]
             
         else:
             if annotations_dir is None:
@@ -635,16 +648,8 @@ class XeniumData:
                         keys.append(parsed.named["name"])
                         files.append(file)
             
-        print("Reading annotations...", flush=True)
-        self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
-        
-        if self.from_xeniumdata:
-            # read saved metadata
-            new_metadata = read_json(self.path / "annotations" / "annotations_metadata.json")
-            
-            # if keys in stored metadata fit to loaded metadata substitute use the stored metadata
-            if new_metadata.keys() == self.annotations.metadata.keys():
-                self.annotations.metadata = new_metadata
+            print("Reading annotations...", flush=True)
+            self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
                 
     def read_regions(self,
                     regions_dir: Union[str, os.PathLike, Path] = None, # "../regions",
@@ -652,13 +657,11 @@ class XeniumData:
                     pattern_regions_file: str = "regions-{slide_id}__{sample_id}__{name}"
                     ):
         if self.from_xeniumdata:
-            # check if regions data is stored in this XeniumData
-            if "regions" not in self.xd_metadata:
+            try:
+                p = self.xd_metadata["regions"]
+            except KeyError:
                 raise ModalityNotFoundError(modality="regions")
-            
-            # get path and names of annotation files
-            keys = self.xd_metadata["regions"].keys()
-            files = [self.path / self.xd_metadata["regions"][n] for n in keys]
+            self.regions = read_regionsdata(path=self.path / p)
             
         else:
             if regions_dir is None:
@@ -682,22 +685,13 @@ class XeniumData:
                         keys.append(parsed.named["name"])
                         files.append(file)
             
-        print("Reading regions...", flush=True)
-        self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
-        
-        if self.from_xeniumdata:
-            # read saved metadata
-            new_metadata = read_json(self.path / "regions" / "regions_metadata.json")
-            
-            # if keys in stored metadata fit to loaded metadata substitute use the stored metadata
-            if new_metadata.keys() == self.regions.metadata.keys():
-                self.regions.metadata = new_metadata
+            print("Reading regions...", flush=True)
+            self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
 
 
     def read_cells(self):
         print("Reading cells...", flush=True)
         if self.from_xeniumdata:
-            #TODO: Implement this part with a read_celldata() function
             try:
                 cells_path = self.xd_metadata["cells"]
             except KeyError:
@@ -1144,6 +1138,19 @@ class XeniumData:
         else:
             _save_annotations(
                 annotations=annotations,
+                path=path_stem,
+                metadata=metadata
+            )
+            
+            
+        # save regions
+        try:
+            regions = self.regions
+        except AttributeError:
+            pass
+        else:
+            _save_regions(
+                regions=regions,
                 path=path_stem,
                 metadata=metadata
             )
