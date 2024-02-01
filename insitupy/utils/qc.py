@@ -6,7 +6,7 @@ import seaborn as sns
 from pathlib import Path
 from typing import Union, List
 
-from .io import read_json
+from .io import read_json, save_and_show_figure
 from .utils import get_nrows_maxcols
 
 def find_xenium_outputs(
@@ -46,7 +46,9 @@ def plot_qc(
     cats: List[str] = ["num_cells", "transcripts_per_cell", "transcripts_per_100um"],
     max_cols: int = 4,
     fontsize: int = 22,
-    savepath: Union[str, os.PathLike, Path] = None
+    savepath: Union[str, os.PathLike, Path] = None,
+    save_only: bool = False,
+    dpi_save: int = 300
     ):
     # plot
     plt.rcParams.update({'font.size': fontsize})
@@ -72,9 +74,5 @@ def plot_qc(
         else:
             # remove legend
             axs[i].get_legend().remove()
-
-    plt.tight_layout()
     
-    if savepath is not None:
-        plt.savefig(savepath, bbox_inches="tight")
-    plt.show()
+    save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=True)
