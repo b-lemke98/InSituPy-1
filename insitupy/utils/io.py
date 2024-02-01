@@ -1,8 +1,9 @@
 import json
 import os
+import pandas as pd
 import shutil
 from pathlib import Path
-from typing import Union
+from typing import Union, List
 
 import dask.array as da
 import zarr
@@ -54,7 +55,10 @@ def write_dict_to_json(
         with open(file, "w") as metafile:
                 metafile.write(dict_json)
         
-def check_overwrite_and_remove_if_true(path, overwrite):
+def check_overwrite_and_remove_if_true(
+    path: Union[str, os.PathLike, Path], 
+    overwrite: bool = False
+    ):
     path = Path(path)
     if path.exists():
         if overwrite:
