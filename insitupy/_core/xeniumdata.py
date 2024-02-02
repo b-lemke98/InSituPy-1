@@ -611,6 +611,7 @@ class XeniumData:
                     suffix: str = ".geojson",
                     pattern_annotations_file: str = "annotations-{slide_id}__{sample_id}__{name}"
                     ):
+        print("Reading annotations...", flush=True)
         if self.from_xeniumdata:
             try:
                 p = self.xd_metadata["annotations"]
@@ -648,7 +649,6 @@ class XeniumData:
                         keys.append(parsed.named["name"])
                         files.append(file)
             
-            print("Reading annotations...", flush=True)
             self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
                 
     def read_regions(self,
@@ -656,6 +656,7 @@ class XeniumData:
                     suffix: str = ".geojson",
                     pattern_regions_file: str = "regions-{slide_id}__{sample_id}__{name}"
                     ):
+        print("Reading regions...", flush=True)
         if self.from_xeniumdata:
             try:
                 p = self.xd_metadata["regions"]
@@ -685,7 +686,6 @@ class XeniumData:
                         keys.append(parsed.named["name"])
                         files.append(file)
             
-            print("Reading regions...", flush=True)
             self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
 
 
