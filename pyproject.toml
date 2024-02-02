@@ -2,6 +2,7 @@
 name = "insitupy"
 version = "1.2.1" # <<COOKIETEMPLE_FORCE_BUMP>>
 description = "Package introducing the XeniumData structure to read an analyze Xenium in situ data in a structured manner."
+license = "BSD-3-Clause"
 authors = ["jwrth <j.wirth@tum.de>"]
 readme = "README.md"
 

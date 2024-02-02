@@ -1,3 +1,7 @@
+import math
+import os
+
+from numpy import ndarray
 from pandas.api.types import is_numeric_dtype, is_string_dtype
 
 
@@ -123,5 +127,28 @@ def convert_to_list(elem):
     '''
     Return element to list if it is not a list already.
     '''
-    return [elem] if isinstance(elem, str) else list(elem)
+    return [elem] if (isinstance(elem, str) or isinstance(elem, os.PathLike)) else list(elem)
 
+def nested_dict_numpy_to_list(dictionary):
+    for key, value in dictionary.items():
+        if isinstance(value, ndarray):
+            dictionary[key] = value.tolist()
+        elif isinstance(value, dict):
+            nested_dict_numpy_to_list(value)
+            
+def get_nrows_maxcols(keys, max_cols):
+    '''
+    Determine optimal number of rows and columns for `plt.subplot` based on
+    list of keys [`keys`] and maximum number of columns [`max_cols`].
+
+    Returns: `n_plots`, `n_rows`, `max_cols`
+    '''
+
+    n_plots = len(keys)
+    if n_plots > max_cols:
+        n_rows = math.ceil(n_plots / max_cols)
+    else:
+        n_rows = 1
+        max_cols = n_plots
+
+    return n_plots, n_rows, max_cols
