@@ -74,7 +74,7 @@ Contributions are welcome! If you find any issues or have suggestions for new fe
 
 ## License
 
-InSituPy is licensed under the [MIT License](LICENSE).
+InSituPy is licensed under the [BSD-3-Clause](LICENSE).
 
 ---
 
