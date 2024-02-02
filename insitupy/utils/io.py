@@ -1,8 +1,10 @@
 import json
+import matplotlib.pyplot as plt
 import os
+import pandas as pd
 import shutil
 from pathlib import Path
-from typing import Union
+from typing import Union, List
 
 import dask.array as da
 import zarr
@@ -54,7 +56,10 @@ def write_dict_to_json(
         with open(file, "w") as metafile:
                 metafile.write(dict_json)
         
-def check_overwrite(path, overwrite):
+def check_overwrite_and_remove_if_true(
+    path: Union[str, os.PathLike, Path], 
+    overwrite: bool = False
+    ):
     path = Path(path)
     if path.exists():
         if overwrite:
@@ -68,3 +73,27 @@ def check_overwrite(path, overwrite):
             raise FileExistsError(f"The output file already exists at {path}. To overwrite it, please set the `overwrite` parameter to True."
 )
     
+
+def save_and_show_figure(savepath, fig, save_only=False, show=True, dpi_save=300, save_background=None, tight=True):
+    #if fig is not None and axis is not None:
+    #    return fig, axis
+    #elif savepath is not None:
+    if tight:
+        fig.tight_layout()
+
+    if savepath is not None:
+        print("Saving figure to file " + savepath)
+
+        # create path if it does not exist
+        Path(os.path.dirname(savepath)).mkdir(parents=True, exist_ok=True)
+
+        # save figure
+        plt.savefig(savepath, dpi=dpi_save,
+                    facecolor=save_background, bbox_inches='tight')
+        print("Saved.")
+    if save_only:
+        plt.close(fig)
+    elif show:
+        return plt.show()
+    else:
+        return

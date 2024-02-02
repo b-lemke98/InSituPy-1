@@ -1,90 +1,109 @@
 import os
+import warnings
 from copy import deepcopy
 from os.path import relpath
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import xmltodict
 from anndata import AnnData
 from parse import *
+from shapely.geometry.multipolygon import MultiPolygon
 from shapely import Polygon, affinity
 from tifffile import TiffFile, imread
 
 from insitupy import __version__
 
 from .._exceptions import InvalidFileTypeError
-from ..utils.geo import parse_geopandas
-from ..utils.io import check_overwrite, load_pyramid, write_dict_to_json
+from ..utils.geo import parse_geopandas, write_qupath_geojson
+from ..utils.io import check_overwrite_and_remove_if_true, load_pyramid, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._mixins import DeepCopyMixin
 
 
-class AnnotationData(DeepCopyMixin):
+class ShapesData(DeepCopyMixin):
     '''
     Object to store annotations.
     '''
+    default_assert_uniqueness = False
+    shape_name = "shapes"
+    repr_color = tf.Cyan
     def __init__(self,
-                 annot_files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
-                 annot_labels: Optional[List[str]] = None,
-                 pixel_size: float = 1
+                 files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
+                 keys: Optional[List[str]] = None,
+                 pixel_size: float = 1,
+                 assert_uniqueness: Optional[bool] = None,
+                 # shape_name: Optional[str] = None
                  ) -> None:
-        self.metadata = {}
-        # self.n_annotations = []
-        # self.classes = []
-        # self.analyzed = []
+        # make sure files and keys are a list
+        files = convert_to_list(files)
+        keys = convert_to_list(keys)
+        assert len(files) == len(keys), "Number of files does not match number of keys."
         
-        if annot_files is not None:
-            for label, file in zip(annot_labels, annot_files):
+        # if shape_name is not None:
+        #     self.shape_name = shape_name
+        
+        # create dictionary for metadata
+        self.metadata = {}
+        
+        if assert_uniqueness is None:
+            assert_uniqueness = self.default_assert_uniqueness
+        
+        if files is not None:
+            for key, file in zip(keys, files):
                 # read annotation and store in dictionary
-                self.add_annotation(data=file, label=label, pixel_size=pixel_size)
-            
+                self.add_annotation(data=file, 
+                                    key=key, 
+                                    pixel_size=pixel_size,
+                                    assert_uniqueness=assert_uniqueness
+                                    )
+                
     def __repr__(self):
         if len(self.metadata) > 0:
             repr_strings = [
-                f'{tf.Bold}{l}:{tf.ResetAll}\t{m["n_annotations"]} annotations, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
+                f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} {self.shape_name}, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
                 ]
             
             s = "\n".join(repr_strings)
         else:
             s = ""
-        repr = f"{tf.Cyan+tf.Bold}annotations{tf.ResetAll}\n{s}"
-        return repr
+        repr = f"{self.repr_color}{tf.Bold}{self.shape_name}{tf.ResetAll}\n{s}"
+        return repr   
     
     def _update_metadata(self, 
-                         label: str,
+                         key: str,
                          analyzed: bool
                          ):
         # retrieve dataframe
-        annot_df = getattr(self, label)
+        annot_df = getattr(self, key)
         
         # record metadata information
-        self.metadata[label]["n_annotations"] = len(annot_df)  # number of annotations
-        self.metadata[label]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
-        self.metadata[label]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
+        self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
+        self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+        self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
         
             
     def add_annotation(self,
                        data: Union[gpd.GeoDataFrame, pd.DataFrame, dict, 
                                    str, os.PathLike, Path],
-                       label: str,
+                       key: str,
                        pixel_size: Optional[float] = 1,
-                       verbose: bool = False
+                       verbose: bool = False,
+                       assert_uniqueness: bool = False
                        ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
         
         # convert pixel coordinates to metric units
         new_df["geometry"] = new_df.geometry.scale(origin=(0,0), xfact=pixel_size, yfact=pixel_size)
-
-        if not hasattr(self, label):
-            # if label does not exist yet the new df is the whole annotation dataframe
-            annot_df = new_df
         
-            # add new entry to metadata
-            self.metadata[label] = {}
+        if not hasattr(self, key):
+            # if key does not exist yet, the new df is the whole annotation dataframe
+            annot_df = new_df
             
             # collect additional variables for reporting
             new_annotations_added = True # dataframe will be added later
@@ -93,7 +112,7 @@ class AnnotationData(DeepCopyMixin):
             new_n = len(annot_df)
         else:
             # concatenate the new and old dataframe
-            annot_df = getattr(self, label)
+            annot_df = getattr(self, key)
 
             # concatenate old and new annoation dataframe
             old_n = len(annot_df)
@@ -108,15 +127,123 @@ class AnnotationData(DeepCopyMixin):
             existing_str = "existing "
                     
         if new_annotations_added:
-            # add dataframe to AnnotationData object
-            setattr(self, label, annot_df)
+            add = True
+            if assert_uniqueness:
+                if len(annot_df.index.unique()) != len(annot_df.name.unique()):
+                    warnings.warn(message=f"Names of {self.shape_name} for key '{key}' were not unique. Key was skipped.")
+                    add = False
+                else:
+                    if verbose:
+                        print(f"Names of {self.shape_name} for key '{key}' are unique.")
             
-            # update metadata
-            self._update_metadata(label=label, analyzed=False)
+            # check if any of the shapes are shapely MultiPolygons
+            is_not_multipolygon = [not isinstance(p, MultiPolygon) for p in annot_df.geometry]
+            if not np.all(is_not_multipolygon):
+                annot_df = annot_df.loc[is_not_multipolygon]
+                warnings.warn(f"Some {self.shape_name} were a shapely 'MultiPolygon' objects and skipped.")
             
-            if verbose:
-                # report
-                print(f"Added {new_n - old_n} new annotations to {existing_str}label '{label}'")
+            if add:
+                # add dataframe to AnnotationData object
+                setattr(self, key, annot_df)
+                
+                # add new entry to metadata
+                self.metadata[key] = {}
+                
+                # update metadata
+                self._update_metadata(key=key, analyzed=False)
+                
+                if verbose:
+                    # report
+                    print(f"Added {new_n - old_n} new {self.shape_name} to {existing_str}key '{key}'")
+                    
+    def crop(self,
+             xlim, ylim
+             ):
+        limit_poly = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
+        
+        new_metadata = {}
+        for i, n in enumerate(self.metadata.keys()):
+            shapesdf = getattr(self, n)
+            
+            # select annotations that intersect with the selected area
+            mask = [limit_poly.intersects(elem) for elem in shapesdf["geometry"]]
+            shapesdf = shapesdf.loc[mask, :].copy()
+            
+            # move origin to zero after cropping
+            shapesdf["geometry"] = shapesdf["geometry"].apply(affinity.translate, xoff=-xlim[0], yoff=-ylim[0])
+            
+            # check if there are annotations left or if it has to be deleted
+            if len(shapesdf) > 0:
+                # add new dataframe back to annotations object
+                setattr(self, n, shapesdf)
+                
+                # update metadata
+                new_metadata[n] = {}
+                new_metadata[n][f"n_{self.shape_name}"] = len(shapesdf)
+                new_metadata[n]["classes"] = shapesdf.name.unique().tolist()
+                new_metadata[n]["analyzed"] = self.metadata[n]["analyzed"]  # analyzed information is just copied
+            
+            else:
+                # delete annotations
+                delattr(self, n)
+
+        self.metadata = new_metadata
+
+    def save(self,
+             path: Union[str, os.PathLike, Path],
+             overwrite: bool = False
+             ):
+        path = Path(path)
+        
+        # check if the output file should be overwritten
+        check_overwrite_and_remove_if_true(path, overwrite=overwrite)
+        
+        # create directory
+        path.mkdir(parents=True, exist_ok=True)
+        
+        # # create path for matrix
+        # annot_path = (path / self.shape_name)
+        # annot_path.mkdir(parents=True, exist_ok=True) # create directory
+        
+        # if metadata is not None:
+        #     metadata["annotations"] = {}
+        for n in self.metadata.keys():
+            df = getattr(self, n)
+            # annot_file = annot_path / f"{n}.parquet"
+            # annot_df.to_parquet(annot_file)
+            shapes_file = path / f"{n}.geojson"
+            write_qupath_geojson(dataframe=df, file=shapes_file)
+            
+            # if metadata is not None:
+            #     metadata["annotations"][n] = Path(relpath(annot_file, path)).as_posix()
+            
+        # save AnnotationData metadata
+        shape_meta_path = path / f"metadata.json"
+        write_dict_to_json(dictionary=self.metadata, file=shape_meta_path)
+        
+class AnnotationsData(ShapesData):
+    def __init__(self,
+                 files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
+                 keys: Optional[List[str]] = None,
+                 pixel_size: float = 1
+                 ) -> None:
+        self.default_assert_uniqueness = False
+        self.shape_name = "annotations"
+        self.repr_color = tf.Cyan
+        
+        ShapesData.__init__(self, files, keys, pixel_size)
+    
+class RegionsData(ShapesData):
+    def __init__(self,
+                 files: Optional[List[Union[str, os.PathLike, Path]]] = None, 
+                 keys: Optional[List[str]] = None,
+                 pixel_size: float = 1
+                 ) -> None:
+        self.default_assert_uniqueness = True
+        self.shape_name = "regions"
+        self.repr_color = tf.Yellow
+        
+        ShapesData.__init__(self, files, keys, pixel_size)
 
 class BoundariesData(DeepCopyMixin):
     '''
@@ -270,7 +397,7 @@ class CellData(DeepCopyMixin):
         metadata = {}
         
         # check if the output file should be overwritten
-        check_overwrite(path, overwrite=overwrite)
+        check_overwrite_and_remove_if_true(path, overwrite=overwrite)
         
         # create path for matrix
         mtx_path = path / "matrix"
@@ -298,7 +425,6 @@ class CellData(DeepCopyMixin):
                 metadata["boundaries"][n] = Path(relpath(bound_file, path)).as_posix()
                 
         # add more things to metadata
-        metadata["pixel_size"] = self.pixel_size
         metadata["version"] = __version__
         
         # save metadata
@@ -316,7 +442,7 @@ class CellData(DeepCopyMixin):
         3. Select only matrix cell IDs which are also in boundaries and filter for them
         '''
         # get cell IDs from matrix
-        cell_ids = self.matrix.obs_names
+        cell_ids = self.matrix.obs_names.astype(str)
         
         try:
             boundaries = self.boundaries
@@ -329,7 +455,7 @@ class CellData(DeepCopyMixin):
                 df = getattr(boundaries, n)
                 
                 # filter dataframe
-                df.loc[df["cell_id"].isin(cell_ids), :]
+                df = df.loc[df["cell_id"].astype(str).isin(cell_ids), :]
                 
                 # add to object
                 setattr(self.boundaries, n, df)

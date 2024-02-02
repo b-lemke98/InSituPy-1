@@ -1,3 +1,4 @@
+import numpy as np
 import os
 from pathlib import Path
 from typing import Union
@@ -52,12 +53,16 @@ def read_qupath_geojson(file: Union[str, os.PathLike, Path]) -> pd.DataFrame:
     # Read the GeoJSON file into a GeoDataFrame
     dataframe = geopandas.read_file(file)
 
-    # Flatten the "classification" column into separate "name" and "color" columns
-    dataframe["name"] = [elem["name"] for elem in dataframe["classification"]]
-    dataframe["color"] = [elem["color"] for elem in dataframe["classification"]]
+    # annotation geojsons contain a classification column where each entry is a dict with name and color of the annotation
+    if "classification" in dataframe.columns:
+        # Flatten the "classification" column into separate "name" and "color" columns
+        dataframe["name"] = [elem["name"] for elem in dataframe["classification"]]
+        dataframe["color"] = [elem["color"] for elem in dataframe["classification"]]
 
-    # Remove the redundant "classification" column
-    dataframe = dataframe.drop(["classification"], axis=1)
+        # Remove the redundant "classification" column
+        dataframe = dataframe.drop(["classification"], axis=1)
+        
+    # Exported TMA cores instead contain the columns 'name' and 'isMissing'. These we just leave.
 
     # Return the transformed DataFrame
     return dataframe
@@ -74,23 +79,25 @@ def write_qupath_geojson(dataframe: GeoDataFrame,
     - dataframe (geopandas.GeoDataFrame): The input GeoDataFrame containing "name" and "color" columns.
     - file (Union[str, os.PathLike, Path]): The file path (as a string or pathlib.Path) where the GeoJSON data will be saved.
     """
-    # Initialize an empty list to store dictionaries for each row
-    classification_list = []
+    
+    if np.all([elem in dataframe.columns for elem in ["name", "color"]]):        
+        # Initialize an empty list to store dictionaries for each row
+        classification_list = []
 
-    # Iterate over rows in the GeoDataFrame
-    for _, row in dataframe.iterrows():
-        # Create a dictionary with "name" and "color" entries for each row
-        classification_dict = {}
-        for column in ["name", "color"]:
-            classification_dict[column] = row[column]
-        # Append the dictionary to the list
-        classification_list.append(classification_dict)
+        # Iterate over rows in the GeoDataFrame
+        for _, row in dataframe.iterrows():
+            # Create a dictionary with "name" and "color" entries for each row
+            classification_dict = {}
+            for column in ["name", "color"]:
+                classification_dict[column] = row[column]
+            # Append the dictionary to the list
+            classification_list.append(classification_dict)
 
-    # Add a new "classification" column to the GeoDataFrame
-    dataframe["classification"] = classification_list
+        # Add a new "classification" column to the GeoDataFrame
+        dataframe["classification"] = classification_list
 
-    # Remove the original "name" and "color" columns
-    dataframe = dataframe.drop(["name", "color"], axis=1)
+        # Remove the original "name" and "color" columns
+        dataframe = dataframe.drop(["name", "color"], axis=1)
 
     # Write the GeoDataFrame to a GeoJSON file
     dataframe.to_file(file, driver="GeoJSON")

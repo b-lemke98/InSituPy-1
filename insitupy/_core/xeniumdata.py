@@ -2,11 +2,10 @@ import functools as ft
 import gc
 import json
 import os
-import shutil
 import warnings
-from os.path import abspath, relpath
+from os.path import abspath
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 
 import matplotlib
@@ -16,36 +15,39 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
+import shutil
 from anndata import AnnData
 from dask_image.imread import imread
+from datetime import datetime
 from geopandas import GeoDataFrame
-from matplotlib.colors import rgb2hex
 from napari.layers import Layer, Shapes
 from napari.layers.shapes.shapes import Shapes
 from pandas.api.types import is_numeric_dtype
 from parse import *
 from scipy.sparse import csr_matrix, issparse
 from shapely import Point, Polygon, affinity
-from shapely.geometry.multipolygon import MultiPolygon
-from shapely.geometry.polygon import LinearRing, Polygon
+from shapely.geometry.polygon import Polygon
+from uuid import uuid4
 
 from insitupy import __version__
 
-from .._exceptions import (InvalidFileTypeError, ModalityNotFoundError,
+from .._constants import CACHE
+from .._exceptions import (ModalityNotFoundError,
                            NotOneElementError, UnknownOptionError,
                            WrongNapariLayerTypeError, XeniumDataMissingObject,
                            XeniumDataRepeatedCropError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
-from ..image.io import write_ome_tiff
-from ..utils.geo import write_qupath_geojson
-from ..utils.io import check_overwrite, read_json, write_dict_to_json
+from ..utils.io import check_overwrite_and_remove_if_true, read_json, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
-from ._checks import check_raw
+from ._checks import check_raw, check_zip
+from ._layers import _add_annotations_as_layer
+from ._save import (_save_images, _save_annotations, _save_cells, 
+                    _save_transcripts, _save_regions)
 from ._scanorama import scanorama
 from ._widgets import (_annotation_widget, _create_points_layer,
                        _initialize_point_widgets)
-from .dataclasses import AnnotationData, BoundariesData, CellData, ImageData
+from .dataclasses import AnnotationsData, BoundariesData, CellData, ImageData, RegionsData
 
 
 def _read_boundaries_from_xenium(
@@ -121,6 +123,32 @@ def read_celldata(
     celldata = CellData(matrix=matrix, boundaries=boundaries)
     
     return celldata
+
+def read_regionsdata(
+    path: Union[str, os.PathLike, Path],
+):    
+    metadata = read_json(path / "metadata.json")
+    keys = metadata.keys()
+    files = [path / f"{k}.geojson" for k in keys]
+    data = RegionsData(files, keys)
+    
+    # overwrite metadata
+    data.metadata = metadata
+    return data
+
+def read_annotationsdata(
+    path: Union[str, os.PathLike, Path],
+):    
+    metadata = read_json(path / "metadata.json")
+    keys = metadata.keys()
+    files = [path / f"{k}.geojson" for k in keys]
+    data = AnnotationsData(files, keys)
+    
+    # overwrite metadata
+    data.metadata = metadata
+    return data
+
+
 
 class XeniumData:
     #TODO: Docstring of XeniumData
@@ -202,7 +230,6 @@ class XeniumData:
         if hasattr(self, "images"):
             images_repr = self.images.__repr__()
             repr = (
-                #repr + f"\n{tf.Bold}Images:{tf.ResetAll} "
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + images_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
                         
@@ -211,12 +238,6 @@ class XeniumData:
             repr = (
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} cells{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
-            
-        # if hasattr(self, "matrix"):
-        #     matrix_repr = self.cells.matrix.__repr__()
-        #     repr = (
-        #         repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} matrix{tf.ResetAll}\n{tf.SPACER}   " + matrix_repr.replace("\n", "\n\t   ")
-        #     )
         
         if hasattr(self, "transcripts"):
             trans_repr = f"DataFrame with shape {self.transcripts.shape[0]} x {self.transcripts.shape[1]}"
@@ -225,17 +246,16 @@ class XeniumData:
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Purple+tf.Bold} transcripts{tf.ResetAll}\n{tf.SPACER}   " + trans_repr
             )
             
-        # if hasattr(self, "boundaries"):
-        #     bound_repr = self.boundaries.__repr__()
-        #     repr = (
-        #         #repr + f"\n{tf.Bold}Images:{tf.ResetAll} "
-        #         repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + bound_repr.replace("\n", f"\n{tf.SPACER}   ")
-        #     )
-            
         if hasattr(self, "annotations"):
             annot_repr = self.annotations.__repr__()
             repr = (
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + annot_repr.replace("\n", f"\n{tf.SPACER}   ")
+            )
+    
+        if hasattr(self, "regions"):
+            region_repr = self.regions.__repr__()
+            repr = (
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + region_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
         return repr
 
@@ -253,7 +273,7 @@ class XeniumData:
             metafile.write(metadata_json)
 
     def assign_annotations(self, 
-                annotation_labels: str = "all",
+                annotation_key: str = "all",
                 add_annotation_masks: bool = False
                 ):
         '''
@@ -264,20 +284,20 @@ class XeniumData:
         assert hasattr(self, "cells"), "No .cells attribute available. Run `read_cells()`."
         assert hasattr(self, "annotations"), "No .annotations attribute available. Run `read_annotations()`."
         
-        if annotation_labels == "all":
-            annotation_labels = self.annotations.metadata.keys()
+        if annotation_key == "all":
+            annotation_key = self.annotations.metadata.keys()
             
-        # make sure annotation labels are a list
-        annotation_labels = convert_to_list(annotation_labels)
+        # make sure annotation keys are a list
+        annotation_key = convert_to_list(annotation_key)
         
         # convert coordinates into shapely Point objects
         points = [Point(elem) for elem in self.cells.matrix.obsm["spatial"]]
 
-        # iterate through annotation labels
-        for annotation_label in annotation_labels:
-            print(f"Assigning label '{annotation_label}'...")
-            # extract pandas dataframe of current label
-            annot = getattr(self.annotations, annotation_label)
+        # iterate through annotation keys
+        for annotation_key in annotation_key:
+            print(f"Assigning key '{annotation_key}'...")
+            # extract pandas dataframe of current key
+            annot = getattr(self.annotations, annotation_key)
             
             # get unique list of annotation names
             annot_names = annot.name.unique()
@@ -305,26 +325,38 @@ class XeniumData:
             df.index = self.cells.matrix.obs_names
             
             # create annotation from annotation masks
-            df[f"annotation-{annotation_label}"] = [" & ".join(annot_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
+            df[f"annotation-{annotation_key}"] = [" & ".join(annot_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
             
             if add_annotation_masks:
                 self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df, left_index=True, right_index=True)
             else:
                 self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df.iloc[:, -1], left_index=True, right_index=True)
                 
-            # save that the current label was analyzed
-            self.annotations.metadata[annotation_label]["analyzed"] = tf.TICK
+            # save that the current key was analyzed
+            self.annotations.metadata[annotation_key]["analyzed"] = tf.TICK
         
     def copy(self):
         '''
         Function to generate a deep copy of the XeniumData object.
         '''
         from copy import deepcopy
-        
+        had_viewer = False
         if hasattr(self, "viewer"):
+            had_viewer = True
+            
+            # make copy of viewer to add it later again
+            viewer_copy = self.viewer.copy()
+            # remove viewer because there is otherwise a error during deepcopy
             del self.viewer
         
-        return deepcopy(self)
+        # make copy
+        self_copy = deepcopy(self)
+        
+        # add viewer again to original object if necessary
+        if had_viewer:
+            self.viewer = viewer_copy
+        
+        return self_copy
     
     def crop(self, 
             shape_layer: Optional[str] = None,
@@ -352,37 +384,31 @@ class XeniumData:
             if xlim is not None or ylim is not None:
                 assert np.all([elem is not None for elem in [xlim, ylim]])
                 use_shape = False
-        
-        # check if the changes are supposed to be made in place or not
-        with_viewer = False
-        if inplace:
-            _self = self
-        else:
-            if hasattr(self, "viewer"):
-                with_viewer = True
-                viewer_copy = self.viewer.copy() # copy viewer to transfer it to new object for cropping
-            _self = self.copy()
-            if with_viewer:
-                _self.viewer = viewer_copy
             
         # assert that either shape_layer is given or xlim/ylim
         assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
         
         if use_shape:
             # extract shape layer for cropping from napari viewer
-            crop_shape = _self.viewer.layers[shape_layer]
+            crop_shape = self.viewer.layers[shape_layer]
             
             # check the structure of the shape object
             if len(crop_shape.data) != 1:
                 raise NotOneElementError(crop_shape.data)
             
             # select the shape from list
-            crop_window = crop_shape.data[0]
+            crop_window = crop_shape.data[0].copy()
             crop_window *= self.metadata["pixel_size"] # convert to metric unit (normally µm)
             
             # extract x and y limits from the shape (assuming a rectangle)
             xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
             ylim = (crop_window[:, 0].min(), crop_window[:, 0].max())
+            
+        # check if the changes are supposed to be made in place or not
+        if inplace:
+            _self = self
+        else:
+            _self = self.copy()
             
         # if the object was previously cropped, check if the current window is identical with the previous one
         if np.all([elem in _self.metadata.keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
@@ -427,38 +453,20 @@ class XeniumData:
             _self.images.crop(xlim=xlim, ylim=ylim)
         
         if hasattr(_self, "annotations"):
-            limit_poly = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
+            _self.annotations.crop(xlim=xlim, ylim=ylim)
             
-            new_metadata = {}
-            for i, n in enumerate(_self.annotations.metadata.keys()):
-                annotdf = getattr(_self.annotations, n)
-                
-                # select annotations that intersect with the selected area
-                mask = [limit_poly.intersects(elem) for elem in annotdf["geometry"]]
-                annotdf = annotdf.loc[mask, :].copy()
-                
-                # move origin to zero after cropping
-                annotdf["geometry"] = annotdf["geometry"].apply(affinity.translate, xoff=-xlim[0], yoff=-ylim[0])
-                
-                # add new dataframe back to annotations object
-                setattr(_self.annotations, n, annotdf)
-                
-                # update metadata
-                new_metadata[n] = {}
-                new_metadata[n]["n_annotations"] = len(annotdf)
-                new_metadata[n]["classes"] = annotdf.name.unique().tolist()
-                new_metadata[n]["analyzed"] = _self.annotations.metadata[n]["analyzed"]  # analyzed information is just copied
-            
-            _self.annotations.metadata = new_metadata
+        if hasattr(_self, "regions"):
+            _self.regions.crop(xlim=xlim, ylim=ylim)
                 
         # add information about cropping to metadata
         _self.metadata["cropping_xlim"] = xlim
         _self.metadata["cropping_ylim"] = ylim
                 
         
-        if not inplace:
+        if inplace:
             if hasattr(self, "viewer"):
                 del _self.viewer # delete viewer
+        else:
             return _self
 
     def hvg(self,
@@ -599,57 +607,91 @@ class XeniumData:
                 print(err)
 
     def read_annotations(self,
-                    annotation_dir: Union[str, os.PathLike, Path] = None, # "../annotations",
+                    annotations_dir: Union[str, os.PathLike, Path] = None, # "../annotations",
                     suffix: str = ".geojson",
-                    pattern_annotation_file: str = "annotation-{slide_id}__{sample_id}__{name}"
+                    pattern_annotations_file: str = "annotations-{slide_id}__{sample_id}__{name}"
                     ):
         if self.from_xeniumdata:
-            # check if matrix data is stored in this XeniumData
-            if "annotations" not in self.xd_metadata:
+            try:
+                p = self.xd_metadata["annotations"]
+            except KeyError:
                 raise ModalityNotFoundError(modality="annotations")
+            self.annotations = read_annotationsdata(path=self.path / p)
             
-            # get path and names of annotation files
-            labels = self.xd_metadata["annotations"].keys()
-            files = [self.path / self.xd_metadata["annotations"][n] for n in labels]
+            # # check if annotations data is stored in this XeniumData
+            # if "annotations" not in self.xd_metadata:
+            #     raise ModalityNotFoundError(modality="annotations")
+            
+            # # get path and names of annotation files
+            # keys = self.xd_metadata["annotations"].keys()
+            # files = [self.path / self.xd_metadata["annotations"][n] for n in keys]
             
         else:
-            if annotation_dir is None:
+            if annotations_dir is None:
                 raise ModalityNotFoundError(modality="annotations")
             else:
                 # convert to Path
-                annotation_dir = Path(annotation_dir)
+                annotations_dir = Path(annotations_dir)
                 
                 # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
-                if not annotation_dir.is_dir():
-                    annotation_dir = Path(os.path.normpath(self.path / annotation_dir))
-                    if not annotation_dir.is_dir():
-                        raise FileNotFoundError(f"`annot_path` {annotation_dir} is neither a direct path nor a relative path.")
+                if not annotations_dir.is_dir():
+                    annotations_dir = Path(os.path.normpath(self.path / annotations_dir))
+                    if not annotations_dir.is_dir():
+                        raise FileNotFoundError(f"`annotations_dir` {annotations_dir} is neither a direct path nor a relative path.")
                 
                 # get list annotation files that match the current slide id and sample id
                 files = []
-                labels = []
-                for file in annotation_dir.glob(f"*{suffix}"):
+                keys = []
+                for file in annotations_dir.glob(f"*{suffix}"):
                     if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
-                        parsed = parse(pattern_annotation_file, file.stem)
-                        labels.append(parsed.named["name"])
+                        parsed = parse(pattern_annotations_file, file.stem)
+                        keys.append(parsed.named["name"])
                         files.append(file)
             
-        print("Reading annotations...", flush=True)
-        self.annotations = AnnotationData(annot_files=files, annot_labels=labels, pixel_size=self.metadata['pixel_size'])
-        
+            print("Reading annotations...", flush=True)
+            self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
+                
+    def read_regions(self,
+                    regions_dir: Union[str, os.PathLike, Path] = None, # "../regions",
+                    suffix: str = ".geojson",
+                    pattern_regions_file: str = "regions-{slide_id}__{sample_id}__{name}"
+                    ):
         if self.from_xeniumdata:
-            # read saved metadata
-            new_metadata = read_json(self.path / "annotations" / "annotations_metadata.json")
+            try:
+                p = self.xd_metadata["regions"]
+            except KeyError:
+                raise ModalityNotFoundError(modality="regions")
+            self.regions = read_regionsdata(path=self.path / p)
             
-            # if keys in stored metadata fit to loaded metadata substitute use the stored metadata
-            if new_metadata.keys() == self.annotations.metadata.keys():
-                self.annotations.metadata = new_metadata
+        else:
+            if regions_dir is None:
+                raise ModalityNotFoundError(modality="regions")
+            else:
+                # convert to Path
+                regions_dir = Path(regions_dir)
+                
+                # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
+                if not regions_dir.is_dir():
+                    regions_dir = Path(os.path.normpath(self.path / regions_dir))
+                    if not regions_dir.is_dir():
+                        raise FileNotFoundError(f"`regions_dir` {regions_dir} is neither a direct path nor a relative path.")
+                
+                # get list annotation files that match the current slide id and sample id
+                files = []
+                keys = []
+                for file in regions_dir.glob(f"*{suffix}"):
+                    if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
+                        parsed = parse(pattern_regions_file, file.stem)
+                        keys.append(parsed.named["name"])
+                        files.append(file)
+            
+            print("Reading regions...", flush=True)
+            self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
 
 
     def read_cells(self):
         print("Reading cells...", flush=True)
         if self.from_xeniumdata:
-            #TODO: Implement this part with a read_celldata() function
             try:
                 cells_path = self.xd_metadata["cells"]
             except KeyError:
@@ -1029,19 +1071,19 @@ class XeniumData:
         path = Path(path)
         
         # check overwrite
-        check_overwrite(path=path, overwrite=overwrite)
-
-        # check if the output directory is going to be zipped or not
-        if path.suffix == ".zip":
-            zip_output = True
-            path = path.with_suffix("")
-        elif path.suffix == "":
-            zip_output = False
-        else:
-            raise ValueError(f"The specified output path ({path}) must be a valid directory or a zip file. It does not need to exist yet.")
+        check_overwrite_and_remove_if_true(path=path, overwrite=overwrite)
         
+        # check whether to save to zip
+        zip_output = check_zip(path=path)
+        
+        # remove zip if available
+        path_stem = path.parent / path.stem
+        
+        if zip_output:
+            check_overwrite_and_remove_if_true(path=path_stem, overwrite=overwrite)
+
         # create output directory if it does not exist yet
-        path.mkdir(parents=True, exist_ok=True)
+        path_stem.mkdir(parents=True, exist_ok=True)
         
         # create a metadata dictionary
         metadata = {}
@@ -1052,92 +1094,140 @@ class XeniumData:
         metadata["path"] = str(abspath(self.path))
         
         # save images
-        if hasattr(self, "images"):
-            img_path = (path / "images")
-            img_path.mkdir(parents=True, exist_ok=True) # create image directory
-            
-            metadata["images"] = {}
-            for n, img_metadata in self.images.metadata.items():
-                # extract image
-                img = getattr(self.images, n)[0]
-                
-                # get file name for saving
-                filename = Path(img_metadata["file"]).name
-                
-                # retrieve image metadata for saving
-                photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
-                axes = img_metadata['axes']
-                
-                # retrieve OME metadata
-                ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY", "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
-                pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
-                selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
-                
-                # write images as OME-TIFF
-                write_ome_tiff(img_path / filename, img, photometric=photometric, axes=axes, metadata=selected_metadata, overwrite=overwrite)
-                
-                # collect metadata
-                metadata["images"][n] = Path(relpath(img_path / filename, path)).as_posix()
-                
-        # save matrix
+        try:
+            images = self.images
+        except AttributeError:
+            pass
+        else:
+            _save_images(
+                imagedata=images,
+                path=path_stem,
+                metadata=metadata
+                )
+
+        # save cells
         try:
             cells = self.cells
         except AttributeError:
             pass
         else:
-            # create path for cells
-            cells_path = path / "cells"
-            
-            # save cells to path and write info to metadata
-            cells.save(cells_path)
-            metadata["cells"] = Path(relpath(cells_path, path)).as_posix()
+            _save_cells(
+                cells=cells,
+                path=path_stem,
+                metadata=metadata
+            )
             
         # save transcripts
-        if hasattr(self, "transcripts"):
-            trans_path = (path / "transcripts")
-            trans_path.mkdir(parents=True, exist_ok=True) # create directory
-            trans_file = trans_path / "transcripts.parquet"
-            self.transcripts.to_parquet(trans_file)
-            metadata["transcripts"] = Path(relpath(trans_file, path)).as_posix()
+        try:
+            transcripts = self.transcripts
+        except AttributeError:
+            pass
+        else:
+            _save_transcripts(
+                transcripts=transcripts,
+                path=path_stem,
+                metadata=metadata
+                )
                 
+        
         # save annotations
-        if hasattr(self, "annotations"):
-            annot_path = (path / "annotations")
-            annot_path.mkdir(parents=True, exist_ok=True) # create directory
+        try:
+            annotations = self.annotations
+        except AttributeError:
+            pass
+        else:
+            _save_annotations(
+                annotations=annotations,
+                path=path_stem,
+                metadata=metadata
+            )
             
-            metadata["annotations"] = {}
-            for n in self.annotations.metadata.keys():
-                annot_df = getattr(self.annotations, n)
-                # annot_file = annot_path / f"{n}.parquet"
-                # annot_df.to_parquet(annot_file)
-                annot_file = annot_path / f"{n}.geojson"
-                write_qupath_geojson(dataframe=annot_df, file=annot_file)
-                metadata["annotations"][n] = Path(relpath(annot_file, path)).as_posix()
-                
-            # save AnnotationData metadata
-            annot_meta_path = annot_path / "annotations_metadata.json"
-            write_dict_to_json(dictionary=self.annotations.metadata, file=annot_meta_path)
-                
+            
+        # save regions
+        try:
+            regions = self.regions
+        except AttributeError:
+            pass
+        else:
+            _save_regions(
+                regions=regions,
+                path=path_stem,
+                metadata=metadata
+            )
+
         # save version of InSituPy
         metadata["version"] = __version__
             
         # write Xeniumdata metadata to json file
-        xd_metadata_path = path / ".xeniumdata"
+        xd_metadata_path = path_stem / ".xeniumdata"
         write_dict_to_json(dictionary=metadata, file=xd_metadata_path)
             
         # write Xenium metadata to json file
-        metadata_path = path / "xenium.json"
+        metadata_path = path_stem / "xenium.json"
         write_dict_to_json(dictionary=self.metadata, file=metadata_path)
-            
+        
         # Optionally: zip the resulting directory
         if zip_output:
-            shutil.make_archive(path, 'zip', path, verbose=False)
+            shutil.make_archive(path_stem, 'zip', path_stem, verbose=False)
+            shutil.rmtree(path_stem) # delete directory
+
+    def quicksave(self):
+        # create quicksave directory if it does not exist already
+        quicksave_dir = CACHE / "quicksaves"
+        quicksave_dir.mkdir(parents=True, exist_ok=True)
+        
+        # create filename
+        current_datetime = datetime.now().strftime("%y%m%d_%H-%M-%S")
+        slide_id = self.slide_id
+        sample_id = self.sample_id
+        uid = str(uuid4())[:8]
+
+        # create output directory
+        outname = f"{slide_id}__{sample_id}__{current_datetime}__{uid}"
+        outdir = quicksave_dir / outname
+        
+        # save annotations
+        try:
+            annotations = self.annotations
+        except AttributeError:
+            pass
+        else:
+            _save_annotations(
+                annotations=annotations,
+                path=outdir,
+                metadata=None
+            )
             
+        # # zip the output
+        shutil.make_archive(outdir, format='zip', root_dir=outdir, verbose=False)
+        shutil.rmtree(outdir) # delete directory
+            
+        
+    def list_quicksaves(self):
+        # create quicksave directory if it does not exist already
+        quicksave_dir = CACHE / "quicksaves"
+        
+        pattern = "{slide_id}__{sample_id}__{savetime}__{uid}"
 
-
+        # collect results
+        res = {
+            "slide_id": [],
+            "sample_id": [],
+            "savetime": [],
+            "uid": []
+        }
+        for f in quicksave_dir.glob("*"):
+            parse_res = parse(pattern, f.stem).named
+            for key, value in parse_res.items():
+                res[key].append(value)
+            
+        # create and return dataframe
+        return pd.DataFrame(res)
+            
+            
     def show(self,
         keys: Optional[str] = None,
-        annotation_labels: Optional[str] = None,
+        annotation_keys: Optional[str] = None,
         show_images: bool = True,
         show_cells: bool = False,
         point_size: int = 6,
@@ -1239,82 +1329,35 @@ class XeniumData:
                     self.viewer.add_layer(Layer.create(*layer))            
 
         # optionally add annotations
-        if annotation_labels is not None:        
+        if annotation_keys is not None:        
             # get colorcycle for region annotations
             cmap_annot = matplotlib.colormaps[cmap_annotations]
             cc_annot = cmap_annot.colors
             
-            if annotation_labels == "all":
-                annotation_labels = self.annotations.metadata.keys()
-            annotation_labels = convert_to_list(annotation_labels)
-            for annotation_label in annotation_labels:
-                annot_df = getattr(self.annotations, annotation_label)
+            if annotation_keys == "all":
+                annotation_keys = self.annotations.metadata.keys()
+            annotation_keys = convert_to_list(annotation_keys)
+            for annotation_key in annotation_keys:
+                annot_df = getattr(self.annotations, annotation_key)
                 
                 # get classes
                 classes = annot_df['name'].unique()
                 
                 # iterate through classes
                 for cl in classes:
+                    # generate layer name
+                    layer_name = f"*{cl} ({annotation_key})"
+                    
                     # get dataframe for this class
                     class_df = annot_df[annot_df["name"] == cl]
                     
-                    # iterate through annotations of this class and collect them as list
-                    shape_list = []
-                    color_list = []
-                    uid_list = []
-                    type_list = [] # list to store whether the polygon is exterior or interior
-                    for uid, row in class_df.iterrows():
-                        # get metadata
-                        polygon = row["geometry"]
-                        #uid = row["id"]
-                        hexcolor = rgb2hex([elem / 255 for elem in row["color"]])
-                        
-                        # check if polygon is a MultiPolygon or just a simple Polygon object
-                        if isinstance(polygon, MultiPolygon):
-                            poly_list = list(polygon.geoms)
-                        elif isinstance(polygon, Polygon):
-                            poly_list = [polygon]
-                        else:
-                            raise ValueError(f"Input must be a Polygon or MultiPolygon object. Received: {type(polygon)}")
-                        
-                        for p in poly_list:
-                            # extract exterior coordinates from shapely object
-                            # Note: the last coordinate is removed since it is identical with the first
-                            # in shapely objects, leading sometimes to visualization bugs in napari
-                            exterior_array = np.array([p.exterior.coords.xy[1].tolist()[:-1],
-                                                    p.exterior.coords.xy[0].tolist()[:-1]]).T
-                            #exterior_array *= pixel_size # convert to length unit
-                            shape_list.append(exterior_array)  # collect shape
-                            color_list.append(hexcolor)  # collect corresponding color
-                            uid_list.append(uid)  # collect corresponding unique id
-                            type_list.append("exterior")
-                            
-                            # if polygon has interiors, plot them as well
-                            # for information on donut-shaped polygons in napari see: https://forum.image.sc/t/is-it-possible-to-generate-doughnut-shapes-in-napari-shapes-layer/88834
-                            if len(p.interiors) > 0:
-                                for linear_ring in p.interiors:
-                                    if isinstance(linear_ring, LinearRing):
-                                        interior_array = np.array([linear_ring.coords.xy[1].tolist()[:-1],
-                                                                linear_ring.coords.xy[0].tolist()[:-1]]).T
-                                        #interior_array *= pixel_size # convert to length unit
-                                        shape_list.append(interior_array)  # collect shape
-                                        color_list.append(hexcolor)  # collect corresponding color
-                                        uid_list.append(uid)  # collect corresponding unique id
-                                        type_list.append("interior")
-                                    else:
-                                        ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
-                        
-                    self.viewer.add_shapes(shape_list, 
-                                    name=f"*{cl} ({annotation_label})",
-                                    properties={
-                                        'uid': uid_list, # list with uids
-                                        'type': type_list # list giving information on whether the polygon is interior or exterior
-                                    },
-                                    shape_type='polygon', 
-                                    edge_width=10,
-                                    edge_color=color_list,
-                                    face_color='transparent'
-                                    )
+                    if layer_name not in self.viewer.layers:
+                        # add layer to viewer
+                        _add_annotations_as_layer(
+                            dataframe=class_df,
+                            viewer=self.viewer,
+                            layer_name=layer_name
+                        )
                     
         # WIDGETS
         try:
@@ -1323,25 +1366,34 @@ class XeniumData:
             pass
         else:
             # initialize the widgets
-            add_points_widget, locate_cells_widget = _initialize_point_widgets(
-                adata=cells.matrix, viewer=self.viewer
-                )
-            
-            # set layout of widgets
-            add_points_widget.max_height = 150
-            add_points_widget.max_width = widgets_max_width
-            locate_cells_widget.max_height = 150
-            locate_cells_widget.max_width = widgets_max_width
+            add_points_widget, locate_cells_widget, add_region_widget, add_annotations_widget = _initialize_point_widgets(xdata=self)
             
             # add widgets to napari window
-            self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
-            self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate", area="right")
+            if add_points_widget is not None:
+                self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
+                add_points_widget.max_height = 150
+                add_points_widget.max_width = widgets_max_width
+            
+            if locate_cells_widget is not None:
+                self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate", area="right")
+                locate_cells_widget.max_height = 150
+                locate_cells_widget.max_width = widgets_max_width
+            
+            if add_region_widget is not None:
+                self.viewer.window.add_dock_widget(add_region_widget, name="Show regions", area="right")
+                add_region_widget.max_height = 150
+                add_region_widget.max_width = widgets_max_width
+                
+            if add_annotations_widget is not None:
+                self.viewer.window.add_dock_widget(add_annotations_widget, name="Show annotations", area="right")
+                add_annotations_widget.max_height = 150
+                add_annotations_widget.max_width = widgets_max_width
         
         # add annotation widget to napari
         annot_widget = _annotation_widget()
         annot_widget.max_height = 100
         annot_widget.max_width = widgets_max_width
-        self.viewer.window.add_dock_widget(annot_widget, name="Annotations", area="right")
+        self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
         
         # EVENTS
         # Function assign to an layer addition event
@@ -1392,7 +1444,7 @@ class XeniumData:
             return self.viewer
     
     def store_annotations(self,
-                        name_pattern = "*{class_name} ({annot_label})",
+                        name_pattern = "*{class_name} ({annot_key})",
                         uid_col: str = "id"
                         ):
         '''
@@ -1412,12 +1464,12 @@ class XeniumData:
             else:
                 name_parsed = parse(name_pattern, layer.name)
                 if name_parsed is not None:
-                    annot_label = name_parsed.named["annot_label"]
+                    annot_key = name_parsed.named["annot_key"]
                     class_name = name_parsed.named["class_name"]
                     
                     # if the XeniumData object does not has an annotations attribute, initialize it
                     if not hasattr(self, "annotations"):
-                        self.annotations = AnnotationData() # initialize empty object
+                        self.annotations = AnnotationsData() # initialize empty object
                     
                     # extract shapes coordinates and colors
                     shapes = layer.data
@@ -1439,5 +1491,5 @@ class XeniumData:
                     annot_df = GeoDataFrame(annot_df, geometry="geometry")
                     
                     # add annotations
-                    self.annotations.add_annotation(data=annot_df, label=annot_label, verbose=True)                       
+                    self.annotations.add_annotation(data=annot_df, key=annot_key, verbose=True)                       
  

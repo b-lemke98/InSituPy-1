@@ -45,4 +45,14 @@ def check_raw(X):
     if not np.all(np.modf(X)[0] == 0):
         raise ValueError("Anndata object does not contain raw counts. Preprocessing aborted.")
 
-
+def check_zip(path):
+    # check if the output directory is going to be zipped or not
+    if path.suffix == ".zip":
+        zip_output = True
+        path = path.with_suffix("")
+    elif path.suffix == "":
+        zip_output = False
+    else:
+        raise ValueError(f"The specified output path ({path}) must be a valid directory or a zip file. It does not need to exist yet.")
+    
+    return zip_output
