@@ -4,6 +4,7 @@ from typing import Literal, Optional, Union
 
 import numpy as np
 import tifffile as tf
+import warnings
 
 from .utils import resize_image
 
@@ -11,7 +12,7 @@ from .utils import resize_image
 def write_ome_tiff(
     file: Union[str, os.PathLike, Path],
     image: np.ndarray,
-    axes: str = "YXS", # channels - other examples: 'TCYXS'. S for RGB channels.
+    axes: str = "YXS", # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
     metadata: dict = {},
     subresolutions = 7, 
     subres_steps: int = 2,
@@ -30,6 +31,10 @@ def write_ome_tiff(
 
     For parameters optimal for Xenium see: https://www.10xgenomics.com/support/software/xenium-explorer/tutorials/xe-image-file-conversion
     '''
+    # check dtype of image
+    if image.dtype not in [np.dtype('uint16'), np.dtype('uint8')]:
+        warnings.warn("Image does not have dtype 'uint8' or 'uint16'. Is converted to 'uint16'.")
+        image = image.astype('uint16')
     
     file = Path(file)
     if file.exists():

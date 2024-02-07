@@ -592,19 +592,20 @@ class XeniumData:
             plt.savefig(save)
         plt.show()
 
-    def read_all(self, verbose: bool = True):
+    def read_all(self, 
+                 skip: Optional[str] = None,
+                 ):
         # extract read functions
         read_funcs = [elem for elem in dir(self) if elem.startswith("read_")]
         read_funcs = [elem for elem in read_funcs if elem != "read_all"]
         
         for f in read_funcs:
-            # if verbose: 
-            #     print(f"Running {f}()", flush=True)
-            func = getattr(self, f)
-            try:
-                func()
-            except ModalityNotFoundError as err:
-                print(err)
+            if skip is None or skip not in f:
+                func = getattr(self, f)
+                try:
+                    func()
+                except ModalityNotFoundError as err:
+                    print(err)
 
     def read_annotations(self,
                     annotations_dir: Union[str, os.PathLike, Path] = None, # "../annotations",
@@ -704,7 +705,7 @@ class XeniumData:
 
     def read_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
-                    dapi_type: str = "focus"
+                    nuclei_type: Literal["focus", "mip", ""] = "mip"
                     ):
         if self.from_xeniumdata:
             # check if matrix data is stored in this XeniumData
@@ -716,7 +717,7 @@ class XeniumData:
             img_names = list(self.xd_metadata["images"].keys())
         else:
             if names == "nuclei":
-                img_keys = [f"morphology_{dapi_type}_filepath"]
+                img_keys = [f"morphology_{nuclei_type}_filepath"]
                 img_names = ["nuclei"]
             else:
                 # get available keys for registered images in metadata
@@ -726,7 +727,7 @@ class XeniumData:
                 img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
                 
                 # add dapi image key
-                img_keys = [f"morphology_{dapi_type}_filepath"] + img_keys
+                img_keys = [f"morphology_{nuclei_type}_filepath"] + img_keys
                 
                 if names != "all":
                     # make sure keys is a list

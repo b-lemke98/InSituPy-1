@@ -27,7 +27,7 @@ def resize_image(img: NDArray,
         
     assert img.dtype in [np.dtype('uint16'), np.dtype('uint8')], \
         "Image must have one of the following numpy data types: `dtype('uint8)` or `dtype('uint16)`. \
-            Otherwise cv2.resize shows an error."
+        Otherwise cv2.resize shows an error."
     
     if isinstance(img, da.Array):
         img = img.compute() # load into memory
