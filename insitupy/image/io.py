@@ -18,7 +18,7 @@ def write_ome_tiff(
     subres_steps: int = 2,
     pixelsize: Optional[float] = 1, # defaults to Xenium settings.
     pixelunit: Optional[str] = None, # usually µm
-    significant_bits: Optional[int] = 8,
+    #significant_bits: Optional[int] = 16,
     photometric: Literal['rgb', 'minisblack', 'maxisblack'] = 'rgb', # before I had rgb here. Xenium doc says minisblack
     tile: tuple = (1024, 1024), # 1024 pixel is optimal for Xenium Explorer
     compression: Literal['jpeg', 'LZW', 'jpeg2000', None] = 'jpeg2000', # jpeg2000 is used in Xenium documentation
@@ -34,7 +34,17 @@ def write_ome_tiff(
     # check dtype of image
     if image.dtype not in [np.dtype('uint16'), np.dtype('uint8')]:
         warnings.warn("Image does not have dtype 'uint8' or 'uint16'. Is converted to 'uint16'.")
-        image = image.astype('uint16')
+        
+        if image.dtype == np.dtype('int8'):
+            image = image.astype('uint8')
+        else:
+            image = image.astype('uint16')
+        
+    # determine significant bits variable - is important that Xenium explorer correctly distinguishes between 8 bit and 16 bit
+    if image.dtype == np.dtype('uint8'):
+        significant_bits = 8
+    else:
+        significant_bits = 16
     
     file = Path(file)
     if file.exists():
