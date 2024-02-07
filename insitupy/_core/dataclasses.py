@@ -511,8 +511,12 @@ class ImageData(DeepCopyMixin):
         self.metadata = {}
         for n, f in zip(img_names, img_files):
             
+            # generate full path for image
+            impath = path / f
+            impath = impath.resolve() # resolve relative path
+            
             # load images
-            store = imread(path / f, aszarr=True)
+            store = imread(impath, aszarr=True)
             pyramid = load_pyramid(store)
             
             # set attribute and add names to object
