@@ -11,15 +11,16 @@ import pandas as pd
 import xmltodict
 from anndata import AnnData
 from parse import *
-from shapely.geometry.multipolygon import MultiPolygon
 from shapely import Polygon, affinity
+from shapely.geometry.multipolygon import MultiPolygon
 from tifffile import TiffFile, imread
 
 from insitupy import __version__
 
 from .._exceptions import InvalidFileTypeError
 from ..utils.geo import parse_geopandas, write_qupath_geojson
-from ..utils.io import check_overwrite_and_remove_if_true, load_pyramid, write_dict_to_json
+from ..utils.io import (check_overwrite_and_remove_if_true, load_pyramid,
+                        write_dict_to_json)
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._mixins import DeepCopyMixin

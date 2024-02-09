@@ -2,12 +2,15 @@ import functools as ft
 import gc
 import json
 import os
+import shutil
 import warnings
+from datetime import datetime
 from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 
+import dask_image
 import matplotlib
 import matplotlib.pyplot as plt
 import napari
@@ -15,10 +18,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
-import shutil
 from anndata import AnnData
-from dask_image.imread import imread
-from datetime import datetime
 from geopandas import GeoDataFrame
 from napari.layers import Layer, Shapes
 from napari.layers.shapes.shapes import Shapes
@@ -27,27 +27,28 @@ from parse import *
 from scipy.sparse import csr_matrix, issparse
 from shapely import Point, Polygon, affinity
 from shapely.geometry.polygon import Polygon
-from uuid import uuid4
 
 from insitupy import __version__
 
 from .._constants import CACHE
-from .._exceptions import (ModalityNotFoundError,
-                           NotOneElementError, UnknownOptionError,
-                           WrongNapariLayerTypeError, XeniumDataMissingObject,
+from .._exceptions import (ModalityNotFoundError, NotOneElementError,
+                           UnknownOptionError, WrongNapariLayerTypeError,
+                           XeniumDataMissingObject,
                            XeniumDataRepeatedCropError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
-from ..utils.io import check_overwrite_and_remove_if_true, read_json, write_dict_to_json
+from ..utils.io import (check_overwrite_and_remove_if_true, read_json,
+                        write_dict_to_json)
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._checks import check_raw, check_zip
 from ._layers import _add_annotations_as_layer
-from ._save import (_save_images, _save_annotations, _save_cells, 
-                    _save_transcripts, _save_regions)
+from ._save import (_save_annotations, _save_cells, _save_images,
+                    _save_regions, _save_transcripts)
 from ._scanorama import scanorama
 from ._widgets import (_annotation_widget, _create_points_layer,
                        _initialize_point_widgets)
-from .dataclasses import AnnotationsData, BoundariesData, CellData, ImageData, RegionsData
+from .dataclasses import (AnnotationsData, BoundariesData, CellData, ImageData,
+                          RegionsData)
 
 
 def _read_boundaries_from_xenium(
@@ -156,6 +157,7 @@ class XeniumData:
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
                  pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{sample_id}",
+                 metadata_filename: Optional[str] = None,
                  matrix: Optional[AnnData] = None
                  ):
         """_summary_
@@ -192,12 +194,16 @@ class XeniumData:
             if not self.path.is_dir():
                 raise FileNotFoundError(f"No such directory found: {str(self.path)}")
             
-            # check for modified metadata_filename
-            metadata_files = [elem.name for elem in self.path.glob("*.xenium")]
-            if "experiment_modified.xenium" in metadata_files:
-                self.metadata_filename = "experiment_modified.xenium"
+            if metadata_filename is not None:
+                self.metadata_filename = metadata_filename
+                
             else:
-                self.metadata_filename = "experiment.xenium"
+                # check for modified metadata_filename
+                metadata_files = [elem.name for elem in self.path.glob("*.xenium")]
+                if "experiment_modified.xenium" in metadata_files:
+                    self.metadata_filename = "experiment_modified.xenium"
+                else:
+                    self.metadata_filename = "experiment.xenium"
                 
             # all changes are saved to the modified .xenium json
             self.metadata_save_path = self.path / "experiment_modified.xenium"
@@ -904,7 +910,7 @@ class XeniumData:
 
                 # read images
                 print("\t\tLoading images to be registered...", flush=True)
-                image = imread(img_file) # e.g. HE image
+                image = dask_image.imread(img_file) # e.g. HE image
                 
                 # sometimes images are read with an empty time dimension in the first axis. 
                 # If this is the case, it is removed here.
@@ -1013,7 +1019,7 @@ class XeniumData:
                                         )
                     
                     # save metadata
-                    self.metadata['images'][f'registered_{self.image_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path)
+                    self.metadata['images'][f'registered_{self.image_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path).replace("\\", "/")
                     self._save_metadata()
                         
                     del imreg_complete, imreg_selected, image, template, nuclei_img, eo, dab
@@ -1092,7 +1098,7 @@ class XeniumData:
         # store basic information about experiment
         metadata["slide_id"] = self.slide_id
         metadata["sample_id"] = self.sample_id
-        metadata["path"] = str(abspath(self.path))
+        #metadata["path"] = str(abspath(self.path))
         
         # save images
         try:
