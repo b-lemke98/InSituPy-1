@@ -67,11 +67,25 @@ def _read_boundaries_from_xenium(
     
     return boundaries
 
+# def _read_masks_from_xenium(
+#     path: Union[str, os.PathLike, Path]):        
+#     # # read boundaries data
+#     path = Path(path)
+#     files=["cells.zarr.zip"]
+    
+#     # generate path for files
+#     files = [path / f for f in files]
+    
+#     # read boundaries
+#     masks = MasksData()
+#     masks.read_masks(files=files, labels=labels)
+    
+#     return masks
 
-def _read_matrix_from_xenium(path, metadata):
+def _read_matrix_from_xenium(path):
     # extract parameters from metadata
-    cf_zarr_path = path / metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
-    cf_h5_path = cf_zarr_path.parent / cf_zarr_path.name.replace(".zarr.zip", ".h5")
+    #cf_zarr_path = path / metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
+    cf_h5_path = path / "cell_feature_matrix.h5"
 
     with warnings.catch_warnings():
         warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -79,8 +93,8 @@ def _read_matrix_from_xenium(path, metadata):
         adata = sc.read_10x_h5(cf_h5_path)
 
     # read cell information
-    cells_zarr_path = path / metadata["xenium_explorer_files"]["cells_zarr_filepath"]
-    cells_parquet_path = cells_zarr_path.parent / cells_zarr_path.name.replace(".zarr.zip", ".parquet")
+    #cells_zarr_path = path / metadata["xenium_explorer_files"]["cells_zarr_filepath"]
+    cells_parquet_path = path / "cells.parquet"
     cells = pd.read_parquet(cells_parquet_path)
 
     # transform cell ids from bytes to str
@@ -705,7 +719,7 @@ class XeniumData:
                 raise ModalityNotFoundError(modality="cells")
             self.cells = read_celldata(path=self.path / cells_path)
         else:
-            matrix = matrix = _read_matrix_from_xenium(path=self.path, metadata=self.metadata)
+            matrix = matrix = _read_matrix_from_xenium(path=self.path)
             boundaries = _read_boundaries_from_xenium(path=self.path)
             self.cells = CellData(matrix=matrix, boundaries=boundaries)
 

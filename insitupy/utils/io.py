@@ -1,16 +1,18 @@
 import json
-import matplotlib.pyplot as plt
 import os
-import pandas as pd
 import shutil
 from pathlib import Path
-from typing import Union, List
+from typing import List, Union
 
 import dask.array as da
+import matplotlib.pyplot as plt
+import pandas as pd
 import zarr
 
 from .utils import nested_dict_numpy_to_list
 
+
+#TODO: `load_pyramid` should be moved to .image.io
 def load_pyramid(store):
     '''
     Function to load pyramid.
