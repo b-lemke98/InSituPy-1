@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
+import zarr
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from napari.layers import Layer, Shapes
@@ -52,6 +53,41 @@ from ._widgets import (_annotation_widget, _create_points_layer,
 from .dataclasses import (AnnotationsData, BoundariesData, CellData, ImageData,
                           RegionsData)
 
+
+def _read_binned_expression(
+    path: Union[str, os.PathLike, Path],
+    gene_names_to_select = List
+):
+    # add binned expression data to .varm of self.cells.matrix
+    trans_file = path / "transcripts.zarr.zip"
+    
+    # read zarr store
+    t = zarr.open(trans_file, mode="r")
+
+    # extract sparse array
+    data_gene = t["density/gene"]
+    data = data_gene["data"][:]
+    indices = data_gene["indices"][:]
+    indptr = data_gene["indptr"][:]
+    
+    # get dimensions of the array
+    cols = data_gene.attrs["cols"]
+    rows = data_gene.attrs["rows"]
+    
+    # get info on gene names
+    gene_names = data_gene.attrs["gene_names"]
+    n_genes = len(gene_names)
+
+    sarr = csr_matrix((data, indices, indptr))
+
+    # reshape to get binned data
+    arr = sarr.toarray()
+    arr = arr.reshape((n_genes, rows, cols))
+
+    # select only genes that are available in the adata object
+    gene_mask = [elem in gene_names_to_select for elem in gene_names]
+    arr = arr[gene_mask]
+    return arr
 
 def _read_boundaries_from_xenium(
     path: Union[str, os.PathLike, Path],
@@ -194,7 +230,6 @@ def read_annotationsdata(
     # overwrite metadata
     data.metadata = metadata
     return data
-
 
 
 class XeniumData:
@@ -756,9 +791,15 @@ class XeniumData:
                 raise ModalityNotFoundError(modality="cells")
             self.cells = read_celldata(path=self.path / cells_path)
         else:
+            # read celldata
             matrix = matrix = _read_matrix_from_xenium(path=self.path)
             boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=self.metadata["pixel_size"])
             self.cells = CellData(matrix=matrix, boundaries=boundaries)
+            
+            # read binned expression
+            arr = _read_binned_expression(path=self.path, gene_names_to_select=self.cells.matrix.var_names)
+            self.cells.matrix.varm["binned_expression"] = arr
+            
 
     def read_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
