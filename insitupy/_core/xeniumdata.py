@@ -152,13 +152,14 @@ def read_celldata(
     boundaries_dict = {k: path / v for k,v in celldata_metadata["boundaries"].items()}
     boundaries_dict = {}
     for k,v in celldata_metadata["boundaries"].items():
+        suffix = v.split(".", 1)[-1] # necessary to do this with split because of the two dots in .zarr.zip
         f = path / v
-        if f.suffix == ".parquet":
+        if suffix == "parquet":
             d = pd.read_parquet(f)
-        elif f.suffix == ".zarr.zip":
+        elif suffix == "zarr.zip":
             d = dask.array.from_zarr(f)
         else:
-            raise ValueError(f"Boundaries saved in CellData object are neither .parquet nor .zarr.zip format: {f.suffix}")
+            raise ValueError(f"Boundaries saved in CellData object are neither .parquet nor .zarr.zip format: {suffix}")
         boundaries_dict[k] = d
     
     boundaries = BoundariesData()
@@ -234,7 +235,7 @@ class XeniumData:
             # set flag for xeniumdata
             self.from_xeniumdata = True
             
-        elif matrix is None:            
+        elif matrix is None:
             # check if path exists
             if not self.path.is_dir():
                 raise FileNotFoundError(f"No such directory found: {str(self.path)}")
