@@ -1,10 +1,12 @@
 import os
 import warnings
 from copy import deepcopy
+from numbers import Number
 from os.path import relpath
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
+import dask
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -250,8 +252,11 @@ class BoundariesData(DeepCopyMixin):
     '''
     Object to read and load boundaries of cells and nuclei.
     '''
-    def __init__(self):
+    def __init__(self,
+                 pixel_size: Number = 1, # required for boundaries that are saved as masks
+                 ):
         self.labels = []
+        self.pixel_size = pixel_size
         
     def __repr__(self):
         if len(self.labels) == 0:
@@ -262,53 +267,56 @@ class BoundariesData(DeepCopyMixin):
                 repr += f"\n{tf.SPACER+tf.Bold+l+tf.ResetAll}"
         return repr
     
-    def read_boundaries(self,
-        files: Union[str, os.PathLike, Path, List],
-        labels: Optional[Union[str, List[str]]] = None,
-    ):
-        
-        # generate dataframes
-        dataframes = {}
-        for n, f in zip(labels, files):
-            # check the file suffix
-            if not f.suffix == ".parquet":
-                InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
+    # def read_boundaries(self,
+    #     files: Union[str, os.PathLike, Path, List],
+    #     labels: Optional[Union[str, List[str]]] = None,
+    # ):
+    #     # generate dataframes
+    #     dataframes = {}
+    #     for n, f in zip(labels, files):
+    #         # check the file suffix
+    #         if not f.suffix == ".parquet":
+    #             InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
             
-            # load dataframe
-            df = pd.read_parquet(f)
+    #         # load dataframe
+    #         df = pd.read_parquet(f)
 
-            # decode columns
-            df = df.apply(lambda x: decode_robust_series(x), axis=0)
+    #         # decode columns
+    #         df = df.apply(lambda x: decode_robust_series(x), axis=0)
 
-            # collect dataframe
-            dataframes[n] = df
+    #         # collect dataframe
+    #         dataframes[n] = df
             
-        # add dictionary with boundaries to BoundariesData object
-        self.add_boundaries(dataframes=dataframes)
+    #     # add dictionary with boundaries to BoundariesData object
+    #     self.add_boundaries(dataframes=dataframes)
         
     def add_boundaries(self,
-                       dataframes: Optional[Union[dict, List[str]]] = None,
+                       data: Optional[Union[dict, List[str]]] = None,
                        labels: Optional[List[str]] = [],
                        overwrite: bool = False
                        ):
-        if dataframes is not None:
-            if isinstance(dataframes, dict):
+        if data is not None:
+            if isinstance(data, dict):
                 # extract keys from dictionary
-                labels = dataframes.keys()
-                dataframes = dataframes.values()
-            elif isinstance(dataframes, list):
+                labels = data.keys()
+                data = data.values()
+            elif isinstance(data, list):
                 if labels is None:
                     raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
             else:
-                raise ValueError(f"Argument 'dataframes' has unknown file type ({type(dataframes)}). Expected to be a list or dictionary.")
+                raise ValueError(f"Argument 'dataframes' has unknown file type ({type(data)}). Expected to be a list or dictionary.")
             
-            for l, df in zip(labels, dataframes):
-                if l not in self.labels or overwrite:
-                    # add to object
-                    setattr(self, l, df)
-                    self.labels.append(l)
+            for l, df in zip(labels, data):
+                if isinstance(df, pd.DataFrame) or isinstance(df, dask.array.core.Array):                    
+                    if l not in self.labels or overwrite:
+                        # add to object
+                        setattr(self, l, df)
+                        self.labels.append(l)
+                    else:
+                        raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
                 else:
-                    raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
+                    print(f"Boundaries element `{l}` is neither a pandas DataFrame nor a Dask Array. Was not added.")
+                
                 
     def crop(self,
              cell_ids: List[str],
@@ -321,19 +329,25 @@ class BoundariesData(DeepCopyMixin):
         # make sure cell ids are a list
         cell_ids = convert_to_list(cell_ids)
         
-        for n in ["cells", "nuclei"]:
+        for n in self.labels:
             # get dataframe
-            df = getattr(self, n)
+            data = getattr(self, n)
             
-            # filter dataframe
-            df.loc[df["cell_id"].isin(cell_ids), :]
-            
-            # re-center to 0
-            df["vertex_x"] -= xlim[0]
-            df["vertex_y"] -= ylim[0]
+            if isinstance(data, pd.DataFrame):
+                # filter dataframe
+                data = data.loc[data["cell_id"].isin(cell_ids), :]
+                
+                # re-center to 0
+                data["vertex_x"] -= xlim[0]
+                data["vertex_y"] -= ylim[0]
+            elif isinstance(data, dask.array.core.Array):
+                ps = self.pixel_size
+                data = data[int(ylim[0]/ps):int(ylim[1]/ps), int(xlim[0]/ps):int(xlim[1]/ps)]
+            else:
+                print(f"Boundaries element `{n}` is neither a pandas DataFrame nor a Dask Array. Could not be cropped.")
             
             # add to object
-            setattr(self, n, df)
+            setattr(self, n, data)
             
                 
     def convert_to_shapely_objects(self):
@@ -342,16 +356,19 @@ class BoundariesData(DeepCopyMixin):
             # retrief dataframe with boundary coordinates
             df = getattr(self, n)
             
-            # convert xy coordinates into shapely Point objects
-            df["geometry"] = gpd.points_from_xy(df["vertex_x"], df["vertex_y"])
-            del df["vertex_x"], df["vertex_y"]
+            if isinstance(df, pd.DataFrame):
+                # convert xy coordinates into shapely Point objects
+                df["geometry"] = gpd.points_from_xy(df["vertex_x"], df["vertex_y"])
+                del df["vertex_x"], df["vertex_y"]
 
-            # convert points into polygon objects per cell id
-            df = df.groupby("cell_id")['geometry'].apply(lambda x: Polygon(x.tolist()))
-            df.index = decode_robust_series(df.index)  # convert byte strings in index
-            
-            # add to object
-            setattr(self, n, pd.DataFrame(df))
+                # convert points into polygon objects per cell id
+                df = df.groupby("cell_id")['geometry'].apply(lambda x: Polygon(x.tolist()))
+                df.index = decode_robust_series(df.index)  # convert byte strings in index
+                
+                # add to object
+                setattr(self, n, pd.DataFrame(df))
+            else:
+                print(f"Boundaries element `{n} was no Dataframe. Skipped.")
 
 class CellData(DeepCopyMixin):
     '''
@@ -432,34 +449,34 @@ class CellData(DeepCopyMixin):
         write_dict_to_json(dictionary=metadata, file=path / ".celldata")
             
     
-    def sync_cell_ids(self):
-        '''
-        Function to synchronize matrix and boundaries of CellData.
+    # def sync_cell_ids(self):
+    #     '''
+    #     Function to synchronize matrix and boundaries of CellData.
         
-        Procedure:
-        1. Select matrix cell IDs
-        2. Check if all matrix cell IDs are in boundaries
-            - if not all are in boundaries, throw error saying that those will also be removed
-        3. Select only matrix cell IDs which are also in boundaries and filter for them
-        '''
-        # get cell IDs from matrix
-        cell_ids = self.matrix.obs_names.astype(str)
+    #     Procedure:
+    #     1. Select matrix cell IDs
+    #     2. Check if all matrix cell IDs are in boundaries
+    #         - if not all are in boundaries, throw error saying that those will also be removed
+    #     3. Select only matrix cell IDs which are also in boundaries and filter for them
+    #     '''
+    #     # get cell IDs from matrix
+    #     cell_ids = self.matrix.obs_names.astype(str)
         
-        try:
-            boundaries = self.boundaries
-        except AttributeError:
-            print('No `boundaries` attribute found in CellData found.')
-            pass
-        else:
-            for n in ["cellular", "nuclear"]:
-                # get dataframe
-                df = getattr(boundaries, n)
+    #     try:
+    #         boundaries = self.boundaries
+    #     except AttributeError:
+    #         print('No `boundaries` attribute found in CellData found.')
+    #         pass
+    #     else:
+    #         for n in ["cellular", "nuclear"]:
+    #             # get dataframe
+    #             df = getattr(boundaries, n)
                 
-                # filter dataframe
-                df = df.loc[df["cell_id"].astype(str).isin(cell_ids), :]
+    #             # filter dataframe
+    #             df = df.loc[df["cell_id"].astype(str).isin(cell_ids), :]
                 
-                # add to object
-                setattr(self.boundaries, n, df)
+    #             # add to object
+    #             setattr(self.boundaries, n, df)
             
     def shift(self, 
               x: Union[int, float], 
@@ -481,16 +498,17 @@ class CellData(DeepCopyMixin):
             print('No `boundaries` attribute found in CellData found.')
             pass
         else:
-            for n in ["cellular", "nuclear"]:
+            for n in boundaries.labels:
                 # get dataframe
                 df = getattr(boundaries, n)
                 
-                # re-center to 0
-                df["vertex_x"] += x
-                df["vertex_y"] += y
-                
-                # add to object
-                setattr(self.boundaries, n, df)
+                if isinstance(df, pd.DataFrame):
+                    # re-center to 0
+                    df["vertex_x"] += x
+                    df["vertex_y"] += y
+                    
+                    # add to object
+                    setattr(self.boundaries, n, df)
         
     
 class ImageData(DeepCopyMixin):
