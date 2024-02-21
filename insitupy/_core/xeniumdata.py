@@ -5,11 +5,13 @@ import os
 import shutil
 import warnings
 from datetime import datetime
+from numbers import Number
 from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 
+import dask
 import dask_image
 import matplotlib
 import matplotlib.pyplot as plt
@@ -18,6 +20,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
+import zarr
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from napari.layers import Layer, Shapes
@@ -31,9 +34,9 @@ from shapely.geometry.polygon import Polygon
 from insitupy import __version__
 
 from .._constants import CACHE
-from .._exceptions import (ModalityNotFoundError, NotOneElementError,
-                           UnknownOptionError, WrongNapariLayerTypeError,
-                           XeniumDataMissingObject,
+from .._exceptions import (InvalidFileTypeError, ModalityNotFoundError,
+                           NotOneElementError, UnknownOptionError,
+                           WrongNapariLayerTypeError, XeniumDataMissingObject,
                            XeniumDataRepeatedCropError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
 from ..utils.io import (check_overwrite_and_remove_if_true, read_json,
@@ -46,43 +49,95 @@ from ._save import (_save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
 from ._scanorama import scanorama
 from ._widgets import (_annotation_widget, _create_points_layer,
-                       _initialize_point_widgets)
+                       _initialize_widgets)
 from .dataclasses import (AnnotationsData, BoundariesData, CellData, ImageData,
                           RegionsData)
 
 
+def _read_binned_expression(
+    path: Union[str, os.PathLike, Path],
+    gene_names_to_select = List
+):
+    # add binned expression data to .varm of self.cells.matrix
+    trans_file = path / "transcripts.zarr.zip"
+    
+    # read zarr store
+    t = zarr.open(trans_file, mode="r")
+
+    # extract sparse array
+    data_gene = t["density/gene"]
+    data = data_gene["data"][:]
+    indices = data_gene["indices"][:]
+    indptr = data_gene["indptr"][:]
+    
+    # get dimensions of the array
+    cols = data_gene.attrs["cols"]
+    rows = data_gene.attrs["rows"]
+    
+    # get info on gene names
+    gene_names = data_gene.attrs["gene_names"]
+    n_genes = len(gene_names)
+
+    sarr = csr_matrix((data, indices, indptr))
+
+    # reshape to get binned data
+    arr = sarr.toarray()
+    arr = arr.reshape((n_genes, rows, cols))
+
+    # select only genes that are available in the adata object
+    gene_mask = [elem in gene_names_to_select for elem in gene_names]
+    arr = arr[gene_mask]
+    return arr
+
 def _read_boundaries_from_xenium(
-    path: Union[str, os.PathLike, Path]):        
+    path: Union[str, os.PathLike, Path],
+    pixel_size: Number = 1,
+    mode: Literal["dataframe", "mask"] = "mask"
+    ) -> BoundariesData:
     # # read boundaries data
     path = Path(path)
-    files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"]
-    labels=["cellular", "nuclear"]
     
-    # generate path for files
-    files = [path / f for f in files]
+    # create boundariesdata object
+    boundaries = BoundariesData(pixel_size=pixel_size)
     
-    # read boundaries
-    boundaries = BoundariesData()
-    boundaries.read_boundaries(files=files, labels=labels)
+    if mode == "dataframe":
+        files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"]
+        labels=["cellular", "nuclear"]
+        
+        # generate path for files
+        files = [path / f for f in files]
+        
+        # generate dataframes
+        data_dict = {}
+        for n, f in zip(labels, files):
+            # check the file suffix
+            if not f.suffix == ".parquet":
+                InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
+            
+            # load dataframe
+            df = pd.read_parquet(f)
+
+            # decode columns
+            df = df.apply(lambda x: decode_robust_series(x), axis=0)
+
+            # collect dataframe
+            data_dict[n] = df
+                        
+    else:
+        cells_zarr_file = path / "cells.zarr.zip"
+        
+        # open zarr directory using dask
+        data_dict = {
+            "nuclear": dask.array.from_zarr(cells_zarr_file, component="masks/0"),
+            "cellular": dask.array.from_zarr(cells_zarr_file, component="masks/1")
+        }
     
+    boundaries.add_boundaries(data=data_dict)
+
     return boundaries
 
-# def _read_masks_from_xenium(
-#     path: Union[str, os.PathLike, Path]):        
-#     # # read boundaries data
-#     path = Path(path)
-#     files=["cells.zarr.zip"]
-    
-#     # generate path for files
-#     files = [path / f for f in files]
-    
-#     # read boundaries
-#     masks = MasksData()
-#     masks.read_masks(files=files, labels=labels)
-    
-#     return masks
 
-def _read_matrix_from_xenium(path):
+def _read_matrix_from_xenium(path) -> AnnData:
     # extract parameters from metadata
     #cf_zarr_path = path / metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
     cf_h5_path = path / "cell_feature_matrix.h5"
@@ -128,11 +183,24 @@ def read_celldata(
     matrix = sc.read(path / celldata_metadata["matrix"])
     
     # read boundaries data
-    labels = convert_to_list(celldata_metadata["boundaries"].keys())
-    files = [path / f for f in convert_to_list(celldata_metadata["boundaries"].values())]
+    # labels = convert_to_list(celldata_metadata["boundaries"].keys())
+    # files = [path / f for f in convert_to_list(celldata_metadata["boundaries"].values())]
+    boundaries_dict = {k: path / v for k,v in celldata_metadata["boundaries"].items()}
+    boundaries_dict = {}
+    for k,v in celldata_metadata["boundaries"].items():
+        suffix = v.split(".", 1)[-1] # necessary to do this with split because of the two dots in .zarr.zip
+        f = path / v
+        if suffix == "parquet":
+            d = pd.read_parquet(f)
+        elif suffix == "zarr.zip":
+            d = dask.array.from_zarr(f)
+        else:
+            raise ValueError(f"Boundaries saved in CellData object are neither .parquet nor .zarr.zip format: {suffix}")
+        boundaries_dict[k] = d
     
     boundaries = BoundariesData()
-    boundaries.read_boundaries(files=files, labels=labels)
+    boundaries.add_boundaries(data=boundaries_dict)
+    #boundaries.read_boundaries(files=files, labels=labels)
     
     # create CellData object
     celldata = CellData(matrix=matrix, boundaries=boundaries)
@@ -162,7 +230,6 @@ def read_annotationsdata(
     # overwrite metadata
     data.metadata = metadata
     return data
-
 
 
 class XeniumData:
@@ -203,7 +270,7 @@ class XeniumData:
             # set flag for xeniumdata
             self.from_xeniumdata = True
             
-        elif matrix is None:            
+        elif matrix is None:
             # check if path exists
             if not self.path.is_dir():
                 raise FileNotFoundError(f"No such directory found: {str(self.path)}")
@@ -225,11 +292,9 @@ class XeniumData:
             # read metadata
             self.metadata = read_json(self.path / self.metadata_filename)
             
-            # parse folder name to get slide_id and sample_id
-            name_stub = "__".join(self.path.stem.split("__")[:3])
-            p_parsed = parse(pattern_xenium_folder, name_stub)
-            self.slide_id = p_parsed.named["slide_id"]
-            self.sample_id = p_parsed.named["sample_id"]
+            # get slide id and sample id from metadata
+            self.slide_id = self.metadata["slide_id"]
+            self.sample_id = self.metadata["region_name"]
         else:
             self.cells.matrix = matrix
             self.slide_id = ""
@@ -450,8 +515,13 @@ class XeniumData:
             # select
             _self.cells.matrix = _self.cells.matrix[mask, :].copy()
             
+            # crop boundaries
+            _self.cells.boundaries.crop(
+                cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim
+                )
+            
             # sync cell ids of boundaries with matrix
-            _self.cells.sync_cell_ids()
+            #_self.cells.sync_cell_ids()
             
             # shift coordinates to correct for change of coordinates during cropping
             _self.cells.shift(x=-xlim[0], y=-ylim[0])
@@ -719,9 +789,15 @@ class XeniumData:
                 raise ModalityNotFoundError(modality="cells")
             self.cells = read_celldata(path=self.path / cells_path)
         else:
+            # read celldata
             matrix = matrix = _read_matrix_from_xenium(path=self.path)
-            boundaries = _read_boundaries_from_xenium(path=self.path)
+            boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=self.metadata["pixel_size"])
             self.cells = CellData(matrix=matrix, boundaries=boundaries)
+            
+            # read binned expression
+            arr = _read_binned_expression(path=self.path, gene_names_to_select=self.cells.matrix.var_names)
+            self.cells.matrix.varm["binned_expression"] = arr
+            
 
     def read_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
@@ -1387,17 +1463,22 @@ class XeniumData:
             pass
         else:
             # initialize the widgets
-            add_points_widget, locate_cells_widget, add_region_widget, add_annotations_widget = _initialize_point_widgets(xdata=self)
+            add_points_widget, locate_cells_widget, add_region_widget, add_annotations_widget, add_boundaries_widget = _initialize_widgets(xdata=self)
             
             # add widgets to napari window
             if add_points_widget is not None:
                 self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
-                add_points_widget.max_height = 150
+                add_points_widget.max_height = 130
                 add_points_widget.max_width = widgets_max_width
+                
+            if add_boundaries_widget is not None:
+                self.viewer.window.add_dock_widget(add_boundaries_widget, name="Add boundaries", area="right")
+                add_boundaries_widget.max_height = 80
+                add_boundaries_widget.max_width = widgets_max_width
             
             if locate_cells_widget is not None:
                 self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate", area="right")
-                locate_cells_widget.max_height = 150
+                locate_cells_widget.max_height = 130
                 locate_cells_widget.max_width = widgets_max_width
             
             if add_region_widget is not None:

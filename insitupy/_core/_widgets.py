@@ -1,5 +1,6 @@
-from typing import Tuple, List, Optional
+from typing import List, Optional, Tuple
 
+import dask
 import matplotlib
 import napari
 import numpy as np
@@ -14,9 +15,9 @@ from scipy.sparse import issparse
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import LinearRing, Polygon
 
-from ._layers import _add_annotations_as_layer
 from ..utils.palettes import CustomPalettes
 from ..utils.utils import convert_to_list
+from ._layers import _add_annotations_as_layer
 
 
 def _create_points_layer(points, 
@@ -77,7 +78,7 @@ def _create_points_layer(points,
         )
     return layer
 
-def _initialize_point_widgets(
+def _initialize_widgets(
     xdata # xenium data object
     ) -> List[FunctionGui]:
     
@@ -87,9 +88,12 @@ def _initialize_point_widgets(
     if not hasattr(xdata, "cells"):
         add_points_widget = None
         move_to_cell_widget = None
+        add_boundaries_widget = None
     else:
-        # access adata and viewer from xeniumdata
+        # access adata, viewer and metadata from xeniumdata
         adata = xdata.cells.matrix
+        boundaries = xdata.cells.boundaries
+        pixel_size = xdata.metadata["pixel_size"]
         
         # get point coordinates
         points = np.flip(adata.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
@@ -99,6 +103,40 @@ def _initialize_point_widgets(
             X = adata.X.toarray()
         else:
             X = adata.X
+            
+        masks = []
+        for n in boundaries.labels:
+            b = getattr(boundaries, n)
+            if isinstance(b, dask.array.core.Array):
+                masks.append(n)
+        
+        if len(masks) > 0:
+            @magicgui(
+                call_button='Add',
+                key={'choices': masks, 'label': 'Masks:'}
+            )
+            def add_boundaries_widget(
+                key
+            ):
+                layer_name = f"mask-{key}"
+                
+                if layer_name not in viewer.layers:
+                    # get geopandas dataframe with regions
+                    mask = getattr(xdata.cells.boundaries, key)
+                    print(mask)
+                    nsubres = 6
+                    mask_pyramid = [mask]
+
+                    sub = mask.copy()
+                    for n in range(nsubres):
+                        sub = sub[::2, ::2]
+                        mask_pyramid.append(sub)
+                        
+                    viewer.add_labels(mask_pyramid, name=layer_name, scale=(pixel_size,pixel_size))
+                else:
+                    print(f"Key '{key}' already in layer list.", flush=True)
+        else:
+            add_boundaries_widget = None
         
         @magicgui(
             call_button='Add',
@@ -112,8 +150,6 @@ def _initialize_point_widgets(
             size=6,
             viewer=viewer
             ) -> napari.types.LayerDataTuple:
-            
-
             
             layers = []
             if gene is not None:
@@ -133,7 +169,7 @@ def _initialize_point_widgets(
                 else:
                     print(f"Key '{gene}' already in layer list.")
             
-            if (observation is not None):
+            if observation is not None:
                 if observation not in viewer.layers:
                     # get observation values
                     color_value_obs = adata.obs[observation].values                
@@ -265,6 +301,8 @@ def _initialize_point_widgets(
                     face_color='transparent',
                     text=text
                     )
+            else:
+                print(f"Key '{key}' already in layer list.")
                 
                 # restore original configuration of dropdown lists
                 #add_region_widget.key.value = first_region_key
@@ -331,7 +369,7 @@ def _initialize_point_widgets(
         
         
     
-    return add_points_widget, move_to_cell_widget, add_region_widget, add_annotations_widget #add_genes, add_observations
+    return add_points_widget, move_to_cell_widget, add_region_widget, add_annotations_widget, add_boundaries_widget #add_genes, add_observations
 
 
 @magic_factory(
