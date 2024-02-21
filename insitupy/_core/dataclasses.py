@@ -11,6 +11,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xmltodict
+import zarr
 from anndata import AnnData
 from parse import *
 from shapely import Polygon, affinity
@@ -343,6 +344,9 @@ class BoundariesData(DeepCopyMixin):
             elif isinstance(data, dask.array.core.Array):
                 ps = self.pixel_size
                 data = data[int(ylim[0]/ps):int(ylim[1]/ps), int(xlim[0]/ps):int(xlim[1]/ps)]
+                
+                # rechunk the dask array to prevent errors during later steps
+                data = data.rechunk()
             else:
                 print(f"Boundaries element `{n}` is neither a pandas DataFrame nor a Dask Array. Could not be cropped.")
             
@@ -436,10 +440,16 @@ class CellData(DeepCopyMixin):
             bound_path.mkdir(parents=True, exist_ok=True) # create directory
             
             metadata["boundaries"] = {}
-            for n in ["cellular", "nuclear"]:
-                bound_df = getattr(boundaries, n)
-                bound_file = bound_path / f"{n}.parquet"
-                bound_df.to_parquet(bound_file)
+            for n in boundaries.labels:
+                bound_data = getattr(boundaries, n)
+                
+                if isinstance(bound_data, pd.DataFrame):
+                    bound_file = bound_path / f"{n}.parquet"
+                    bound_data.to_parquet(bound_file)
+                elif isinstance(bound_data, dask.array.core.Array):
+                    bound_file = bound_path / f"{n}.zarr.zip"
+                    with zarr.ZipStore(bound_file, mode='w') as store:
+                        bound_data.to_zarr(store)
                 metadata["boundaries"][n] = Path(relpath(bound_file, path)).as_posix()
                 
         # add more things to metadata
