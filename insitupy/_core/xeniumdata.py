@@ -292,11 +292,9 @@ class XeniumData:
             # read metadata
             self.metadata = read_json(self.path / self.metadata_filename)
             
-            # parse folder name to get slide_id and sample_id
-            name_stub = "__".join(self.path.stem.split("__")[:3])
-            p_parsed = parse(pattern_xenium_folder, name_stub)
-            self.slide_id = p_parsed.named["slide_id"]
-            self.sample_id = p_parsed.named["sample_id"]
+            # get slide id and sample id from metadata
+            self.slide_id = self.metadata["slide_id"]
+            self.sample_id = self.metadata["region_name"]
         else:
             self.cells.matrix = matrix
             self.slide_id = ""
