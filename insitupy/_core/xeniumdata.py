@@ -1000,7 +1000,7 @@ class XeniumData:
 
                 # read images
                 print("\t\tLoading images to be registered...", flush=True)
-                image = dask_image.imread(img_file) # e.g. HE image
+                image = dask_image.imread.imread(img_file) # e.g. HE image
                 
                 # sometimes images are read with an empty time dimension in the first axis. 
                 # If this is the case, it is removed here.
