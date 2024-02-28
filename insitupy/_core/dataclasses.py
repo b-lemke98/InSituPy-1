@@ -254,17 +254,20 @@ class BoundariesData(DeepCopyMixin):
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self,
-                 pixel_size: Number = 1, # required for boundaries that are saved as masks
+                 #pixel_size: Number = 1, # required for boundaries that are saved as masks
                  ):
-        self.labels = []
-        self.pixel_size = pixel_size
+        #self.labels = []
+        #self.pixel_size = {}
+        self.metadata = {}
         
     def __repr__(self):
-        if len(self.labels) == 0:
+        labels = list(self.metadata.keys())
+        if len(labels) == 0:
             repr = f"Empty BoundariesData object"
         else:
-            repr = f"BoundariesData object with {len(self.labels)} entries:"
-            for l in self.labels:
+            ll = len(labels)
+            repr = f"BoundariesData object with {ll} {'entry' if ll == 1 else 'entries'}:"
+            for l in labels:
                 repr += f"\n{tf.SPACER+tf.Bold+l+tf.ResetAll}"
         return repr
     
@@ -292,32 +295,34 @@ class BoundariesData(DeepCopyMixin):
     #     self.add_boundaries(dataframes=dataframes)
         
     def add_boundaries(self,
-                       data: Optional[Union[dict, List[str]]] = None,
+                       data: Optional[Union[dict, List[str]]],
+                       pixel_size: Number, # required for boundaries that are saved as masks
                        labels: Optional[List[str]] = [],
                        overwrite: bool = False
                        ):
-        if data is not None:
-            if isinstance(data, dict):
-                # extract keys from dictionary
-                labels = data.keys()
-                data = data.values()
-            elif isinstance(data, list):
-                if labels is None:
-                    raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
-            else:
-                raise ValueError(f"Argument 'dataframes' has unknown file type ({type(data)}). Expected to be a list or dictionary.")
-            
-            for l, df in zip(labels, data):
-                if isinstance(df, pd.DataFrame) or isinstance(df, dask.array.core.Array):                    
-                    if l not in self.labels or overwrite:
-                        # add to object
-                        setattr(self, l, df)
-                        self.labels.append(l)
-                    else:
-                        raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
+        if isinstance(data, dict):
+            # extract keys from dictionary
+            labels = data.keys()
+            data = data.values()
+        elif isinstance(data, list):
+            if labels is None:
+                raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
+        else:
+            raise ValueError(f"Argument 'dataframes' has unknown file type ({type(data)}). Expected to be a list or dictionary.")
+        
+        for l, df in zip(labels, data):
+            if isinstance(df, pd.DataFrame) or isinstance(df, dask.array.core.Array):                    
+                if l not in self.metadata or overwrite:
+                    # add to object
+                    setattr(self, l, df)
+                    #self.labels.append(l)
+                    self.metadata[l] = {}
+                    self.metadata[l]["pixel_size"] = pixel_size
                 else:
-                    print(f"Boundaries element `{l}` is neither a pandas DataFrame nor a Dask Array. Was not added.")
-                
+                    raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
+            else:
+                print(f"Boundaries element `{l}` is neither a pandas DataFrame nor a Dask Array. Was not added.")
+            
                 
     def crop(self,
              cell_ids: List[str],
@@ -330,7 +335,7 @@ class BoundariesData(DeepCopyMixin):
         # make sure cell ids are a list
         cell_ids = convert_to_list(cell_ids)
         
-        for n in self.labels:
+        for n, meta in self.metadata.items():
             # get dataframe
             data = getattr(self, n)
             
@@ -342,7 +347,7 @@ class BoundariesData(DeepCopyMixin):
                 data["vertex_x"] -= xlim[0]
                 data["vertex_y"] -= ylim[0]
             elif isinstance(data, dask.array.core.Array):
-                ps = self.pixel_size
+                ps = meta["pixel_size"]
                 data = data[int(ylim[0]/ps):int(ylim[1]/ps), int(xlim[0]/ps):int(xlim[1]/ps)]
                 
                 # rechunk the dask array to prevent errors during later steps
@@ -355,7 +360,7 @@ class BoundariesData(DeepCopyMixin):
             
                 
     def convert_to_shapely_objects(self):
-        for n in self.labels:
+        for n in self.metadata.keys():
             print(f"Converting `{n}` to GeoPandas DataFrame with shapely objects.")
             # retrief dataframe with boundary coordinates
             df = getattr(self, n)

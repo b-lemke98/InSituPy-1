@@ -93,7 +93,7 @@ def _initialize_widgets(
         # access adata, viewer and metadata from xeniumdata
         adata = xdata.cells.matrix
         boundaries = xdata.cells.boundaries
-        pixel_size = xdata.metadata["pixel_size"]
+        #pixel_size = xdata.metadata["pixel_size"]
         
         # get point coordinates
         points = np.flip(adata.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
@@ -105,7 +105,7 @@ def _initialize_widgets(
             X = adata.X
             
         masks = []
-        for n in boundaries.labels:
+        for n in boundaries.metadata.keys():
             b = getattr(boundaries, n)
             if isinstance(b, dask.array.core.Array):
                 masks.append(n)
@@ -123,7 +123,12 @@ def _initialize_widgets(
                 if layer_name not in viewer.layers:
                     # get geopandas dataframe with regions
                     mask = getattr(xdata.cells.boundaries, key)
-                    print(mask)
+                    
+                    # get metadata for mask
+                    metadata = xdata.cells.boundaries.metadata
+                    pixel_size = metadata[key]["pixel_size"]
+                    
+                    # create subresolution pyramid from mask
                     nsubres = 6
                     mask_pyramid = [mask]
 
