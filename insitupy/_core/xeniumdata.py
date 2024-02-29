@@ -48,7 +48,7 @@ from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._checks import check_raw, check_zip
 from ._layers import _add_annotations_as_layer
-from ._save import (_save_annotations, _save_cells, _save_images,
+from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
 from ._scanorama import scanorama
 from ._widgets import (_annotation_widget, _create_points_layer,
@@ -1333,6 +1333,19 @@ class XeniumData:
                 path=path_stem,
                 metadata=metadata
             )
+            
+        # save alternative cell data
+        try:
+            alt = self.alt
+        except AttributeError:
+            pass
+        else:
+            _save_alt(
+                attr=alt,
+                path=path_stem,
+                metadata=metadata
+            )
+
             
         # save transcripts
         try:

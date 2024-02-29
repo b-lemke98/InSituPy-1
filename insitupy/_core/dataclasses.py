@@ -256,8 +256,6 @@ class BoundariesData(DeepCopyMixin):
     def __init__(self,
                  #pixel_size: Number = 1, # required for boundaries that are saved as masks
                  ):
-        #self.labels = []
-        #self.pixel_size = {}
         self.metadata = {}
         
     def __repr__(self):
@@ -315,7 +313,6 @@ class BoundariesData(DeepCopyMixin):
                 if l not in self.metadata or overwrite:
                     # add to object
                     setattr(self, l, df)
-                    #self.labels.append(l)
                     self.metadata[l] = {}
                     self.metadata[l]["pixel_size"] = pixel_size
                 else:
@@ -445,7 +442,7 @@ class CellData(DeepCopyMixin):
             bound_path.mkdir(parents=True, exist_ok=True) # create directory
             
             metadata["boundaries"] = {}
-            for n in boundaries.labels:
+            for n in boundaries.metadata.keys():
                 bound_data = getattr(boundaries, n)
                 
                 if isinstance(bound_data, pd.DataFrame):
@@ -513,7 +510,7 @@ class CellData(DeepCopyMixin):
             print('No `boundaries` attribute found in CellData found.')
             pass
         else:
-            for n in boundaries.labels:
+            for n in boundaries.metadata.keys():
                 # get dataframe
                 df = getattr(boundaries, n)
                 

@@ -53,6 +53,21 @@ def _save_cells(cells, path, metadata):
     if metadata is not None:
         metadata["cells"] = Path(relpath(cells_path, path)).as_posix()
         
+def _save_alt(attr, path, metadata):
+    # create path for cells
+    alt_path = path / "alt"
+    
+    for k, celldata in attr.items():
+        cells_path = alt_path / k
+        # save cells to path and write info to metadata
+        celldata.save(cells_path)
+    
+        if metadata is not None:
+            if "alt" not in metadata:
+                metadata["alt"] = {}
+            
+            metadata["alt"][k] = Path(relpath(cells_path, path)).as_posix()
+            
 def _save_transcripts(transcripts, path, metadata):
     # create file path
     trans_path = (path / "transcripts")
