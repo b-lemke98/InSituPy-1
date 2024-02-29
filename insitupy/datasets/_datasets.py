@@ -3,10 +3,21 @@ import os.path
 from typing import TYPE_CHECKING, Literal
 from insitupy.datasets.download import download_url
 import shutil
+
 import sys
+import hashlib
 
 #functions that each download a dataset into  '~/.cache/InSituPy/demo_dataset'
 
+def md5sum(filePath):
+    with open(filePath, 'rb') as fh:
+        m = hashlib.md5()
+        while True:
+            data = fh.read(8192)
+            if not data:
+                break
+            m.update(data)
+    return m.hexdigest()
 
 #spaceranger version 1.0.1
 #data from https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast
@@ -14,7 +25,7 @@ def human_breast_cancer(
         over_write: bool = False
 ) -> None:
         
-    if os.path.exists(os.path.expanduser("~") / Path('.cache/InSituPy/demo_dataset/output-XETG00000__slide_id__hbreastcancer')):
+    if os.path.exists(os.path.expanduser("~") / Path('.cache/InSituPy/demo_dataset/output-XETG00000__slide_id__hbreastcancer')) and md5sum(os.path.expanduser("~") / Path('.cache/InSituPy/demo_dataset/Xenium_FFPE_Human_Breast_Cancer_Rep1_outs.zip'))=='7d42a0b232f92a2e51de1f513b1a44fd':
         if not over_write:
             print(f"This Data exists already. Download is skipped. To force download set `over_write=True`.")
             return
@@ -50,7 +61,7 @@ def nondiseased_kidney(
         over_write: bool = False
 ) -> None:
     
-    if os.path.exists(os.path.expanduser("~") / Path(".cache/InSituPy/demo_dataset/output-XETG0000__slide_id__hkidney")):
+    if os.path.exists(os.path.expanduser("~") / Path(".cache/InSituPy/demo_dataset/output-XETG0000__slide_id__hkidney")) and md5sum(os.path.expanduser("~") / Path(".cache/InSituPy/demo_dataset/Xenium_V1_hKidney_nondiseased_section_outs.zip"))=="194d5e21b40b27fa8c009d4cbdc3272d":
         if not over_write:
             print(f"This Data exists already. Download is skipped. To force download set `over_write=True`.")
             return
@@ -82,7 +93,7 @@ def pancreatic_cancer(
         over_write: bool = False
 
 ) -> None:
-    if os.path.exists(os.path.expanduser("~") / Path(".cache/InSituPy/demo_dataset/output-XETG0000__slide_id__hPancreas")):
+    if os.path.exists(os.path.expanduser("~") / Path(".cache/InSituPy/demo_dataset/output-XETG0000__slide_id__hPancreas")) and md5sum(os.path.expanduser("~") / Path(".cache/InSituPy/demo_dataset/Xenium_V1_hPancreas_Cancer_Add_on_FFPE_outs.zip"))=="7acca4c2a40f09968b72275403c29f93":
         if not over_write:
             print(f"This Data exists already. Download is skipped. To force download set `over_write=True`.")
             return
@@ -115,7 +126,7 @@ def pancreatic_cancer(
 def hskin_melanoma(
         over_write: bool = False
 ) -> None:
-    if os.path.exists(os.path.expanduser("~") / Path(".cache/InSituPy/demo_dataset/output-XETG0000__slide_id__hskin")):
+    if os.path.exists(os.path.expanduser("~") / Path(".cache/InSituPy/demo_dataset/output-XETG0000__slide_id__hskin")) and md5sum(os.path.expanduser("~") / Path(".cache/InSituPy/demo_dataset/Xeniumranger_V1_hSkin_Melanoma_Add_on_FFPE_outs.zip"))=="29102799a3f1858c7318b705eb1a8584":
         if not over_write:
             print(f"This Data exists already. Download is skipped. To force download set `over_write=True`.")
             return
