@@ -99,8 +99,26 @@ def _initialize_widgets(
         # access adata, viewer and metadata from xeniumdata
         adata = xdata.cells.matrix
         boundaries = xdata.cells.boundaries
-        #pixel_size = xdata.metadata["pixel_size"]
         
+        # # setup adata and boundaries dictionaries which potentially contain multiple layers
+        # adata_dict = {
+        #     "main": xdata.cells.matrix
+        # }
+        # bound_dict = {
+        #     "main": xdata.cells.boundaries
+        # }
+        
+        
+        # # check for alternative segmentations
+        # try:
+        #     alt = xdata.alt
+        # except AttributeError:
+        #     pass
+        # else:
+        #     for k,celldata in alt.items():
+        #         adata_dict[k] = celldata.matrix
+        #         bound_dict[k] = celldata.boundaries
+                
         # get point coordinates
         points = np.flip(adata.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
     

@@ -192,7 +192,9 @@ def _restructure_transcripts_dataframe(dataframe):
     }, axis=1)
 
     # reorder dataframe
-    dataframe = dataframe.loc[:, ["x", "y", "z", "gene", "qv", "overlaps_nucleus", "fov_name", "nucleus_distance", "xenium_cell_id"]]
+    dataframe = dataframe.loc[:, ["x", "y", "z", "gene", "qv", "overlaps_nucleus", 
+                                  #"fov_name", "nucleus_distance", 
+                                  "xenium_cell_id"]]
 
     # group column names into MultiIndices
     grouped_column_names = [
