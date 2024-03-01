@@ -22,7 +22,7 @@ from insitupy import __version__
 
 from .._exceptions import InvalidFileTypeError
 from ..utils.geo import parse_geopandas, write_qupath_geojson
-from ..utils.io import (check_overwrite_and_remove_if_true, load_pyramid,
+from ..utils.io import (check_overwrite_and_remove_if_true, read_ome_tiff,
                         write_dict_to_json)
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
@@ -68,9 +68,24 @@ class ShapesData(DeepCopyMixin):
                 
     def __repr__(self):
         if len(self.metadata) > 0:
-            repr_strings = [
-                f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} {self.shape_name}, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
-                ]
+            repr_strings = []
+            for l, m in self.metadata.items():
+                # add ' to classes
+                classes = [f"'{elem}'" for elem in m["classes"]]
+                lc = len(classes)
+                
+                # create string
+                r = (
+                    f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} ' 
+                    f'{self.shape_name}, {lc} '
+                    f'{"classes" if lc>1 else "class"} '
+                    f'({",".join(classes)}) {m["analyzed"]}'
+                )
+                repr_strings.append(r)
+            # repr_strings = [
+            #     #f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} {self.shape_name}, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
+            #     f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} {self.shape_name}, {len(m["classes"])} {"classes" if len(m["classes"])>1 else "class"} ({",".join(m["classes"])}) {m["analyzed"]}' for l, m in self.metadata.items()
+            #     ]
             
             s = "\n".join(repr_strings)
         else:
@@ -87,7 +102,12 @@ class ShapesData(DeepCopyMixin):
         
         # record metadata information
         self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
-        self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+        
+        try:        
+            self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+        except KeyError:
+            self.metadata[key]["classes"] = ["unnamed"]
+            
         self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
         
             
@@ -545,45 +565,48 @@ class ImageData(DeepCopyMixin):
             # generate full path for image
             impath = path / f
             impath = impath.resolve() # resolve relative path
+            suffix = impath.name.split(".", maxsplit=1)[-1]
             
-            # load images
-            store = imread(impath, aszarr=True)
-            pyramid = load_pyramid(store)
-            
-            # set attribute and add names to object
-            setattr(self, n, pyramid)
-            self.names.append(n)
-            
-            # add metadata
-            self.metadata[n] = {}
-            self.metadata[n]["file"] = f # store file information
-            self.metadata[n]["shape"] = pyramid[0].shape # store shape
-            self.metadata[n]["subresolutions"] = len(pyramid) - 1 # store number of subresolutions of pyramid
-            
-            # read ome metadata
-            with TiffFile(path / f) as tif:
-                axes = tif.series[0].axes # get axes
-                ome_meta = tif.ome_metadata # read OME metadata
-                
-            self.metadata[n]["axes"] = axes
-            self.metadata[n]["OME"] = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
-            
-            # check whether the image is RGB or not
-            if len(pyramid[0].shape) == 3:
-                self.metadata[n]["rgb"] = True
-            elif len(pyramid[0].shape) == 2:
-                self.metadata[n]["rgb"] = False
+            if suffix == "zarr.zip":
+                pass
             else:
-                raise ValueError(f"Unknown image shape: {pyramid[0].shape}")
-            
-            # get image contrast limits
-            if self.metadata[n]["rgb"]:
-                self.metadata[n]["contrast_limits"] = (0, 255)
-            else:
-                self.metadata[n]["contrast_limits"] = (0, int(pyramid[0].max()))
+                # load images
+                pyramid = read_ome_tiff(path=impath, levels=None)
                 
-            # add universal pixel size to metadata
-            self.metadata[n]['pixel_size'] = pixel_size
+                # set attribute and add names to object
+                setattr(self, n, pyramid)
+                self.names.append(n)
+                
+                # add metadata
+                self.metadata[n] = {}
+                self.metadata[n]["file"] = f # store file information
+                self.metadata[n]["shape"] = pyramid[0].shape # store shape
+                self.metadata[n]["subresolutions"] = len(pyramid) - 1 # store number of subresolutions of pyramid
+                
+                # read ome metadata
+                with TiffFile(path / f) as tif:
+                    axes = tif.series[0].axes # get axes
+                    ome_meta = tif.ome_metadata # read OME metadata
+                    
+                self.metadata[n]["axes"] = axes
+                self.metadata[n]["OME"] = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
+                
+                # check whether the image is RGB or not
+                if len(pyramid[0].shape) == 3:
+                    self.metadata[n]["rgb"] = True
+                elif len(pyramid[0].shape) == 2:
+                    self.metadata[n]["rgb"] = False
+                else:
+                    raise ValueError(f"Unknown image shape: {pyramid[0].shape}")
+                
+                # get image contrast limits
+                if self.metadata[n]["rgb"]:
+                    self.metadata[n]["contrast_limits"] = (0, 255)
+                else:
+                    self.metadata[n]["contrast_limits"] = (0, int(pyramid[0].max()))
+                    
+                # add universal pixel size to metadata
+                self.metadata[n]['pixel_size'] = pixel_size
                 
         
     def __repr__(self):

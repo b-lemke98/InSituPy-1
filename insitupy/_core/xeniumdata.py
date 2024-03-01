@@ -1319,7 +1319,8 @@ class XeniumData:
             _save_images(
                 imagedata=images,
                 path=path_stem,
-                metadata=metadata
+                metadata=metadata,
+                images_as_zarr=True
                 )
 
         # save cells
