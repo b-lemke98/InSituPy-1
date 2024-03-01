@@ -617,7 +617,6 @@ class ImageData(DeepCopyMixin):
             else:
                 raise ValueError(f"Unknown image shape: {img.shape}")
             
-            print(img.shape)
             # get image contrast limits
             if self.metadata[n]["rgb"]:
                 self.metadata[n]["contrast_limits"] = (0, 255)

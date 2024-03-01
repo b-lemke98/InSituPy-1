@@ -140,7 +140,7 @@ def _initialize_widgets(
                     # add masks as labels to napari viewer
                     viewer.add_labels(mask_pyramid, name=layer_name, scale=(pixel_size,pixel_size))
                 else:
-                    print(f"Key '{key}' already in layer list.", flush=True)
+                    print(f"Layer '{layer_name}' already in layer list.", flush=True)
         else:
             add_boundaries_widget = None
         
@@ -157,6 +157,9 @@ def _initialize_widgets(
             viewer=viewer
             ) -> napari.types.LayerDataTuple:
             
+            # get names of cells
+            cell_names = adata.obs_names.values
+            
             layers = []
             if gene is not None:
                 if gene not in viewer.layers:
@@ -164,9 +167,6 @@ def _initialize_widgets(
                     gene_loc = adata.var_names.get_loc(gene)
                     color_value_gene = X[:, gene_loc]
                     
-                    # get names of cells
-                    cell_names = adata.obs_names.values
-                
                     # create points layer for genes
                     gene_layer = _create_points_layer(
                         points=points,
@@ -189,6 +189,7 @@ def _initialize_widgets(
                         points=points,
                         color_values=color_value_obs,
                         name=observation,
+                        point_names=cell_names,
                         point_size=size,
                     )
                     layers.append(obs_layer)
