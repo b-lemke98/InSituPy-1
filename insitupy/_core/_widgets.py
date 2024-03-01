@@ -1,3 +1,4 @@
+from numbers import Number
 from typing import List, Optional, Tuple
 
 import dask
@@ -15,14 +16,16 @@ from scipy.sparse import issparse
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import LinearRing, Polygon
 
+from ..image.utils import create_img_pyramid
 from ..utils.palettes import CustomPalettes
 from ..utils.utils import convert_to_list
 from ._layers import _add_annotations_as_layer
 
 
 def _create_points_layer(points, 
-                         color_values, 
-                         name, 
+                         color_values: List[Number], 
+                         name: str, 
+                         point_names: List[str],
                          point_size: int = 6, # is in scale unit (so mostly µm)
                          opacity: float = 1,
                          visible: bool = True,
@@ -59,12 +62,15 @@ def _create_points_layer(points,
         points, 
         {
             'name': name,
-            'properties': {"color_value": color_values},
+            'properties': {
+                "expression": color_values,
+                "cell_name": point_names
+                },
             'symbol': 'o',
             'size': point_size,
             'face_color': {
                 "color_mode": color_mode, # workaround (see https://github.com/napari/napari/issues/6433)
-                "colors": "color_value"
+                "colors": "expression"
                 },
             'face_color_cycle': color_cycle,
             'face_colormap': color_map,
@@ -128,15 +134,10 @@ def _initialize_widgets(
                     metadata = xdata.cells.boundaries.metadata
                     pixel_size = metadata[key]["pixel_size"]
                     
-                    # create subresolution pyramid from mask
-                    nsubres = 6
-                    mask_pyramid = [mask]
-
-                    sub = mask.copy()
-                    for n in range(nsubres):
-                        sub = sub[::2, ::2]
-                        mask_pyramid.append(sub)
-                        
+                    # generate pyramid of the mask
+                    mask_pyramid = create_img_pyramid(img=mask, nsubres=6)
+                    
+                    # add masks as labels to napari viewer
                     viewer.add_labels(mask_pyramid, name=layer_name, scale=(pixel_size,pixel_size))
                 else:
                     print(f"Key '{key}' already in layer list.", flush=True)
@@ -162,12 +163,16 @@ def _initialize_widgets(
                     # get expression values
                     gene_loc = adata.var_names.get_loc(gene)
                     color_value_gene = X[:, gene_loc]
+                    
+                    # get names of cells
+                    cell_names = adata.obs_names.values
                 
                     # create points layer for genes
                     gene_layer = _create_points_layer(
                         points=points,
                         color_values=color_value_gene,
                         name=gene,
+                        point_names=cell_names,
                         point_size=size
                     )
                     layers.append(gene_layer)

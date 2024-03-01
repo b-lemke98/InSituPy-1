@@ -4,9 +4,10 @@ from copy import deepcopy
 from numbers import Number
 from os.path import relpath
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import dask
+import dask.array as da
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -16,14 +17,14 @@ from anndata import AnnData
 from parse import *
 from shapely import Polygon, affinity
 from shapely.geometry.multipolygon import MultiPolygon
-from tifffile import TiffFile, imread
+from tifffile import TiffFile
 
 from insitupy import __version__
 
 from .._exceptions import InvalidFileTypeError
+from ..image.io import read_ome_tiff
 from ..utils.geo import parse_geopandas, write_qupath_geojson
-from ..utils.io import (check_overwrite_and_remove_if_true, read_ome_tiff,
-                        write_dict_to_json)
+from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._mixins import DeepCopyMixin
@@ -568,45 +569,63 @@ class ImageData(DeepCopyMixin):
             suffix = impath.name.split(".", maxsplit=1)[-1]
             
             if suffix == "zarr.zip":
-                pass
-            else:
-                # load images
-                pyramid = read_ome_tiff(path=impath, levels=None)
-                
-                # set attribute and add names to object
-                setattr(self, n, pyramid)
-                self.names.append(n)
-                
-                # add metadata
-                self.metadata[n] = {}
-                self.metadata[n]["file"] = f # store file information
-                self.metadata[n]["shape"] = pyramid[0].shape # store shape
-                self.metadata[n]["subresolutions"] = len(pyramid) - 1 # store number of subresolutions of pyramid
+                # load image from .zarr.zip
+                with zarr.ZipStore(impath, mode="r") as zipstore:
+                    # open store
+                    img = da.from_zarr(zipstore).persist()
+                    
+                    # retrieve OME metadata
+                    store = zarr.open(zipstore)
+                    meta = store.attrs.asdict()
+                    ome_meta = meta["OME"]
+                    axes = meta["axes"]
+                    # except KeyError:
+                    #     warnings.warn("No OME metadata in `zarr.zip` file. Skipped collection of metadata.")
+
+            elif suffix in ["ome.tif", "ome.tiff"]:
+                # load image from .ome.tiff
+                img = read_ome_tiff(path=impath, levels=0)
                 
                 # read ome metadata
                 with TiffFile(path / f) as tif:
                     axes = tif.series[0].axes # get axes
                     ome_meta = tif.ome_metadata # read OME metadata
-                    
-                self.metadata[n]["axes"] = axes
-                self.metadata[n]["OME"] = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
+                    ome_meta = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
+            else:
+                raise InvalidFileTypeError(
+                    allowed_types=["zarr.zip", "ome.tif", "ome.tiff"], 
+                    received_type=suffix
+                    )
                 
-                # check whether the image is RGB or not
-                if len(pyramid[0].shape) == 3:
-                    self.metadata[n]["rgb"] = True
-                elif len(pyramid[0].shape) == 2:
-                    self.metadata[n]["rgb"] = False
-                else:
-                    raise ValueError(f"Unknown image shape: {pyramid[0].shape}")
-                
-                # get image contrast limits
-                if self.metadata[n]["rgb"]:
-                    self.metadata[n]["contrast_limits"] = (0, 255)
-                else:
-                    self.metadata[n]["contrast_limits"] = (0, int(pyramid[0].max()))
+            # set attribute and add names to object
+            setattr(self, n, img)
+            self.names.append(n)
                     
-                # add universal pixel size to metadata
-                self.metadata[n]['pixel_size'] = pixel_size
+            # add metadata
+            self.metadata[n] = {}
+            self.metadata[n]["file"] = f # store file information
+            self.metadata[n]["shape"] = img.shape # store shape
+            #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
+            self.metadata[n]["axes"] = axes
+            self.metadata[n]["OME"] = ome_meta
+            
+            # check whether the image is RGB or not
+            if len(img.shape) == 3:
+                self.metadata[n]["rgb"] = True
+            elif len(img.shape) == 2:
+                self.metadata[n]["rgb"] = False
+            else:
+                raise ValueError(f"Unknown image shape: {img.shape}")
+            
+            print(img.shape)
+            # get image contrast limits
+            if self.metadata[n]["rgb"]:
+                self.metadata[n]["contrast_limits"] = (0, 255)
+            else:
+                self.metadata[n]["contrast_limits"] = (0, int(img.max()))
+                
+            # add universal pixel size to metadata
+            self.metadata[n]['pixel_size'] = pixel_size
                 
         
     def __repr__(self):
@@ -638,31 +657,26 @@ class ImageData(DeepCopyMixin):
         names = list(self.metadata.keys())
         for n in names:
             # extract the image pyramid
-            pyramid = getattr(self, n)
+            img = getattr(self, n)
             
             # extract pixel size
             pixel_size = self.metadata[n]['pixel_size']
             
-            # get scale factors between the different pyramid levels
-            scale_factors = [1] + [pyramid[i].shape[0] / pyramid[i+1].shape[0] for i in range(len(pyramid)-1)]
+            # convert to metric unit
+            xlim_um = tuple([int(elem / pixel_size) for elem in xlim])
+            ylim_um = tuple([int(elem / pixel_size) for elem in ylim])
             
-            cropped_pyramid = []
-            xlim_scaled = (xlim[0] / pixel_size, xlim[1] / pixel_size) # convert to metric unit
-            ylim_scaled = (ylim[0] / pixel_size, ylim[1] / pixel_size) # convert to metric unit
-            for img, sf in zip(pyramid, scale_factors):
-                # do cropping while taking the scale factor into account
-                # scale the x and y limits
-                xlim_scaled = (int(xlim_scaled[0] / sf), int(xlim_scaled[1] / sf))
-                ylim_scaled = (int(ylim_scaled[0] / sf), int(ylim_scaled[1] / sf))
-                
-                # do the cropping
-                cropped_pyramid.append(img[ylim_scaled[0]:ylim_scaled[1], xlim_scaled[0]:xlim_scaled[1]])
-                
+            cropped_img = img[ylim_um[0]:ylim_um[1], xlim_um[0]:xlim_um[1]]
+            
+            # rechunk the array to prevent irregular chunking
+            cropped_img = cropped_img.rechunk()
+            
             # save cropping properties in metadata
             self.metadata[n]["cropping_xlim"] = xlim
             self.metadata[n]["cropping_ylim"] = ylim
-            self.metadata[n]["shape"] = cropped_pyramid[0].shape
+            #self.metadata[n]["shape"] = cropped_pyramid[0].shape
+            self.metadata[n]["shape"] = cropped_img.shape
                 
             # add cropped pyramid to object
-            setattr(self, n, cropped_pyramid)
+            setattr(self, n, cropped_img)
         

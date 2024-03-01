@@ -2,52 +2,15 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Union
 
-import dask.array as da
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import shapely
-import zarr
-from tifffile import imread
 
 from .utils import nested_dict_numpy_to_list
 
 
-#TODO: `load_pyramid` should be moved to .image.io
-def read_ome_tiff(path, 
-                 levels: Optional[Union[List[int], int]] = None
-                 ):
-    '''
-    Function to load pyramid from `ome.tiff` file.
-    From: https://www.youtube.com/watch?v=8TlAAZcJnvA
-    '''
-    # read store
-    store = imread(path, aszarr=True)
-    
-    # Open store (root group)
-    grp = zarr.open(store, mode='r')
-
-    # Read multiscale metadata
-    datasets = grp.attrs["multiscales"][0]["datasets"]
-    
-    # pyramid = [
-    #     da.from_zarr(store, component=d["path"])
-    #     for d in datasets
-    # ]
-    
-    if levels is None:
-        levels = range(0, len(datasets))
-    pyramid = [
-        da.from_zarr(store, component=datasets[l]["path"])
-        for l in levels
-    ]
-    
-    if len(pyramid) == 1:
-        pyramid = pyramid[0]
-
-    return pyramid
-    
 def read_json(
     file: Union[str, os.PathLike, Path],
     ) -> dict:

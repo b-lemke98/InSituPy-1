@@ -1,11 +1,15 @@
 import os
+import warnings
 from pathlib import Path
-from typing import Literal, Optional, Union
+from typing import List, Literal, Optional, Union
 
+import dask.array as da
 import numpy as np
 import tifffile as tf
-import warnings
+import zarr
+from tifffile import imread
 
+from ..utils.utils import convert_to_list
 from .utils import resize_image
 
 
@@ -104,3 +108,49 @@ def write_ome_tiff(
                 resolution=(1e4 / scale / pixelsize,1e4 / scale / pixelsize),
                 **options
             )
+
+def read_ome_tiff(path, 
+                 levels: Optional[Union[List[int], int]] = None
+                 ):
+    '''    
+    Function to load pyramid from `ome.tiff` file.
+    From: https://www.youtube.com/watch?v=8TlAAZcJnvA
+    
+    Args:
+        path (str): The file path to the `ome.tiff` file.
+        levels (Optional[Union[List[int], int]]): A list of integers representing the levels of the pyramid to load. If None, all levels are loaded. Default is None.
+
+    Returns:
+        List[dask.array.Array] or dask.array.Array: The pyramid or a single level of the pyramid, represented as Dask arrays.
+
+    '''
+    # read store
+    store = imread(path, aszarr=True)
+    
+    # Open store (root group)
+    grp = zarr.open(store, mode='r')
+
+    # Read multiscale metadata
+    datasets = grp.attrs["multiscales"][0]["datasets"]
+    
+    # pyramid = [
+    #     da.from_zarr(store, component=d["path"])
+    #     for d in datasets
+    # ]
+    
+    if levels is None:
+        levels = range(0, len(datasets))
+    # make sure level is a list
+    levels = convert_to_list(levels)
+    
+    # extract images as pyramid list
+    pyramid = [
+        da.from_zarr(store, component=datasets[l]["path"])
+        for l in levels
+    ]
+    
+    # if pyramid has only one element, return only this image
+    if len(pyramid) == 1:
+        pyramid = pyramid[0]
+
+    return pyramid

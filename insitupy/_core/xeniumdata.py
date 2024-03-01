@@ -42,6 +42,7 @@ from .._exceptions import (InvalidFileTypeError, ModalityNotFoundError,
                            WrongNapariLayerTypeError, XeniumDataMissingObject,
                            XeniumDataRepeatedCropError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
+from ..image.utils import create_img_pyramid
 from ..utils.io import (check_overwrite_and_remove_if_true,
                         read_baysor_polygons, read_json, write_dict_to_json)
 from ..utils.utils import convert_to_list, decode_robust_series
@@ -211,6 +212,7 @@ def _restructure_transcripts_dataframe(dataframe):
 
 def read_celldata(
     path: Union[str, os.PathLike, Path],
+    pixel_size: Number
     ) -> CellData:
     # read metadata
     path = Path(path)
@@ -236,7 +238,7 @@ def read_celldata(
         boundaries_dict[k] = d
     
     boundaries = BoundariesData()
-    boundaries.add_boundaries(data=boundaries_dict)
+    boundaries.add_boundaries(data=boundaries_dict, pixel_size=pixel_size)
     #boundaries.read_boundaries(files=files, labels=labels)
     
     # create CellData object
@@ -575,16 +577,20 @@ class XeniumData:
             
         if hasattr(_self, "transcripts"):
             # infer mask for selection
-            xmask = (_self.transcripts["x_location"] >= xlim[0]) & (_self.transcripts["x_location"] <= xlim[1])
-            ymask = (_self.transcripts["y_location"] >= ylim[0]) & (_self.transcripts["y_location"] <= ylim[1])
+            # xmask = (_self.transcripts["x_location"] >= xlim[0]) & (_self.transcripts["x_location"] <= xlim[1])
+            # ymask = (_self.transcripts["y_location"] >= ylim[0]) & (_self.transcripts["y_location"] <= ylim[1])
+            xmask = (_self.transcripts["coordinates", "x"] >= xlim[0]) & (_self.transcripts["coordinates", "x"] <= xlim[1])
+            ymask = (_self.transcripts["coordinates", "y"] >= ylim[0]) & (_self.transcripts["coordinates", "y"] <= ylim[1])
             mask = xmask & ymask
             
             # select
             _self.transcripts = _self.transcripts.loc[mask, :].copy()
             
             # move origin again to 0 by subtracting the lower limits from the coordinates
-            _self.transcripts["x_location"] -= xlim[0]
-            _self.transcripts["y_location"] -= ylim[0]
+            # _self.transcripts["x_location"] -= xlim[0]
+            # _self.transcripts["y_location"] -= ylim[0]
+            _self.transcripts["coordinates", "x"] -= xlim[0]
+            _self.transcripts["coordinates", "y"] -= ylim[0]
             
         if hasattr(_self, "images"):
             _self.images.crop(xlim=xlim, ylim=ylim)
@@ -903,16 +909,17 @@ class XeniumData:
 
     def read_cells(self):
         print("Reading cells...", flush=True)
+        pixel_size = self.metadata["pixel_size"]
         if self.from_xeniumdata:
             try:
                 cells_path = self.xd_metadata["cells"]
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
-            self.cells = read_celldata(path=self.path / cells_path)
+            self.cells = read_celldata(path=self.path / cells_path, pixel_size=pixel_size)
         else:
             # read celldata
             matrix = matrix = _read_matrix_from_xenium(path=self.path)
-            boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=self.metadata["pixel_size"])
+            boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=pixel_size)
             self.cells = CellData(matrix=matrix, boundaries=boundaries)
             
             # read binned expression
@@ -1490,7 +1497,7 @@ class XeniumData:
             n_grayscales = 0 # number of grayscale images
             for i, img_name in enumerate(image_keys):
                 img = getattr(self.images, img_name)
-                ivis = False if i < len(image_keys) - 1 else True # only last image is set visible
+                is_visible = False if i < len(image_keys) - 1 else True # only last image is set visible
                 
                 # check if the current image is RGB
                 is_rgb = self.images.metadata[img_name]["rgb"]
@@ -1505,15 +1512,20 @@ class XeniumData:
                         cmap = grayscale_colormap[n_grayscales]
                         n_grayscales += 1
                     blending = "additive"  # set blending mode
+                
+                # create image pyramid for lazy loading
+                img_pyramid = create_img_pyramid(img=img, nsubres=6)
+                                
+                # add img pyramid to napari viewer
                 self.viewer.add_image(
-                        img,
+                        img_pyramid,
                         name=img_name,
                         colormap=cmap,
                         blending=blending,
                         rgb=is_rgb,
                         contrast_limits=self.images.metadata[img_name]["contrast_limits"],
                         scale=(pixel_size, pixel_size),
-                        visible=ivis
+                        visible=is_visible
                     )
         
         # optionally: add cells as points
@@ -1545,12 +1557,16 @@ class XeniumData:
                     else:
                         geneid = cells.matrix.var_names.get_loc(k)
                         color_value = X[:, geneid]
+                        
+                    # extract names of cells
+                    cell_names = cells.matrix.obs_names.values
 
                     # create points layer
                     layer = _create_points_layer(
                         points=points,
                         color_values=color_value,
                         name=k,
+                        point_names=cell_names,
                         point_size=point_size,
                         visible=pvis
                     )
