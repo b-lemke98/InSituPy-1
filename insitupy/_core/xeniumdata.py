@@ -815,6 +815,9 @@ class XeniumData:
         loomfile = baysor_output / "segmentation_counts.loom"
         matrix = sc.read_loom(loomfile)
         
+        # set spatial coordinates
+        matrix.obsm["spatial"] = matrix.obs[["x", "y"]].values
+        
         # read polygons
         print("Reading segmentation masks", flush=True)
         print("\tRead polygons", flush=True)
@@ -1617,7 +1620,7 @@ class XeniumData:
             pass
         else:
             # initialize the widgets
-            add_points_widget, locate_cells_widget, add_region_widget, add_annotations_widget, add_boundaries_widget = _initialize_widgets(xdata=self)
+            add_points_widget, locate_cells_widget, add_region_widget, add_annotations_widget, add_boundaries_widget, select_data = _initialize_widgets(xdata=self)
             
             # add widgets to napari window
             if add_points_widget is not None:
@@ -1644,6 +1647,11 @@ class XeniumData:
                 self.viewer.window.add_dock_widget(add_annotations_widget, name="Show annotations", area="right")
                 add_annotations_widget.max_height = 150
                 add_annotations_widget.max_width = widgets_max_width
+                
+            if select_data is not None:
+                self.viewer.window.add_dock_widget(select_data, name="Select data", area="left")
+                select_data.max_height = 150
+                select_data.max_width = widgets_max_width
         
         # add annotation widget to napari
         annot_widget = _annotation_widget()
