@@ -44,28 +44,27 @@ class ShapesData(DeepCopyMixin):
                  assert_uniqueness: Optional[bool] = None,
                  # shape_name: Optional[str] = None
                  ) -> None:
-        # make sure files and keys are a list
-        files = convert_to_list(files)
-        keys = convert_to_list(keys)
-        assert len(files) == len(keys), "Number of files does not match number of keys."
-        
-        # if shape_name is not None:
-        #     self.shape_name = shape_name
         
         # create dictionary for metadata
         self.metadata = {}
         
-        if assert_uniqueness is None:
-            assert_uniqueness = self.default_assert_uniqueness
-        
         if files is not None:
-            for key, file in zip(keys, files):
-                # read annotation and store in dictionary
-                self.add_annotation(data=file, 
-                                    key=key, 
-                                    pixel_size=pixel_size,
-                                    assert_uniqueness=assert_uniqueness
-                                    )
+            # make sure files and keys are a list
+            files = convert_to_list(files)
+            keys = convert_to_list(keys)
+            assert len(files) == len(keys), "Number of files does not match number of keys."
+                
+            if assert_uniqueness is None:
+                assert_uniqueness = self.default_assert_uniqueness
+            
+            if files is not None:
+                for key, file in zip(keys, files):
+                    # read annotation and store in dictionary
+                    self.add_shapes(data=file, 
+                                        key=key, 
+                                        pixel_size=pixel_size,
+                                        assert_uniqueness=assert_uniqueness
+                                        )
                 
     def __repr__(self):
         if len(self.metadata) > 0:
@@ -112,14 +111,14 @@ class ShapesData(DeepCopyMixin):
         self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
         
             
-    def add_annotation(self,
-                       data: Union[gpd.GeoDataFrame, pd.DataFrame, dict, 
-                                   str, os.PathLike, Path],
-                       key: str,
-                       pixel_size: Optional[float] = 1,
-                       verbose: bool = False,
-                       assert_uniqueness: bool = False
-                       ):
+    def add_shapes(self,
+                   data: Union[gpd.GeoDataFrame, pd.DataFrame, dict, 
+                                str, os.PathLike, Path],
+                   key: str,
+                   pixel_size: Optional[float] = 1,
+                   verbose: bool = False,
+                   assert_uniqueness: bool = False
+                   ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
         

@@ -216,16 +216,6 @@ def _initialize_widgets(
                         
             return layers
         
-        def callback():
-            # after 
-            config._refresh_widgets_after_data_change(xdata,
-                                                      points_widget=add_points_widget,
-                                                      boundaries_widget=add_boundaries_widget
-                                                      )
-            
-        
-        add_points_widget.call_button.clicked.connect(callback)
-        
         @magicgui(
             call_button='Show',
             cell={'label': "Cells:"},
@@ -261,6 +251,16 @@ def _initialize_widgets(
                         )
             else:
                 print(f"Cell '{cell}' not found in `xeniumdata.cells.matrix.obs_names()`.")
+                
+        def callback(event=None):
+            # after the points widget is run, the widgets have to be refreshed to current data layer
+            config._refresh_widgets_after_data_change(xdata,
+                                                      points_widget=add_points_widget,
+                                                      boundaries_widget=add_boundaries_widget
+                                                      )
+        add_points_widget.call_button.clicked.connect(callback)
+        add_boundaries_widget.call_button.clicked.connect(callback)
+        
     
     if not hasattr(xdata, "regions"):
         add_region_widget = None

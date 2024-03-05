@@ -264,7 +264,8 @@ def read_regionsdata(
 
 def read_annotationsdata(
     path: Union[str, os.PathLike, Path],
-):    
+):
+    path = Path(path)
     metadata = read_json(path / "metadata.json")
     keys = metadata.keys()
     files = [path / f"{k}.geojson" for k in keys]
@@ -707,6 +708,95 @@ class XeniumData:
         else:
             raise ValueError(f'`transformation_method` is not one of ["log1p", "sqrt"]')
         
+    def parse_baysor(self, 
+                    baysor_output: Union[str, os.PathLike, Path],
+                    key_to_add: str = "baysor",
+                    pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
+                    ):
+        
+        try:
+            cells = self.cells
+        except AttributeError:
+            raise ModalityNotFoundError(modality="cells")
+        
+        # read matrix
+        print("Parsing count matrix...", flush=True)
+        loomfile = baysor_output / "segmentation_counts.loom"
+        matrix = sc.read_loom(loomfile)
+        
+        # set indices for .obs and .var
+        matrix.obs = matrix.obs.reset_index().set_index("Name")
+        matrix.obs["CellID"] = matrix.obs["CellID"].astype(float).astype(int) # convert cell id to int
+        matrix.var.set_index("Name", inplace=True)
+        
+        # remove unassigned codewords from genes and obs entries with an NaN in any column
+        varmask = ~matrix.var_names.str.startswith("UnassignedCodeword")
+        obsmask = ~matrix.obs.isna().any(axis=1)
+        matrix = matrix[obsmask, varmask].copy()        
+        
+        # set spatial coordinates
+        matrix.obsm["spatial"] = matrix.obs[["x", "y"]].values
+        matrix.obs.drop(["x", "y"], axis=1, inplace=True) # drop the coordinate columns
+        
+        # read polygons
+        print("Reading segmentation masks", flush=True)
+        print("\tRead polygons", flush=True)
+        jsonfile = baysor_output / "segmentation_polygons.json"
+        df = read_baysor_polygons(jsonfile)
+        
+        # remove polygons of cells that have been removed in the matrix
+        df = df[df.cell.astype(int).isin(matrix.obs["CellID"])]
+        
+        # determine dimensions of dataset
+        xmax = ceil(cells.matrix.obsm['spatial'][:, 0].max() + 15)
+        ymax = ceil(cells.matrix.obsm['spatial'][:, 1].max() + 15)
+        
+        # generate a segmentation mask
+        print("\tConvert polygons to segmentation mask", flush=True)
+        img = rasterize(list(zip(df["geometry"], df["cell"])), out_shape=(ymax,xmax))
+        
+        # convert to dask array
+        img = da.from_array(img)
+        
+        # create boundaries object
+        boundaries = BoundariesData()
+        boundaries.add_boundaries(data={f"{key_to_add}_cellular": img}, pixel_size=pixel_size)
+        
+        # add data to XeniumData
+        alt_attr_name = "alt"
+        try:
+            alt_attr = getattr(self, alt_attr_name)
+        except AttributeError:
+            setattr(self, alt_attr_name, {})
+            alt_attr = getattr(self, alt_attr_name)
+        
+        alt_attr[key_to_add] = CellData(matrix=matrix, boundaries=boundaries)
+        
+        trans_attr_name = "transcripts"
+        try:
+            trans_attr = getattr(self, trans_attr_name)
+        except AttributeError:
+            print("No transcript layer found. Addition of Baysor transcript data is skipped.", flush=True)
+            pass
+        else:
+            # read transcripts from Baysor results
+            print("Parsing transcripts data...", flush=True)
+            
+            print("\tRead data", flush=True)
+            segcsv_file = baysor_output / "segmentation.csv"
+            baysor_transcript_dataframe = pd.read_csv(segcsv_file)
+            
+            print("\tMerge with existing data", flush=True)
+            baysor_results = baysor_transcript_dataframe.set_index("transcript_id")[["cell"]]
+            baysor_results.columns = pd.MultiIndex.from_tuples([("cell_id", key_to_add)])
+            trans_attr = pd.merge(left=trans_attr,
+                                  right=baysor_results, 
+                                  left_index=True, 
+                                  right_index=True
+                                  )
+            
+            # add resulting dataframe to XeniumData
+            setattr(self, trans_attr_name, trans_attr)
 
 
     def plot_dimred(self, save: Optional[str] = None):
@@ -799,86 +889,6 @@ class XeniumData:
             
             self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
             
-    def parse_baysor(self, 
-                    baysor_output: Union[str, os.PathLike, Path],
-                    key_to_add: str = "baysor",
-                    pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
-                    ):
-        
-        try:
-            cells = self.cells
-        except AttributeError:
-            raise ModalityNotFoundError(modality="cells")
-        
-        # read matrix
-        print("Parsing count matrix...", flush=True)
-        loomfile = baysor_output / "segmentation_counts.loom"
-        matrix = sc.read_loom(loomfile)
-        
-        # set indices for .obs and .var
-        matrix.obs.set_index("Name", inplace=True)
-        matrix.var.set_index("Name", inplace=True)
-        
-        # set spatial coordinates
-        matrix.obsm["spatial"] = matrix.obs[["x", "y"]].values
-        matrix.obs.drop(["x", "y"], axis=1, inplace=True) # drop the coordinate columns
-        
-        # read polygons
-        print("Reading segmentation masks", flush=True)
-        print("\tRead polygons", flush=True)
-        jsonfile = baysor_output / "segmentation_polygons.json"
-        df = read_baysor_polygons(jsonfile)
-        
-        # determine dimensions of dataset
-        xmax = ceil(cells.matrix.obsm['spatial'][:, 0].max() + 15)
-        ymax = ceil(cells.matrix.obsm['spatial'][:, 1].max() + 15)
-        
-        # generate a segmentation mask
-        print("\tConvert polygons to segmentation mask", flush=True)
-        img = rasterize(list(zip(df["geometry"], range(1, len(df)+1))), out_shape=(ymax,xmax))
-        
-        # convert to dask array
-        img = da.from_array(img)
-        
-        # create boundaries object
-        boundaries = BoundariesData()
-        boundaries.add_boundaries(data={key_to_add: img}, pixel_size=pixel_size)
-        
-        # add data to XeniumData
-        alt_attr_name = "alt"
-        try:
-            alt_attr = getattr(self, alt_attr_name)
-        except AttributeError:
-            setattr(self, alt_attr_name, {})
-            alt_attr = getattr(self, alt_attr_name)
-        
-        alt_attr[key_to_add] = CellData(matrix=matrix, boundaries=boundaries)
-        
-        trans_attr_name = "transcripts"
-        try:
-            trans_attr = getattr(self, trans_attr_name)
-        except AttributeError:
-            print("No transcript layer found. Addition of Baysor transcript data is skipped.", flush=True)
-            pass
-        else:
-            # read transcripts from Baysor results
-            print("Parsing transcripts data...", flush=True)
-            
-            print("\tRead data", flush=True)
-            segcsv_file = baysor_output / "segmentation.csv"
-            baysor_transcript_dataframe = pd.read_csv(segcsv_file)
-            
-            print("\tMerge with existing data", flush=True)
-            baysor_results = baysor_transcript_dataframe.set_index("transcript_id")[["cell"]]
-            baysor_results.columns = pd.MultiIndex.from_tuples([("cell_id", key_to_add)])
-            trans_attr = pd.merge(left=trans_attr,
-                                  right=baysor_results, 
-                                  left_index=True, 
-                                  right_index=True
-                                  )
-            
-            # add resulting dataframe to XeniumData
-            setattr(self, trans_attr_name, trans_attr)
 
         
     def read_regions(self,
@@ -1421,42 +1431,46 @@ class XeniumData:
             shutil.make_archive(path_stem, 'zip', path_stem, verbose=False)
             shutil.rmtree(path_stem) # delete directory
 
-    def quicksave(self):
+    def quicksave(self, 
+                  note: Optional[str] = None
+                  ):
         # create quicksave directory if it does not exist already
-        quicksave_dir = CACHE / "quicksaves"
-        quicksave_dir.mkdir(parents=True, exist_ok=True)
-        
-        # create filename
-        current_datetime = datetime.now().strftime("%y%m%d_%H-%M-%S")
-        slide_id = self.slide_id
-        sample_id = self.sample_id
-        uid = str(uuid4())[:8]
-
-        # create output directory
-        outname = f"{slide_id}__{sample_id}__{current_datetime}__{uid}"
-        outdir = quicksave_dir / outname
+        self.quicksave_dir = CACHE / "quicksaves"
+        self.quicksave_dir.mkdir(parents=True, exist_ok=True)
         
         # save annotations
         try:
             annotations = self.annotations
         except AttributeError:
+            print("No annotations found. Quicksave skipped.", flush=True)
             pass
         else:
+            # create filename
+            current_datetime = datetime.now().strftime("%y%m%d_%H-%M-%S")
+            slide_id = self.slide_id
+            sample_id = self.sample_id
+            uid = str(uuid4())[:8]
+
+            # create output directory
+            outname = f"{slide_id}__{sample_id}__{current_datetime}__{uid}"
+            outdir = self.quicksave_dir / outname
+            
             _save_annotations(
                 annotations=annotations,
                 path=outdir,
                 metadata=None
             )
             
-        # # zip the output
-        shutil.make_archive(outdir, format='zip', root_dir=outdir, verbose=False)
-        shutil.rmtree(outdir) # delete directory
+            if note is not None:
+                with open(outdir / "note.txt", "w") as notefile:
+                    notefile.write(note)
+            
+            # # # zip the output
+            # shutil.make_archive(outdir, format='zip', root_dir=outdir, verbose=False)
+            # shutil.rmtree(outdir) # delete directory
             
         
-    def list_quicksaves(self):
-        # create quicksave directory if it does not exist already
-        quicksave_dir = CACHE / "quicksaves"
-        
+    def list_quicksaves(self):        
         pattern = "{slide_id}__{sample_id}__{savetime}__{uid}"
 
         # collect results
@@ -1464,15 +1478,45 @@ class XeniumData:
             "slide_id": [],
             "sample_id": [],
             "savetime": [],
-            "uid": []
+            "uid": [],
+            "note": []
         }
-        for f in quicksave_dir.glob("*"):
-            parse_res = parse(pattern, f.stem).named
+        for d in self.quicksave_dir.glob("*"):
+            parse_res = parse(pattern, d.stem).named
             for key, value in parse_res.items():
                 res[key].append(value)
             
+            notepath = d / "note.txt"
+            if notepath.exists():
+                with open(notepath, "r") as notefile:
+                    res["note"].append(notefile.read())
+            else:
+                res["note"].append("")
+                
         # create and return dataframe
         return pd.DataFrame(res)
+    
+    def load_quicksave(self, 
+                       uid: str
+                       ):
+        # find files with the uid
+        files = list(self.quicksave_dir.glob(f"*{uid}*"))
+        
+        if len(files) == 1:
+            ad = read_annotationsdata(files[0] / "annotations")
+        elif len(files) == 0:
+            print(f"No quicksave with uid '{uid}' found. Use `.list_quicksaves()` to list all available quicksaves.")
+        else:
+            raise ValueError(f"More than one quicksave with uid '{uid}' found.")
+        
+        # add annotations to existing annotations attribute or add a new one
+        try:
+            annotations = self.annotations
+        except AttributeError:
+            annotations = self.annotations = AnnotationsData()
+        else:
+            for k in ad.metadata.keys():
+                annotations.add_shapes(getattr(ad, k), k, verbose=True)
             
             
     def show(self,
@@ -1701,6 +1745,7 @@ class XeniumData:
 
         # Connect the function to any new layers added to the viewer
         self.viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
+
         
         # NAPARI SETTINGS
         if scalebar:
@@ -1760,5 +1805,5 @@ class XeniumData:
                     annot_df = GeoDataFrame(annot_df, geometry="geometry")
                     
                     # add annotations
-                    self.annotations.add_annotation(data=annot_df, key=annot_key, verbose=True)                       
+                    self.annotations.add_shapes(data=annot_df, key=annot_key, verbose=True)                       
  

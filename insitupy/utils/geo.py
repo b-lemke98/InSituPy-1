@@ -1,9 +1,9 @@
-import numpy as np
 import os
 from pathlib import Path
 from typing import Union
 
 import geopandas
+import numpy as np
 import pandas as pd
 from geopandas.geodataframe import GeoDataFrame
 
@@ -35,8 +35,9 @@ def parse_geopandas(
     # set the crs to EPSG:4326 (does not matter for us but to circumvent errors it is better to set it)
     df = df.set_crs(4326)
     
-    # set uid column as index
-    df = df.set_index(uid_col)
+    if df.index.name != uid_col:
+        # set uid column as index
+        df = df.set_index(uid_col)
     
     return df
         

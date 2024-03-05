@@ -18,7 +18,6 @@ def update_viewer_config(
         global boundaries
         boundaries = xdata.cells.boundaries
     else:
-        print(current_data_name)
         adata = xdata.alt[current_data_name].matrix
         boundaries = xdata.alt[current_data_name].boundaries
         
@@ -47,9 +46,7 @@ def update_viewer_config(
             
 def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget):
     update_viewer_config(xdata)
-    print(genes, flush=True)
     points_widget.gene.choices = genes
-    print(observations)
     points_widget.observation.choices = observations
-    print(masks)
     boundaries_widget.key.choices = masks
+    
