@@ -7,7 +7,6 @@ import warnings
 from datetime import datetime
 from math import ceil
 from numbers import Number
-from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
@@ -31,10 +30,13 @@ from pandas.api.types import is_numeric_dtype
 from parse import *
 from rasterio.features import rasterize
 from scipy.sparse import csr_matrix, issparse
-from shapely import Point, Polygon, affinity
+from shapely import Point, Polygon
 from shapely.geometry.polygon import Polygon
 
 from insitupy import __version__
+from insitupy._core._save import _save_images
+from insitupy.utils.io import save_and_show_figure
+from insitupy.utils.utils import get_nrows_maxcols
 
 from .._constants import CACHE
 from .._exceptions import (InvalidFileTypeError, ModalityNotFoundError,
@@ -1806,4 +1808,63 @@ class XeniumData:
                     
                     # add annotations
                     self.annotations.add_shapes(data=annot_df, key=annot_key, verbose=True)                       
+                    
+    def plot_binned_expression(
+        self,
+        genes: Union[List[str], str],
+        maxcols: int = 4,
+        figsize: Tuple[int, int] = (8,6),
+        savepath: Union[str, os.PathLike, Path] = None,
+        save_only: bool = False,
+        dpi_save: int = 300,
+        show: bool = True,
+        fontsize: int = 28
+        ):
+        # extract binned expression matrix and gene names
+        binex = self.cells.matrix.varm["binned_expression"]
+        gene_names = self.cells.matrix.var_names
+        
+        genes = convert_to_list(genes)
+        
+        nplots, nrows, ncols = get_nrows_maxcols(genes, max_cols=maxcols)
+        
+        # setup figure
+        fig, axs = plt.subplots(nrows, ncols, figsize=(figsize[0]*ncols, figsize[1]*nrows))
+        
+        # scale font sizes
+        plt.rcParams.update({'font.size': fontsize})
+        
+        if nplots > 1:
+            axs = axs.ravel()
+        else:
+            axs = [axs]
+        
+        for i, gene in enumerate(genes):
+            # retrieve binned expression
+            img = binex[gene_names.get_loc(gene)]
+            
+            # determine upper limit for color
+            vmax = np.percentile(img[img>0], 95)
+            
+            # plot expression
+            axs[i].imshow(img, cmap="viridis", vmax=vmax)
+            
+            # set title
+            axs[i].set_title(gene)
+            
+        if nplots > 1:
+
+            # check if there are empty plots remaining
+            while i < nrows * maxcols - 1:
+                i+=1
+                # remove empty plots
+                axs[i].set_axis_off()
+                
+
+                
+        if show:
+            fig.tight_layout()
+            save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save)
+        else:
+            return fig, axs
  

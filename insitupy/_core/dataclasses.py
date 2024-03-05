@@ -20,7 +20,6 @@ from shapely.geometry.multipolygon import MultiPolygon
 from tifffile import TiffFile
 
 from insitupy import __version__
-from insitupy._core._save import _save_images
 
 from .._exceptions import InvalidFileTypeError
 from ..image.io import read_ome_tiff, write_ome_tiff
@@ -744,3 +743,4 @@ class ImageData(DeepCopyMixin):
         
         if return_savepaths:
             return savepaths
+        
