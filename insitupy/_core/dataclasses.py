@@ -20,9 +20,10 @@ from shapely.geometry.multipolygon import MultiPolygon
 from tifffile import TiffFile
 
 from insitupy import __version__
+from insitupy._core._save import _save_images
 
 from .._exceptions import InvalidFileTypeError
-from ..image.io import read_ome_tiff
+from ..image.io import read_ome_tiff, write_ome_tiff
 from ..utils.geo import parse_geopandas, write_qupath_geojson
 from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
@@ -678,3 +679,68 @@ class ImageData(DeepCopyMixin):
             # add cropped pyramid to object
             setattr(self, n, cropped_img)
         
+    def save(self,
+             path: Union[str, os.PathLike, Path],
+             keys_to_save: Optional[str] = None,
+             images_as_zarr: bool = True,
+             return_savepaths: bool = False,
+             overwrite: bool = False
+             ):
+        path = Path(path)
+        
+        if keys_to_save is None:
+            keys_to_save = list(self.metadata.keys())
+        else:
+            keys_to_save = convert_to_list(keys_to_save)
+        
+        # check overwrite
+        check_overwrite_and_remove_if_true(path=path, overwrite=overwrite)
+        
+        # create output directory
+        path.mkdir(parents=True, exist_ok=True)
+        
+        if return_savepaths:
+            savepaths = {}
+        
+        for n, img_metadata in self.metadata.items():
+            if n in keys_to_save:
+                # extract image
+                img = getattr(self, n)
+                if isinstance(img, list):
+                    img = img[0]
+                    
+                if images_as_zarr:
+                    filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
+                    
+                    with zarr.ZipStore(path / filename, mode="w") as zipstore:
+                        # save image data in zipstore
+                        img.to_zarr(zipstore)
+                        
+                        # open zarr store save metadata in zarr store
+                        store = zarr.open(zipstore, mode="a")
+                        for k,v in img_metadata.items():
+                            store.attrs[k] = v
+                        
+                else:
+                    # get file name for saving
+                    filename = Path(img_metadata["file"]).name
+                    # retrieve image metadata for saving
+                    photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
+                    axes = img_metadata['axes']
+                    
+                    # retrieve OME metadata
+                    ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY", "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
+                    pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
+                    selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
+                    
+                    # write images as OME-TIFF
+                    write_ome_tiff(path / filename, img, 
+                                photometric=photometric, axes=axes, 
+                                metadata=selected_metadata, overwrite=False)
+                
+                if return_savepaths:
+                    # collect savepaths
+                    savepaths[n] = path / filename
+        
+        if return_savepaths:
+            return savepaths
