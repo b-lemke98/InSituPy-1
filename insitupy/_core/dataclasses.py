@@ -4,9 +4,10 @@ from copy import deepcopy
 from numbers import Number
 from os.path import relpath
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import dask
+import dask.array as da
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -16,14 +17,14 @@ from anndata import AnnData
 from parse import *
 from shapely import Polygon, affinity
 from shapely.geometry.multipolygon import MultiPolygon
-from tifffile import TiffFile, imread
+from tifffile import TiffFile
 
 from insitupy import __version__
 
 from .._exceptions import InvalidFileTypeError
+from ..image.io import read_ome_tiff
 from ..utils.geo import parse_geopandas, write_qupath_geojson
-from ..utils.io import (check_overwrite_and_remove_if_true, load_pyramid,
-                        write_dict_to_json)
+from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._mixins import DeepCopyMixin
@@ -68,9 +69,24 @@ class ShapesData(DeepCopyMixin):
                 
     def __repr__(self):
         if len(self.metadata) > 0:
-            repr_strings = [
-                f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} {self.shape_name}, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
-                ]
+            repr_strings = []
+            for l, m in self.metadata.items():
+                # add ' to classes
+                classes = [f"'{elem}'" for elem in m["classes"]]
+                lc = len(classes)
+                
+                # create string
+                r = (
+                    f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} ' 
+                    f'{self.shape_name}, {lc} '
+                    f'{"classes" if lc>1 else "class"} '
+                    f'({",".join(classes)}) {m["analyzed"]}'
+                )
+                repr_strings.append(r)
+            # repr_strings = [
+            #     #f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} {self.shape_name}, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
+            #     f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} {self.shape_name}, {len(m["classes"])} {"classes" if len(m["classes"])>1 else "class"} ({",".join(m["classes"])}) {m["analyzed"]}' for l, m in self.metadata.items()
+            #     ]
             
             s = "\n".join(repr_strings)
         else:
@@ -87,7 +103,12 @@ class ShapesData(DeepCopyMixin):
         
         # record metadata information
         self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
-        self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+        
+        try:        
+            self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+        except KeyError:
+            self.metadata[key]["classes"] = ["unnamed"]
+            
         self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
         
             
@@ -254,17 +275,18 @@ class BoundariesData(DeepCopyMixin):
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self,
-                 pixel_size: Number = 1, # required for boundaries that are saved as masks
+                 #pixel_size: Number = 1, # required for boundaries that are saved as masks
                  ):
-        self.labels = []
-        self.pixel_size = pixel_size
+        self.metadata = {}
         
     def __repr__(self):
-        if len(self.labels) == 0:
+        labels = list(self.metadata.keys())
+        if len(labels) == 0:
             repr = f"Empty BoundariesData object"
         else:
-            repr = f"BoundariesData object with {len(self.labels)} entries:"
-            for l in self.labels:
+            ll = len(labels)
+            repr = f"BoundariesData object with {ll} {'entry' if ll == 1 else 'entries'}:"
+            for l in labels:
                 repr += f"\n{tf.SPACER+tf.Bold+l+tf.ResetAll}"
         return repr
     
@@ -292,32 +314,33 @@ class BoundariesData(DeepCopyMixin):
     #     self.add_boundaries(dataframes=dataframes)
         
     def add_boundaries(self,
-                       data: Optional[Union[dict, List[str]]] = None,
+                       data: Optional[Union[dict, List[str]]],
+                       pixel_size: Number, # required for boundaries that are saved as masks
                        labels: Optional[List[str]] = [],
                        overwrite: bool = False
                        ):
-        if data is not None:
-            if isinstance(data, dict):
-                # extract keys from dictionary
-                labels = data.keys()
-                data = data.values()
-            elif isinstance(data, list):
-                if labels is None:
-                    raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
-            else:
-                raise ValueError(f"Argument 'dataframes' has unknown file type ({type(data)}). Expected to be a list or dictionary.")
-            
-            for l, df in zip(labels, data):
-                if isinstance(df, pd.DataFrame) or isinstance(df, dask.array.core.Array):                    
-                    if l not in self.labels or overwrite:
-                        # add to object
-                        setattr(self, l, df)
-                        self.labels.append(l)
-                    else:
-                        raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
+        if isinstance(data, dict):
+            # extract keys from dictionary
+            labels = data.keys()
+            data = data.values()
+        elif isinstance(data, list):
+            if labels is None:
+                raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
+        else:
+            raise ValueError(f"Argument 'dataframes' has unknown file type ({type(data)}). Expected to be a list or dictionary.")
+        
+        for l, df in zip(labels, data):
+            if isinstance(df, pd.DataFrame) or isinstance(df, dask.array.core.Array):                    
+                if l not in self.metadata or overwrite:
+                    # add to object
+                    setattr(self, l, df)
+                    self.metadata[l] = {}
+                    self.metadata[l]["pixel_size"] = pixel_size
                 else:
-                    print(f"Boundaries element `{l}` is neither a pandas DataFrame nor a Dask Array. Was not added.")
-                
+                    raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
+            else:
+                print(f"Boundaries element `{l}` is neither a pandas DataFrame nor a Dask Array. Was not added.")
+            
                 
     def crop(self,
              cell_ids: List[str],
@@ -330,7 +353,7 @@ class BoundariesData(DeepCopyMixin):
         # make sure cell ids are a list
         cell_ids = convert_to_list(cell_ids)
         
-        for n in self.labels:
+        for n, meta in self.metadata.items():
             # get dataframe
             data = getattr(self, n)
             
@@ -342,7 +365,7 @@ class BoundariesData(DeepCopyMixin):
                 data["vertex_x"] -= xlim[0]
                 data["vertex_y"] -= ylim[0]
             elif isinstance(data, dask.array.core.Array):
-                ps = self.pixel_size
+                ps = meta["pixel_size"]
                 data = data[int(ylim[0]/ps):int(ylim[1]/ps), int(xlim[0]/ps):int(xlim[1]/ps)]
                 
                 # rechunk the dask array to prevent errors during later steps
@@ -355,7 +378,7 @@ class BoundariesData(DeepCopyMixin):
             
                 
     def convert_to_shapely_objects(self):
-        for n in self.labels:
+        for n in self.metadata.keys():
             print(f"Converting `{n}` to GeoPandas DataFrame with shapely objects.")
             # retrief dataframe with boundary coordinates
             df = getattr(self, n)
@@ -440,7 +463,7 @@ class CellData(DeepCopyMixin):
             bound_path.mkdir(parents=True, exist_ok=True) # create directory
             
             metadata["boundaries"] = {}
-            for n in boundaries.labels:
+            for n in boundaries.metadata.keys():
                 bound_data = getattr(boundaries, n)
                 
                 if isinstance(bound_data, pd.DataFrame):
@@ -508,7 +531,7 @@ class CellData(DeepCopyMixin):
             print('No `boundaries` attribute found in CellData found.')
             pass
         else:
-            for n in boundaries.labels:
+            for n in boundaries.metadata.keys():
                 # get dataframe
                 df = getattr(boundaries, n)
                 
@@ -543,42 +566,62 @@ class ImageData(DeepCopyMixin):
             # generate full path for image
             impath = path / f
             impath = impath.resolve() # resolve relative path
+            suffix = impath.name.split(".", maxsplit=1)[-1]
             
-            # load images
-            store = imread(impath, aszarr=True)
-            pyramid = load_pyramid(store)
-            
+            if suffix == "zarr.zip":
+                # load image from .zarr.zip
+                with zarr.ZipStore(impath, mode="r") as zipstore:
+                    # open store
+                    img = da.from_zarr(zipstore).persist()
+                    
+                    # retrieve OME metadata
+                    store = zarr.open(zipstore)
+                    meta = store.attrs.asdict()
+                    ome_meta = meta["OME"]
+                    axes = meta["axes"]
+                    # except KeyError:
+                    #     warnings.warn("No OME metadata in `zarr.zip` file. Skipped collection of metadata.")
+
+            elif suffix in ["ome.tif", "ome.tiff"]:
+                # load image from .ome.tiff
+                img = read_ome_tiff(path=impath, levels=0)
+                
+                # read ome metadata
+                with TiffFile(path / f) as tif:
+                    axes = tif.series[0].axes # get axes
+                    ome_meta = tif.ome_metadata # read OME metadata
+                    ome_meta = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
+            else:
+                raise InvalidFileTypeError(
+                    allowed_types=["zarr.zip", "ome.tif", "ome.tiff"], 
+                    received_type=suffix
+                    )
+                
             # set attribute and add names to object
-            setattr(self, n, pyramid)
+            setattr(self, n, img)
             self.names.append(n)
-            
+                    
             # add metadata
             self.metadata[n] = {}
             self.metadata[n]["file"] = f # store file information
-            self.metadata[n]["shape"] = pyramid[0].shape # store shape
-            self.metadata[n]["subresolutions"] = len(pyramid) - 1 # store number of subresolutions of pyramid
-            
-            # read ome metadata
-            with TiffFile(path / f) as tif:
-                axes = tif.series[0].axes # get axes
-                ome_meta = tif.ome_metadata # read OME metadata
-                
+            self.metadata[n]["shape"] = img.shape # store shape
+            #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
             self.metadata[n]["axes"] = axes
-            self.metadata[n]["OME"] = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
+            self.metadata[n]["OME"] = ome_meta
             
             # check whether the image is RGB or not
-            if len(pyramid[0].shape) == 3:
+            if len(img.shape) == 3:
                 self.metadata[n]["rgb"] = True
-            elif len(pyramid[0].shape) == 2:
+            elif len(img.shape) == 2:
                 self.metadata[n]["rgb"] = False
             else:
-                raise ValueError(f"Unknown image shape: {pyramid[0].shape}")
+                raise ValueError(f"Unknown image shape: {img.shape}")
             
             # get image contrast limits
             if self.metadata[n]["rgb"]:
                 self.metadata[n]["contrast_limits"] = (0, 255)
             else:
-                self.metadata[n]["contrast_limits"] = (0, int(pyramid[0].max()))
+                self.metadata[n]["contrast_limits"] = (0, int(img.max()))
                 
             # add universal pixel size to metadata
             self.metadata[n]['pixel_size'] = pixel_size
@@ -613,31 +656,26 @@ class ImageData(DeepCopyMixin):
         names = list(self.metadata.keys())
         for n in names:
             # extract the image pyramid
-            pyramid = getattr(self, n)
+            img = getattr(self, n)
             
             # extract pixel size
             pixel_size = self.metadata[n]['pixel_size']
             
-            # get scale factors between the different pyramid levels
-            scale_factors = [1] + [pyramid[i].shape[0] / pyramid[i+1].shape[0] for i in range(len(pyramid)-1)]
+            # convert to metric unit
+            xlim_um = tuple([int(elem / pixel_size) for elem in xlim])
+            ylim_um = tuple([int(elem / pixel_size) for elem in ylim])
             
-            cropped_pyramid = []
-            xlim_scaled = (xlim[0] / pixel_size, xlim[1] / pixel_size) # convert to metric unit
-            ylim_scaled = (ylim[0] / pixel_size, ylim[1] / pixel_size) # convert to metric unit
-            for img, sf in zip(pyramid, scale_factors):
-                # do cropping while taking the scale factor into account
-                # scale the x and y limits
-                xlim_scaled = (int(xlim_scaled[0] / sf), int(xlim_scaled[1] / sf))
-                ylim_scaled = (int(ylim_scaled[0] / sf), int(ylim_scaled[1] / sf))
-                
-                # do the cropping
-                cropped_pyramid.append(img[ylim_scaled[0]:ylim_scaled[1], xlim_scaled[0]:xlim_scaled[1]])
-                
+            cropped_img = img[ylim_um[0]:ylim_um[1], xlim_um[0]:xlim_um[1]]
+            
+            # rechunk the array to prevent irregular chunking
+            cropped_img = cropped_img.rechunk()
+            
             # save cropping properties in metadata
             self.metadata[n]["cropping_xlim"] = xlim
             self.metadata[n]["cropping_ylim"] = ylim
-            self.metadata[n]["shape"] = cropped_pyramid[0].shape
+            #self.metadata[n]["shape"] = cropped_pyramid[0].shape
+            self.metadata[n]["shape"] = cropped_img.shape
                 
             # add cropped pyramid to object
-            setattr(self, n, cropped_pyramid)
+            setattr(self, n, cropped_img)
         

@@ -1,3 +1,4 @@
+from numbers import Number
 from typing import List, Optional, Tuple
 
 import dask
@@ -15,14 +16,18 @@ from scipy.sparse import issparse
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import LinearRing, Polygon
 
+import insitupy._core.config as config
+
+from ..image.utils import create_img_pyramid
 from ..utils.palettes import CustomPalettes
 from ..utils.utils import convert_to_list
 from ._layers import _add_annotations_as_layer
 
 
 def _create_points_layer(points, 
-                         color_values, 
-                         name, 
+                         color_values: List[Number], 
+                         name: str, 
+                         point_names: List[str],
                          point_size: int = 6, # is in scale unit (so mostly µm)
                          opacity: float = 1,
                          visible: bool = True,
@@ -59,12 +64,15 @@ def _create_points_layer(points,
         points, 
         {
             'name': name,
-            'properties': {"color_value": color_values},
+            'properties': {
+                "expression": color_values,
+                "cell_name": point_names
+                },
             'symbol': 'o',
             'size': point_size,
             'face_color': {
                 "color_mode": color_mode, # workaround (see https://github.com/napari/napari/issues/6433)
-                "colors": "color_value"
+                "colors": "expression"
                 },
             'face_color_cycle': color_cycle,
             'face_colormap': color_map,
@@ -78,6 +86,7 @@ def _create_points_layer(points,
         )
     return layer
 
+
 def _initialize_widgets(
     xdata # xenium data object
     ) -> List[FunctionGui]:
@@ -90,30 +99,45 @@ def _initialize_widgets(
         move_to_cell_widget = None
         add_boundaries_widget = None
     else:
-        # access adata, viewer and metadata from xeniumdata
-        adata = xdata.cells.matrix
-        boundaries = xdata.cells.boundaries
-        pixel_size = xdata.metadata["pixel_size"]
+        # initialize data_name of viewer
+        config.init_data_name()
+        # initialize viewer configuration
+        #config_mod.get_data_name(data_widget=select_data)
+        config.update_viewer_config(xdata=xdata, 
+                                    #data_name=config.current_data_name
+                                    )
         
-        # get point coordinates
-        points = np.flip(adata.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
-    
-        # get expression matrix
-        if issparse(adata.X):
-            X = adata.X.toarray()
+        data_names = ["main"]
+        try:
+            alt = xdata.alt
+        except AttributeError:
+            pass
         else:
-            X = adata.X
+            for k in alt.keys():
+                data_names.append(k)
+                
+        @magicgui(
+            call_button=False,
+            data_name= {'choices': data_names, 'label': 'Dataset:'}
+        )
+        def select_data(
+            data_name="main"
+        ):
+            #print(data_name)
+            pass
             
-        masks = []
-        for n in boundaries.labels:
-            b = getattr(boundaries, n)
-            if isinstance(b, dask.array.core.Array):
-                masks.append(n)
+        # connect key change with update function
+        @select_data.data_name.changed.connect
+        def update_widgets_on_data_change(event=None):
+            config.current_data_name = select_data.data_name.value
+            config._refresh_widgets_after_data_change(xdata, 
+                                                  add_points_widget, 
+                                                  add_boundaries_widget)
         
-        if len(masks) > 0:
+        if len(config.masks) > 0:
             @magicgui(
                 call_button='Add',
-                key={'choices': masks, 'label': 'Masks:'}
+                key={'choices': config.masks, 'label': 'Masks:'}
             )
             def add_boundaries_widget(
                 key
@@ -122,26 +146,26 @@ def _initialize_widgets(
                 
                 if layer_name not in viewer.layers:
                     # get geopandas dataframe with regions
-                    mask = getattr(xdata.cells.boundaries, key)
-                    print(mask)
-                    nsubres = 6
-                    mask_pyramid = [mask]
-
-                    sub = mask.copy()
-                    for n in range(nsubres):
-                        sub = sub[::2, ::2]
-                        mask_pyramid.append(sub)
-                        
+                    mask = getattr(config.boundaries, key)
+                    
+                    # get metadata for mask
+                    metadata = config.boundaries.metadata
+                    pixel_size = metadata[key]["pixel_size"]
+                    
+                    # generate pyramid of the mask
+                    mask_pyramid = create_img_pyramid(img=mask, nsubres=6)
+                    
+                    # add masks as labels to napari viewer
                     viewer.add_labels(mask_pyramid, name=layer_name, scale=(pixel_size,pixel_size))
                 else:
-                    print(f"Key '{key}' already in layer list.", flush=True)
+                    print(f"Layer '{layer_name}' already in layer list.", flush=True)
         else:
             add_boundaries_widget = None
         
         @magicgui(
             call_button='Add',
-            gene={'choices': adata.var_names.tolist(), 'label': "Gene:"},
-            observation={'choices': adata.obs.columns.tolist(), 'label': "Observation:"},
+            gene={'choices': config.genes, 'label': "Gene:"},
+            observation={'choices': config.observations, 'label': "Observation:"},
             size={'label': 'Size [µm]'}
             )
         def add_points_widget(
@@ -151,18 +175,22 @@ def _initialize_widgets(
             viewer=viewer
             ) -> napari.types.LayerDataTuple:
             
+            # get names of cells
+            cell_names = config.adata.obs_names.values
+            
             layers = []
             if gene is not None:
                 if gene not in viewer.layers:
                     # get expression values
-                    gene_loc = adata.var_names.get_loc(gene)
-                    color_value_gene = X[:, gene_loc]
-                
+                    gene_loc = config.adata.var_names.get_loc(gene)
+                    color_value_gene = config.X[:, gene_loc]
+                    
                     # create points layer for genes
                     gene_layer = _create_points_layer(
-                        points=points,
+                        points=config.points,
                         color_values=color_value_gene,
                         name=gene,
+                        point_names=cell_names,
                         point_size=size
                     )
                     layers.append(gene_layer)
@@ -172,13 +200,14 @@ def _initialize_widgets(
             if observation is not None:
                 if observation not in viewer.layers:
                     # get observation values
-                    color_value_obs = adata.obs[observation].values                
+                    color_value_obs = config.adata.obs[observation].values                
                     
                     # create points layer for observations
                     obs_layer = _create_points_layer(
-                        points=points,
+                        points=config.points,
                         color_values=color_value_obs,
                         name=observation,
+                        point_names=cell_names,
                         point_size=size,
                     )
                     layers.append(obs_layer)
@@ -186,6 +215,16 @@ def _initialize_widgets(
                     print(f"Key '{observation}' already in layer list.")
                         
             return layers
+        
+        def callback():
+            # after 
+            config._refresh_widgets_after_data_change(xdata,
+                                                      points_widget=add_points_widget,
+                                                      boundaries_widget=add_boundaries_widget
+                                                      )
+            
+        
+        add_points_widget.call_button.clicked.connect(callback)
         
         @magicgui(
             call_button='Show',
@@ -199,10 +238,10 @@ def _initialize_widgets(
             highlight=True,
             #viewer=viewer
         ) -> Optional[napari.types.LayerDataTuple]:
-            if cell in adata.obs_names.astype(str):
+            if cell in config.adata.obs_names.astype(str):
                 # get location of selected cell
-                cell_loc = adata.obs_names.get_loc(cell)
-                cell_position = points[cell_loc]
+                cell_loc = config.adata.obs_names.get_loc(cell)
+                cell_position = config.points[cell_loc]
             
                 # move center of camera to cell position
                 viewer.camera.center = (0, cell_position[0], cell_position[1])
@@ -369,7 +408,7 @@ def _initialize_widgets(
         
         
     
-    return add_points_widget, move_to_cell_widget, add_region_widget, add_annotations_widget, add_boundaries_widget #add_genes, add_observations
+    return add_points_widget, move_to_cell_widget, add_region_widget, add_annotations_widget, add_boundaries_widget, select_data #add_genes, add_observations
 
 
 @magic_factory(

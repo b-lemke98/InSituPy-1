@@ -127,7 +127,7 @@ def convert_to_list(elem):
     '''
     Return element to list if it is not a list already.
     '''
-    return [elem] if (isinstance(elem, str) or isinstance(elem, os.PathLike)) else list(elem)
+    return [elem] if (isinstance(elem, str) or isinstance(elem, os.PathLike) or isinstance(elem, int)) else list(elem)
 
 def nested_dict_numpy_to_list(dictionary):
     for key, value in dictionary.items():

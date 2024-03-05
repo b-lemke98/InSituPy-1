@@ -1,4 +1,4 @@
-from typing import Literal, Tuple
+from typing import Literal, Tuple, Union
 
 import cv2
 import dask.array as da
@@ -180,3 +180,15 @@ def deconvolve_he(
         ihc_d = convert_to_8bit(ihc_d, save_mem=False)
 
     return ihc_h, ihc_e, ihc_d
+
+def create_img_pyramid(img: Union[np.ndarray, da.core.Array], 
+                       nsubres: int = 6
+                       ):
+    # create subresolution pyramid from mask
+    img_pyramid = [img]
+
+    for n in range(nsubres):
+        img = img[::2, ::2]
+        img_pyramid.append(img)
+        
+    return img_pyramid

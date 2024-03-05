@@ -5,6 +5,7 @@ import os
 import shutil
 import warnings
 from datetime import datetime
+from math import ceil
 from numbers import Number
 from os.path import abspath
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 
 import dask
+import dask.array as da
 import dask_image
 import matplotlib
 import matplotlib.pyplot as plt
@@ -27,6 +29,7 @@ from napari.layers import Layer, Shapes
 from napari.layers.shapes.shapes import Shapes
 from pandas.api.types import is_numeric_dtype
 from parse import *
+from rasterio.features import rasterize
 from scipy.sparse import csr_matrix, issparse
 from shapely import Point, Polygon, affinity
 from shapely.geometry.polygon import Polygon
@@ -39,13 +42,14 @@ from .._exceptions import (InvalidFileTypeError, ModalityNotFoundError,
                            WrongNapariLayerTypeError, XeniumDataMissingObject,
                            XeniumDataRepeatedCropError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
-from ..utils.io import (check_overwrite_and_remove_if_true, read_json,
-                        write_dict_to_json)
+from ..image.utils import create_img_pyramid
+from ..utils.io import (check_overwrite_and_remove_if_true,
+                        read_baysor_polygons, read_json, write_dict_to_json)
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._checks import check_raw, check_zip
 from ._layers import _add_annotations_as_layer
-from ._save import (_save_annotations, _save_cells, _save_images,
+from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
 from ._scanorama import scanorama
 from ._widgets import (_annotation_widget, _create_points_layer,
@@ -98,7 +102,8 @@ def _read_boundaries_from_xenium(
     path = Path(path)
     
     # create boundariesdata object
-    boundaries = BoundariesData(pixel_size=pixel_size)
+    #boundaries = BoundariesData(pixel_size=pixel_size)
+    boundaries = BoundariesData()
     
     if mode == "dataframe":
         files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"]
@@ -132,7 +137,7 @@ def _read_boundaries_from_xenium(
             "cellular": dask.array.from_zarr(cells_zarr_file, component="masks/1")
         }
     
-    boundaries.add_boundaries(data=data_dict)
+    boundaries.add_boundaries(data=data_dict, pixel_size=pixel_size)
 
     return boundaries
 
@@ -172,8 +177,46 @@ def _read_matrix_from_xenium(path) -> AnnData:
     
     return adata
 
+def _restructure_transcripts_dataframe(dataframe):
+    
+    # decode columns
+    dataframe = dataframe.apply(lambda x: decode_robust_series(x), axis=0)
+    # set index and rename columns
+    dataframe = dataframe.set_index("transcript_id")
+    dataframe = dataframe.rename({
+        "cell_id": "xenium_cell_id",
+        "x_location": "x",
+        "y_location": "y",
+        "z_location": "z",
+        "feature_name": "gene"
+    }, axis=1)
+
+    # reorder dataframe
+    column_names_ordered = ["x", "y", "z", "gene", "qv", "overlaps_nucleus", "fov_name", "nucleus_distance", "xenium_cell_id"]
+    in_df = [elem in dataframe.columns for elem in column_names_ordered]
+    column_names_ordered = [elem for i, elem in zip(in_df, column_names_ordered) if i]
+    dataframe = dataframe.loc[:, column_names_ordered]
+
+    # group column names into MultiIndices
+    grouped_column_names = [
+        ("coordinates", "x"),
+        ("coordinates", "y"),
+        ("coordinates", "z"),
+        ("properties", "gene"),
+        ("properties", "qv"),
+        ("properties", "overlaps_nucleus"),
+        ("properties", "fov_name"),
+        ("properties", "nucleus_distance"),
+        ("cell_id", "xenium")
+    ]
+    grouped_column_names = [elem for i, elem in zip(in_df, grouped_column_names) if i]
+    dataframe.columns = pd.MultiIndex.from_tuples(grouped_column_names)
+    return dataframe
+    
+
 def read_celldata(
     path: Union[str, os.PathLike, Path],
+    pixel_size: Number
     ) -> CellData:
     # read metadata
     path = Path(path)
@@ -199,7 +242,7 @@ def read_celldata(
         boundaries_dict[k] = d
     
     boundaries = BoundariesData()
-    boundaries.add_boundaries(data=boundaries_dict)
+    boundaries.add_boundaries(data=boundaries_dict, pixel_size=pixel_size)
     #boundaries.read_boundaries(files=files, labels=labels)
     
     # create CellData object
@@ -253,6 +296,7 @@ class XeniumData:
         """
         path = Path(path) # make sure the path is a pathlib path
         self.path = Path(path)
+        self.dim = None # dimensions of the dataset
         self.from_xeniumdata = False  # flag indicating from where the data is read
         self.metadata_filename = ".xeniumdata"
         self.xd_metadata_file = self.path / self.metadata_filename
@@ -341,6 +385,15 @@ class XeniumData:
             region_repr = self.regions.__repr__()
             repr = (
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + region_repr.replace("\n", f"\n{tf.SPACER}   ")
+            )
+            
+        if hasattr(self, "alt"):
+            cells_repr = self.alt.__repr__()
+            altseg_keys = self.alt.keys()
+            repr = (
+                #repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
+                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n"
+                f"{tf.SPACER}   Alternative CellData objects with following keys: {','.join(altseg_keys)}"
             )
         return repr
 
@@ -528,16 +581,20 @@ class XeniumData:
             
         if hasattr(_self, "transcripts"):
             # infer mask for selection
-            xmask = (_self.transcripts["x_location"] >= xlim[0]) & (_self.transcripts["x_location"] <= xlim[1])
-            ymask = (_self.transcripts["y_location"] >= ylim[0]) & (_self.transcripts["y_location"] <= ylim[1])
+            # xmask = (_self.transcripts["x_location"] >= xlim[0]) & (_self.transcripts["x_location"] <= xlim[1])
+            # ymask = (_self.transcripts["y_location"] >= ylim[0]) & (_self.transcripts["y_location"] <= ylim[1])
+            xmask = (_self.transcripts["coordinates", "x"] >= xlim[0]) & (_self.transcripts["coordinates", "x"] <= xlim[1])
+            ymask = (_self.transcripts["coordinates", "y"] >= ylim[0]) & (_self.transcripts["coordinates", "y"] <= ylim[1])
             mask = xmask & ymask
             
             # select
             _self.transcripts = _self.transcripts.loc[mask, :].copy()
             
             # move origin again to 0 by subtracting the lower limits from the coordinates
-            _self.transcripts["x_location"] -= xlim[0]
-            _self.transcripts["y_location"] -= ylim[0]
+            # _self.transcripts["x_location"] -= xlim[0]
+            # _self.transcripts["y_location"] -= ylim[0]
+            _self.transcripts["coordinates", "x"] -= xlim[0]
+            _self.transcripts["coordinates", "y"] -= ylim[0]
             
         if hasattr(_self, "images"):
             _self.images.crop(xlim=xlim, ylim=ylim)
@@ -741,7 +798,89 @@ class XeniumData:
                         files.append(file)
             
             self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
-                
+            
+    def parse_baysor(self, 
+                    baysor_output: Union[str, os.PathLike, Path],
+                    key_to_add: str = "baysor",
+                    pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
+                    ):
+        
+        try:
+            cells = self.cells
+        except AttributeError:
+            raise ModalityNotFoundError(modality="cells")
+        
+        # read matrix
+        print("Parsing count matrix...", flush=True)
+        loomfile = baysor_output / "segmentation_counts.loom"
+        matrix = sc.read_loom(loomfile)
+        
+        # set indices for .obs and .var
+        matrix.obs.set_index("Name", inplace=True)
+        matrix.var.set_index("Name", inplace=True)
+        
+        # set spatial coordinates
+        matrix.obsm["spatial"] = matrix.obs[["x", "y"]].values
+        matrix.obs.drop(["x", "y"], axis=1, inplace=True) # drop the coordinate columns
+        
+        # read polygons
+        print("Reading segmentation masks", flush=True)
+        print("\tRead polygons", flush=True)
+        jsonfile = baysor_output / "segmentation_polygons.json"
+        df = read_baysor_polygons(jsonfile)
+        
+        # determine dimensions of dataset
+        xmax = ceil(cells.matrix.obsm['spatial'][:, 0].max() + 15)
+        ymax = ceil(cells.matrix.obsm['spatial'][:, 1].max() + 15)
+        
+        # generate a segmentation mask
+        print("\tConvert polygons to segmentation mask", flush=True)
+        img = rasterize(list(zip(df["geometry"], range(1, len(df)+1))), out_shape=(ymax,xmax))
+        
+        # convert to dask array
+        img = da.from_array(img)
+        
+        # create boundaries object
+        boundaries = BoundariesData()
+        boundaries.add_boundaries(data={key_to_add: img}, pixel_size=pixel_size)
+        
+        # add data to XeniumData
+        alt_attr_name = "alt"
+        try:
+            alt_attr = getattr(self, alt_attr_name)
+        except AttributeError:
+            setattr(self, alt_attr_name, {})
+            alt_attr = getattr(self, alt_attr_name)
+        
+        alt_attr[key_to_add] = CellData(matrix=matrix, boundaries=boundaries)
+        
+        trans_attr_name = "transcripts"
+        try:
+            trans_attr = getattr(self, trans_attr_name)
+        except AttributeError:
+            print("No transcript layer found. Addition of Baysor transcript data is skipped.", flush=True)
+            pass
+        else:
+            # read transcripts from Baysor results
+            print("Parsing transcripts data...", flush=True)
+            
+            print("\tRead data", flush=True)
+            segcsv_file = baysor_output / "segmentation.csv"
+            baysor_transcript_dataframe = pd.read_csv(segcsv_file)
+            
+            print("\tMerge with existing data", flush=True)
+            baysor_results = baysor_transcript_dataframe.set_index("transcript_id")[["cell"]]
+            baysor_results.columns = pd.MultiIndex.from_tuples([("cell_id", key_to_add)])
+            trans_attr = pd.merge(left=trans_attr,
+                                  right=baysor_results, 
+                                  left_index=True, 
+                                  right_index=True
+                                  )
+            
+            # add resulting dataframe to XeniumData
+            setattr(self, trans_attr_name, trans_attr)
+
+        
     def read_regions(self,
                     regions_dir: Union[str, os.PathLike, Path] = None, # "../regions",
                     suffix: str = ".geojson",
@@ -782,16 +921,17 @@ class XeniumData:
 
     def read_cells(self):
         print("Reading cells...", flush=True)
+        pixel_size = self.metadata["pixel_size"]
         if self.from_xeniumdata:
             try:
                 cells_path = self.xd_metadata["cells"]
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
-            self.cells = read_celldata(path=self.path / cells_path)
+            self.cells = read_celldata(path=self.path / cells_path, pixel_size=pixel_size)
         else:
             # read celldata
             matrix = matrix = _read_matrix_from_xenium(path=self.path)
-            boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=self.metadata["pixel_size"])
+            boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=pixel_size)
             self.cells = CellData(matrix=matrix, boundaries=boundaries)
             
             # read binned expression
@@ -854,10 +994,9 @@ class XeniumData:
         else:
             # read transcripts
             print("Reading transcripts...", flush=True)
-            self.transcripts = pd.read_parquet(self.path / transcript_filename)
+            transcript_dataframe = pd.read_parquet(self.path / transcript_filename)
             
-            # decode columns
-            self.transcripts = self.transcripts.apply(lambda x: decode_robust_series(x), axis=0)
+            self.transcripts = _restructure_transcripts_dataframe(transcript_dataframe)
             
 
     def reduce_dimensions(self,
@@ -1199,7 +1338,8 @@ class XeniumData:
             _save_images(
                 imagedata=images,
                 path=path_stem,
-                metadata=metadata
+                metadata=metadata,
+                images_as_zarr=True
                 )
 
         # save cells
@@ -1213,6 +1353,19 @@ class XeniumData:
                 path=path_stem,
                 metadata=metadata
             )
+            
+        # save alternative cell data
+        try:
+            alt = self.alt
+        except AttributeError:
+            pass
+        else:
+            _save_alt(
+                attr=alt,
+                path=path_stem,
+                metadata=metadata
+            )
+
             
         # save transcripts
         try:
@@ -1356,7 +1509,7 @@ class XeniumData:
             n_grayscales = 0 # number of grayscale images
             for i, img_name in enumerate(image_keys):
                 img = getattr(self.images, img_name)
-                ivis = False if i < len(image_keys) - 1 else True # only last image is set visible
+                is_visible = False if i < len(image_keys) - 1 else True # only last image is set visible
                 
                 # check if the current image is RGB
                 is_rgb = self.images.metadata[img_name]["rgb"]
@@ -1371,15 +1524,20 @@ class XeniumData:
                         cmap = grayscale_colormap[n_grayscales]
                         n_grayscales += 1
                     blending = "additive"  # set blending mode
+                
+                # create image pyramid for lazy loading
+                img_pyramid = create_img_pyramid(img=img, nsubres=6)
+                                
+                # add img pyramid to napari viewer
                 self.viewer.add_image(
-                        img,
+                        img_pyramid,
                         name=img_name,
                         colormap=cmap,
                         blending=blending,
                         rgb=is_rgb,
                         contrast_limits=self.images.metadata[img_name]["contrast_limits"],
                         scale=(pixel_size, pixel_size),
-                        visible=ivis
+                        visible=is_visible
                     )
         
         # optionally: add cells as points
@@ -1411,12 +1569,16 @@ class XeniumData:
                     else:
                         geneid = cells.matrix.var_names.get_loc(k)
                         color_value = X[:, geneid]
+                        
+                    # extract names of cells
+                    cell_names = cells.matrix.obs_names.values
 
                     # create points layer
                     layer = _create_points_layer(
                         points=points,
                         color_values=color_value,
                         name=k,
+                        point_names=cell_names,
                         point_size=point_size,
                         visible=pvis
                     )
@@ -1463,9 +1625,14 @@ class XeniumData:
             pass
         else:
             # initialize the widgets
-            add_points_widget, locate_cells_widget, add_region_widget, add_annotations_widget, add_boundaries_widget = _initialize_widgets(xdata=self)
+            add_points_widget, locate_cells_widget, add_region_widget, add_annotations_widget, add_boundaries_widget, select_data = _initialize_widgets(xdata=self)
             
             # add widgets to napari window
+            if select_data is not None:
+                self.viewer.window.add_dock_widget(select_data, name="Select data", area="right")
+                select_data.max_height = 50
+                select_data.max_width = widgets_max_width
+                
             if add_points_widget is not None:
                 self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
                 add_points_widget.max_height = 130
