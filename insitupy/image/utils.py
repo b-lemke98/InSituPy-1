@@ -189,8 +189,13 @@ def create_img_pyramid(img: Union[np.ndarray, da.core.Array],
     img_pyramid = [img]
 
     for n in range(nsubres):
-        print(f"pyr in loop {n}", flush=True)
+        # create subresolution by scaling factor 2
         img = img[::2, ::2]
+        
+        # rechunk to prevent dask errors
+        img = img.rechunk()
+        
+        # collect subresolution
         img_pyramid.append(img)
         
     return img_pyramid
