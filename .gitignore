@@ -140,5 +140,8 @@ dmypy.json
 # output files and folders
 *.out
 out/
-demo_dataset*/
+demo_dataset/
 tmp/
+
+# Mac specific
+.DS_Store
