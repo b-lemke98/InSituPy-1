@@ -4,7 +4,7 @@
    <img src="logo/insitupy_logo.png" width="500">
 </p>
 
-InSituPy is a Python package designed to facilitate the analysis of in situ sequencing data generated with the [_Xenium In Situ_](https://www.10xgenomics.com/platforms/xenium) methodology. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissues.
+InSituPy is a Python package designed to facilitate the analysis of in situ sequencing data generated with the [_Xenium In Situ_](https://www.10xgenomics.com/platforms/xenium) methodology. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissue sections.
 
 ## Installation
 
@@ -74,7 +74,7 @@ Contributions are welcome! If you find any issues or have suggestions for new fe
 
 ## License
 
-InSituPy is licensed under the [MIT License](LICENSE).
+InSituPy is licensed under the [BSD-3-Clause](LICENSE).
 
 ---
 

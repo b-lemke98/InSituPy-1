@@ -8,14 +8,11 @@ import dask.array as da
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .._constants import SHRT_MAX, SHRT_MIN
 from .._exceptions import NotEnoughFeatureMatchesError
 from ..utils.utils import remove_last_line_from_csv
 from .io import write_ome_tiff
 from .utils import convert_to_8bit, fit_image_to_size_limit, scale_to_max_width
-
-# limits in C (see https://www.geeksforgeeks.org/climits-limits-h-cc/)
-SHRT_MAX = 2**15-1  # 32767
-SHRT_MIN = -(2**15-1)  # 32767
 
 
 class ImageRegistration:
