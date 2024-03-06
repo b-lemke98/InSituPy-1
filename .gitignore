@@ -143,4 +143,5 @@ out/
 demo_dataset/
 tmp/
 
+# Mac specific
 .DS_Store
