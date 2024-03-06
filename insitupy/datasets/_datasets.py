@@ -41,7 +41,6 @@ def human_breast_cancer(
     zip_file = named_data_dir / Path(xeniumdata_url).name
     
     # check if file exists and has correct md5sum
-    md5sum_zipfile = md5sum(zip_file)
     expected_md5sum = '7d42a0b232f92a2e51de1f513b1a44fd'
     
     # check if the unzipped xenium data exists
