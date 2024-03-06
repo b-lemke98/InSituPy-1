@@ -1572,9 +1572,12 @@ class XeniumData:
                     blending = "additive"  # set blending mode
                 
                 # create image pyramid for lazy loading
+                print("Before image pyramid generation", flush=True)
                 img_pyramid = create_img_pyramid(img=img, nsubres=6)
                                 
                 # add img pyramid to napari viewer
+                print("Add image to viewer", flush=True)
+                print(img_pyramid)
                 self.viewer.add_image(
                         img_pyramid,
                         name=img_name,

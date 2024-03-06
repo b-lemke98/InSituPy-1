@@ -185,9 +185,11 @@ def create_img_pyramid(img: Union[np.ndarray, da.core.Array],
                        nsubres: int = 6
                        ):
     # create subresolution pyramid from mask
+    print("pyr1", flush=True)
     img_pyramid = [img]
 
     for n in range(nsubres):
+        print(f"pyr in loop {n}", flush=True)
         img = img[::2, ::2]
         img_pyramid.append(img)
         
