@@ -1,4 +1,7 @@
+from typing import List, Optional, Type
+
 from .utils.utils import convert_to_list
+
 
 class ModuleNotFoundOnWindows(ModuleNotFoundError):
     '''
@@ -141,10 +144,30 @@ class ModalityNotFoundError(Exception):
         super().__init__(self.message)
         
 class InvalidFileTypeError(Exception):
-    def __init__(self, allowed_types, received_type, message=None):
+    def __init__(self, 
+                 allowed_types: List[Type], 
+                 received_type: Type, 
+                 message: Optional[str] = None
+                 ):
         allowed_types = convert_to_list(allowed_types)
+        allowed_types = [str(elem) for elem in allowed_types]
+        received_type = str(received_type)
         if message is None:
             message = f"Invalid file type. Allowed file types: {', '.join(allowed_types)}. Received: {received_type}"
+        self.message = message
+        super().__init__(self.message)
+        
+class InvalidDataTypeError(Exception):
+    def __init__(self, 
+                 allowed_types: List[Type], 
+                 received_type: Type, 
+                 message: Optional[str] = None
+                 ):
+        allowed_types = convert_to_list(allowed_types)
+        allowed_types = [str(elem) for elem in allowed_types]
+        received_type = str(received_type)
+        if message is None:
+            message = f"Invalid data type. Allowed data types: {', '.join(allowed_types)}. Received: {received_type}"
         self.message = message
         super().__init__(self.message)
         

@@ -41,7 +41,7 @@ def update_viewer_config(
     masks = []
     for n in boundaries.metadata.keys():
         b = getattr(boundaries, n)
-        if isinstance(b, dask.array.core.Array):
+        if isinstance(b, dask.array.core.Array) or np.all([isinstance(elem, dask.array.core.Array) for elem in b]):
             masks.append(n)
             
 def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget):

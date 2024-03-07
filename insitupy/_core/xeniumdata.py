@@ -238,7 +238,20 @@ def read_celldata(
         if suffix == "parquet":
             d = pd.read_parquet(f)
         elif suffix == "zarr.zip":
-            d = dask.array.from_zarr(f)
+            with zarr.ZipStore(f, mode="r") as zipstore:
+                # get components of zip store
+                components = zipstore.listdir()
+
+                if ".zarray" in components:
+                    # the store is an array which can be opened
+                    d = da.from_zarr(zipstore).persist()
+                else:
+                    subres = [elem for elem in components if not elem.startswith(".")]
+                    d = []
+                    for s in subres:
+                        d.append(da.from_zarr(zipstore, component=s).persist())
+                        
+            #d = dask.array.from_zarr(f)
         else:
             raise ValueError(f"Boundaries saved in CellData object are neither .parquet nor .zarr.zip format: {suffix}")
         boundaries_dict[k] = d
@@ -1306,6 +1319,7 @@ class XeniumData:
     def save(self,
             path: Union[str, os.PathLike, Path],
             overwrite: bool = False,
+            images_as_zarr: bool = True
             #zip: bool = False
             ):
         '''
@@ -1351,7 +1365,7 @@ class XeniumData:
                 imagedata=images,
                 path=path_stem,
                 metadata=metadata,
-                images_as_zarr=True
+                images_as_zarr=images_as_zarr
                 )
 
         # save cells
@@ -1571,9 +1585,13 @@ class XeniumData:
                         n_grayscales += 1
                     blending = "additive"  # set blending mode
                 
-                # create image pyramid for lazy loading
-                img_pyramid = create_img_pyramid(img=img, nsubres=6)
-                                
+                
+                if not isinstance(img, list):
+                    # create image pyramid for lazy loading
+                    img_pyramid = create_img_pyramid(img=img, nsubres=6)
+                else:
+                    img_pyramid = img
+                                                    
                 # add img pyramid to napari viewer
                 self.viewer.add_image(
                         img_pyramid,

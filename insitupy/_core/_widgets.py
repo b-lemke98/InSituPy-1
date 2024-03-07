@@ -152,8 +152,11 @@ def _initialize_widgets(
                     metadata = config.boundaries.metadata
                     pixel_size = metadata[key]["pixel_size"]
                     
-                    # generate pyramid of the mask
-                    mask_pyramid = create_img_pyramid(img=mask, nsubres=6)
+                    if not isinstance(mask, list):
+                        # generate pyramid of the mask
+                        mask_pyramid = create_img_pyramid(img=mask, nsubres=6)
+                    else:
+                        mask_pyramid = mask
                     
                     # add masks as labels to napari viewer
                     viewer.add_labels(mask_pyramid, name=layer_name, scale=(pixel_size,pixel_size))
@@ -258,8 +261,10 @@ def _initialize_widgets(
                                                       points_widget=add_points_widget,
                                                       boundaries_widget=add_boundaries_widget
                                                       )
-        add_points_widget.call_button.clicked.connect(callback)
-        add_boundaries_widget.call_button.clicked.connect(callback)
+        if add_points_widget is not None:
+            add_points_widget.call_button.clicked.connect(callback)
+        if add_boundaries_widget is not None:
+            add_boundaries_widget.call_button.clicked.connect(callback)
         
     
     if not hasattr(xdata, "regions"):

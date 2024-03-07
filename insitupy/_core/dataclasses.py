@@ -21,8 +21,9 @@ from tifffile import TiffFile
 
 from insitupy import __version__
 
-from .._exceptions import InvalidFileTypeError
+from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
 from ..image.io import read_ome_tiff, write_ome_tiff
+from ..image.utils import create_img_pyramid, crop_dask_array_or_pyramid
 from ..utils.geo import parse_geopandas, write_qupath_geojson
 from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
@@ -329,7 +330,7 @@ class BoundariesData(DeepCopyMixin):
             raise ValueError(f"Argument 'dataframes' has unknown file type ({type(data)}). Expected to be a list or dictionary.")
         
         for l, df in zip(labels, data):
-            if isinstance(df, pd.DataFrame) or isinstance(df, dask.array.core.Array):                    
+            if isinstance(df, pd.DataFrame) or isinstance(df, dask.array.core.Array) or np.all([isinstance(elem, dask.array.core.Array) for elem in df]):             
                 if l not in self.metadata or overwrite:
                     # add to object
                     setattr(self, l, df)
@@ -356,22 +357,24 @@ class BoundariesData(DeepCopyMixin):
             # get dataframe
             data = getattr(self, n)
             
-            if isinstance(data, pd.DataFrame):
+            try:
+                # get pixel size
+                pixel_size = meta["pixel_size"]
+                
+                data = crop_dask_array_or_pyramid(
+                    data=data,
+                    xlim=xlim,
+                    ylim=ylim,
+                    pixel_size=pixel_size
+                )
+            except InvalidDataTypeError:
                 # filter dataframe
                 data = data.loc[data["cell_id"].isin(cell_ids), :]
                 
                 # re-center to 0
                 data["vertex_x"] -= xlim[0]
                 data["vertex_y"] -= ylim[0]
-            elif isinstance(data, dask.array.core.Array):
-                ps = meta["pixel_size"]
-                data = data[int(ylim[0]/ps):int(ylim[1]/ps), int(xlim[0]/ps):int(xlim[1]/ps)]
-                
-                # rechunk the dask array to prevent errors during later steps
-                data = data.rechunk()
-            else:
-                print(f"Boundaries element `{n}` is neither a pandas DataFrame nor a Dask Array. Could not be cropped.")
-            
+
             # add to object
             setattr(self, n, data)
             
@@ -434,7 +437,8 @@ class CellData(DeepCopyMixin):
     
     def save(self, 
              path: Union[str, os.PathLike, Path],
-             overwrite: bool = False
+             overwrite: bool = False,
+             boundaries_as_pyramid: bool = True
              ):
         
         path = Path(path)
@@ -468,10 +472,26 @@ class CellData(DeepCopyMixin):
                 if isinstance(bound_data, pd.DataFrame):
                     bound_file = bound_path / f"{n}.parquet"
                     bound_data.to_parquet(bound_file)
-                elif isinstance(bound_data, dask.array.core.Array):
+                else:
+                    # it is assumed that it is a dask array or a list of dask arrays in this case
                     bound_file = bound_path / f"{n}.zarr.zip"
-                    with zarr.ZipStore(bound_file, mode='w') as store:
-                        bound_data.to_zarr(store)
+                    
+                    # check data
+                    if isinstance(bound_data, list):
+                        if not boundaries_as_pyramid:
+                            bound_data = bound_data[0]
+                    else:
+                        if boundaries_as_pyramid:
+                            # create pyramid
+                            bound_data = create_img_pyramid(img=bound_data, nsubres=6)
+                    
+                    with zarr.ZipStore(bound_file, mode='w') as zipstore:
+                        #if isinstance(bound_data, dask.array.core.Array):
+                        if isinstance(bound_data, list):
+                            for i, b in enumerate(bound_data):
+                                b.to_zarr(zipstore, component=str(i))
+                        else:
+                            bound_data.to_zarr(zipstore)
                 metadata["boundaries"][n] = Path(relpath(bound_file, path)).as_posix()
                 
         # add more things to metadata
@@ -570,8 +590,17 @@ class ImageData(DeepCopyMixin):
             if suffix == "zarr.zip":
                 # load image from .zarr.zip
                 with zarr.ZipStore(impath, mode="r") as zipstore:
-                    # open store
-                    img = da.from_zarr(zipstore).persist()
+                    # get components of zip store
+                    components = zipstore.listdir()
+    
+                    if ".zarray" in components:
+                        # the store is an array which can be opened
+                        img = da.from_zarr(zipstore).persist()
+                    else:
+                        subres = [elem for elem in components if not elem.startswith(".")]
+                        img = []
+                        for s in subres:
+                            img.append(da.from_zarr(zipstore, component=s).persist())
                     
                     # retrieve OME metadata
                     store = zarr.open(zipstore)
@@ -583,13 +612,14 @@ class ImageData(DeepCopyMixin):
 
             elif suffix in ["ome.tif", "ome.tiff"]:
                 # load image from .ome.tiff
-                img = read_ome_tiff(path=impath, levels=0)
-                
+                #img = read_ome_tiff(path=impath, levels=0)
+                img = read_ome_tiff(path=impath, levels=None)
                 # read ome metadata
                 with TiffFile(path / f) as tif:
                     axes = tif.series[0].axes # get axes
                     ome_meta = tif.ome_metadata # read OME metadata
                     ome_meta = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
+                    
             else:
                 raise InvalidFileTypeError(
                     allowed_types=["zarr.zip", "ome.tif", "ome.tiff"], 
@@ -599,28 +629,33 @@ class ImageData(DeepCopyMixin):
             # set attribute and add names to object
             setattr(self, n, img)
             self.names.append(n)
-                    
-            # add metadata
+            
+            # retrieve metadata
+            img_shape = img[0].shape if isinstance(img, list) else img.shape
+            img_max = img[0].max() if isinstance(img, list) else img.max()
+            img_max = int(img_max)
+
+            # save metadata
             self.metadata[n] = {}
             self.metadata[n]["file"] = f # store file information
-            self.metadata[n]["shape"] = img.shape # store shape
+            self.metadata[n]["shape"] = img_shape  # store shape
             #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
             self.metadata[n]["axes"] = axes
             self.metadata[n]["OME"] = ome_meta
             
             # check whether the image is RGB or not
-            if len(img.shape) == 3:
+            if len(img_shape) == 3:
                 self.metadata[n]["rgb"] = True
-            elif len(img.shape) == 2:
+            elif len(img_shape) == 2:
                 self.metadata[n]["rgb"] = False
             else:
-                raise ValueError(f"Unknown image shape: {img.shape}")
+                raise ValueError(f"Unknown image shape: {img_shape}")
             
             # get image contrast limits
             if self.metadata[n]["rgb"]:
                 self.metadata[n]["contrast_limits"] = (0, 255)
             else:
-                self.metadata[n]["contrast_limits"] = (0, int(img.max()))
+                self.metadata[n]["contrast_limits"] = (0, img_max)
                 
             # add universal pixel size to metadata
             self.metadata[n]['pixel_size'] = pixel_size
@@ -655,33 +690,35 @@ class ImageData(DeepCopyMixin):
         names = list(self.metadata.keys())
         for n in names:
             # extract the image pyramid
-            img = getattr(self, n)
+            img_data = getattr(self, n)
             
             # extract pixel size
             pixel_size = self.metadata[n]['pixel_size']
             
-            # convert to metric unit
-            xlim_um = tuple([int(elem / pixel_size) for elem in xlim])
-            ylim_um = tuple([int(elem / pixel_size) for elem in ylim])
-            
-            cropped_img = img[ylim_um[0]:ylim_um[1], xlim_um[0]:xlim_um[1]]
-            
-            # rechunk the array to prevent irregular chunking
-            cropped_img = cropped_img.rechunk()
-            
+            cropped_img_data = crop_dask_array_or_pyramid(
+                data=img_data,
+                xlim=xlim,
+                ylim=ylim,
+                pixel_size=pixel_size
+            )
+                
             # save cropping properties in metadata
             self.metadata[n]["cropping_xlim"] = xlim
             self.metadata[n]["cropping_ylim"] = ylim
-            #self.metadata[n]["shape"] = cropped_pyramid[0].shape
-            self.metadata[n]["shape"] = cropped_img.shape
+            
+            try:
+                self.metadata[n]["shape"] = cropped_img_data.shape
+            except AttributeError:
+                self.metadata[n]["shape"] = cropped_img_data[0].shape
                 
             # add cropped pyramid to object
-            setattr(self, n, cropped_img)
+            setattr(self, n, cropped_img_data)
         
     def save(self,
              path: Union[str, os.PathLike, Path],
              keys_to_save: Optional[str] = None,
              images_as_zarr: bool = True,
+             save_pyramid: bool = True,
              return_savepaths: bool = False,
              overwrite: bool = False
              ):
@@ -705,20 +742,34 @@ class ImageData(DeepCopyMixin):
             if n in keys_to_save:
                 # extract image
                 img = getattr(self, n)
-                if isinstance(img, list):
-                    img = img[0]
-                    
+
                 if images_as_zarr:
+                    # generate filename
                     filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
                     
+                    # decide whether to save as pyramid or not
+                    if isinstance(img, list):
+                        if not save_pyramid:
+                            img = img[0]
+                    else:
+                        if save_pyramid:
+                            # create img pyramid
+                            img = create_img_pyramid(img=img, nsubres=6)
+                    
                     with zarr.ZipStore(path / filename, mode="w") as zipstore:
-                        # save image data in zipstore
-                        img.to_zarr(zipstore)
+                        # check whether to save the image as pyramid or not
+                        if save_pyramid:
+                            for i, im in enumerate(img):
+                                im.to_zarr(zipstore, component=str(i))
+                        else:
+                            # save image data in zipstore without pyramid
+                            img.to_zarr(zipstore)
                         
                         # open zarr store save metadata in zarr store
                         store = zarr.open(zipstore, mode="a")
-                        for k,v in img_metadata.items():
-                            store.attrs[k] = v
+                        store.attrs.put(img_metadata)
+                        # for k,v in img_metadata.items():
+                        #     store.attrs[k] = v
                         
                 else:
                     # get file name for saving
