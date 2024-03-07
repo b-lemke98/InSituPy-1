@@ -1,4 +1,5 @@
-from typing import Literal, Tuple, Union
+from numbers import Number
+from typing import List, Literal, Tuple, Union
 
 import cv2
 import dask.array as da
@@ -6,6 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 from skimage.color import hed2rgb, rgb2hed
 
+from .._exceptions import InvalidDataTypeError
 from .axes import ImageAxes
 
 
@@ -182,15 +184,15 @@ def deconvolve_he(
     return ihc_h, ihc_e, ihc_d
 
 def create_img_pyramid(img: Union[np.ndarray, da.core.Array], 
-                       nsubres: int = 6
+                       nsubres: int = 6,
+                       scale_steps: int = 2
                        ):
     # create subresolution pyramid from mask
-    print("pyr1", flush=True)
     img_pyramid = [img]
 
     for n in range(nsubres):
         # create subresolution by scaling factor 2
-        img = img[::2, ::2]
+        img = img[::scale_steps, ::scale_steps]
         
         # rechunk to prevent dask errors
         img = img.rechunk()
@@ -199,3 +201,48 @@ def create_img_pyramid(img: Union[np.ndarray, da.core.Array],
         img_pyramid.append(img)
         
     return img_pyramid
+
+def crop_dask_array_or_pyramid(
+    data: Union[da.core.Array, List[da.core.Array]],
+    xlim: Tuple[int, int],
+    ylim: Tuple[int, int],
+    pixel_size: Number
+    ):
+    # check if image data is one dask array or a pyramid of dask arrays
+    if np.all([isinstance(elem, da.core.Array) for elem in data]):
+        # get scale factors between the different pyramid levels
+        scale_factors = [1] + [data[i].shape[0] / data[i+1].shape[0] for i in range(len(data)-1)]
+        cropped_data = []
+        xlim_scaled = (xlim[0] / pixel_size, xlim[1] / pixel_size) # convert to metric unit
+        ylim_scaled = (ylim[0] / pixel_size, ylim[1] / pixel_size) # convert to metric unit
+        for img, sf in zip(data, scale_factors):
+            # do cropping while taking the scale factor into account
+            # scale the x and y limits
+            xlim_scaled = (int(xlim_scaled[0] / sf), int(xlim_scaled[1] / sf))
+            ylim_scaled = (int(ylim_scaled[0] / sf), int(ylim_scaled[1] / sf))
+            
+            # do the cropping
+            cdata = img[ylim_scaled[0]:ylim_scaled[1], xlim_scaled[0]:xlim_scaled[1]]
+            
+            # rechunk the array to prevent irregular chunking
+            cdata = cdata.rechunk()
+            
+            # collect cropped data
+            cropped_data.append(cdata)
+            
+    elif isinstance(data, da.core.Array):
+        # convert to metric unit
+        xlim_um = tuple([int(elem / pixel_size) for elem in xlim])
+        ylim_um = tuple([int(elem / pixel_size) for elem in ylim])
+        
+        cropped_data = data[ylim_um[0]:ylim_um[1], xlim_um[0]:xlim_um[1]]
+        
+        # rechunk the array to prevent irregular chunking
+        cropped_data = cropped_data.rechunk()
+    else:
+        raise InvalidDataTypeError(
+            allowed_types=[da.core.Array, List[da.core.Array]],
+            received_type=type(data)
+        )
+    
+    return cropped_data

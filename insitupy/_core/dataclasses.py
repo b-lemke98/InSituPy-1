@@ -21,9 +21,9 @@ from tifffile import TiffFile
 
 from insitupy import __version__
 
-from .._exceptions import InvalidFileTypeError
+from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
 from ..image.io import read_ome_tiff, write_ome_tiff
-from ..image.utils import create_img_pyramid
+from ..image.utils import create_img_pyramid, crop_dask_array_or_pyramid
 from ..utils.geo import parse_geopandas, write_qupath_geojson
 from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
@@ -357,22 +357,24 @@ class BoundariesData(DeepCopyMixin):
             # get dataframe
             data = getattr(self, n)
             
-            if isinstance(data, pd.DataFrame):
+            try:
+                # get pixel size
+                pixel_size = meta["pixel_size"]
+                
+                data = crop_dask_array_or_pyramid(
+                    data=data,
+                    xlim=xlim,
+                    ylim=ylim,
+                    pixel_size=pixel_size
+                )
+            except InvalidDataTypeError:
                 # filter dataframe
                 data = data.loc[data["cell_id"].isin(cell_ids), :]
                 
                 # re-center to 0
                 data["vertex_x"] -= xlim[0]
                 data["vertex_y"] -= ylim[0]
-            elif isinstance(data, dask.array.core.Array):
-                ps = meta["pixel_size"]
-                data = data[int(ylim[0]/ps):int(ylim[1]/ps), int(xlim[0]/ps):int(xlim[1]/ps)]
-                
-                # rechunk the dask array to prevent errors during later steps
-                data = data.rechunk()
-            else:
-                print(f"Boundaries element `{n}` is neither a pandas DataFrame nor a Dask Array. Could not be cropped.")
-            
+
             # add to object
             setattr(self, n, data)
             
@@ -612,7 +614,6 @@ class ImageData(DeepCopyMixin):
                 # load image from .ome.tiff
                 #img = read_ome_tiff(path=impath, levels=0)
                 img = read_ome_tiff(path=impath, levels=None)
-                
                 # read ome metadata
                 with TiffFile(path / f) as tif:
                     axes = tif.series[0].axes # get axes
@@ -689,28 +690,29 @@ class ImageData(DeepCopyMixin):
         names = list(self.metadata.keys())
         for n in names:
             # extract the image pyramid
-            img = getattr(self, n)
+            img_data = getattr(self, n)
             
             # extract pixel size
             pixel_size = self.metadata[n]['pixel_size']
             
-            # convert to metric unit
-            xlim_um = tuple([int(elem / pixel_size) for elem in xlim])
-            ylim_um = tuple([int(elem / pixel_size) for elem in ylim])
-            
-            cropped_img = img[ylim_um[0]:ylim_um[1], xlim_um[0]:xlim_um[1]]
-            
-            # rechunk the array to prevent irregular chunking
-            cropped_img = cropped_img.rechunk()
-            
+            cropped_img_data = crop_dask_array_or_pyramid(
+                data=img_data,
+                xlim=xlim,
+                ylim=ylim,
+                pixel_size=pixel_size
+            )
+                
             # save cropping properties in metadata
             self.metadata[n]["cropping_xlim"] = xlim
             self.metadata[n]["cropping_ylim"] = ylim
-            #self.metadata[n]["shape"] = cropped_pyramid[0].shape
-            self.metadata[n]["shape"] = cropped_img.shape
+            
+            try:
+                self.metadata[n]["shape"] = cropped_img_data.shape
+            except AttributeError:
+                self.metadata[n]["shape"] = cropped_img_data[0].shape
                 
             # add cropped pyramid to object
-            setattr(self, n, cropped_img)
+            setattr(self, n, cropped_img_data)
         
     def save(self,
              path: Union[str, os.PathLike, Path],
