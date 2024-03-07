@@ -289,7 +289,8 @@ def _initialize_widgets(
             #region={"choices": first_regions, "label": "Regions:"}
         )
         def add_region_widget(
-            key, 
+            key,
+            tolerance: Number = 2,
             # region
             ):
             layer_name = f"region-{key}"
@@ -297,6 +298,9 @@ def _initialize_widgets(
             if layer_name not in viewer.layers:
                 # get geopandas dataframe with regions
                 reg_df = getattr(xdata.regions, key)
+                
+                # simplify polygons for visualization
+                reg_df["geometry"] = reg_df["geometry"].simplify(tolerance)
                 
                 # iterate through shapes and collect them as list
                 shapes_list = []
@@ -357,7 +361,7 @@ def _initialize_widgets(
             _update_region_on_key_change(add_region_widget)
             
     if not hasattr(xdata, "annotations"):
-        add_annotations_widget = None
+        show_annotations_widget = None
     else:
         # get colorcycle for region annotations
         cmap_annotations = "Dark2"
@@ -379,7 +383,10 @@ def _initialize_widgets(
             key={"choices": annot_keys, "label": "Key:"},
             annot_class={"choices": first_classes, "label": "Class:"}
         )
-        def add_annotations_widget(key, annot_class):
+        def show_annotations_widget(key, 
+                                   annot_class,
+                                   tolerance: Number = 2
+                                   ):
             
             # get annotation dataframe
             annot_df = getattr(xdata.annotations, key)
@@ -399,6 +406,9 @@ def _initialize_widgets(
                     # get dataframe for this class
                     class_df = annot_df[annot_df["name"] == cl]
                     
+                    # simplify polygons for visualization
+                    class_df["geometry"] = class_df["geometry"].simplify(tolerance)
+                    
                     # add layer to viewer
                     _add_annotations_as_layer(
                         dataframe=class_df,
@@ -407,13 +417,13 @@ def _initialize_widgets(
                     )
             
         # connect key change with update function
-        @add_annotations_widget.key.changed.connect
+        @show_annotations_widget.key.changed.connect
         def update_classes_on_key_change(event=None):
-            _update_classes_on_key_change(add_annotations_widget)
+            _update_classes_on_key_change(show_annotations_widget)
         
         
     
-    return add_points_widget, move_to_cell_widget, add_region_widget, add_annotations_widget, add_boundaries_widget, select_data #add_genes, add_observations
+    return add_points_widget, move_to_cell_widget, add_region_widget, show_annotations_widget, add_boundaries_widget, select_data #add_genes, add_observations
 
 
 @magic_factory(
@@ -421,7 +431,7 @@ def _initialize_widgets(
     annot_key={'label': 'Key:'},
     class_name={'label': 'Class:'}
     )
-def _annotation_widget(
+def add_new_annotations_widget(
     annot_key: str = "",
     class_name: str = ""
 ) -> napari.types.LayerDataTuple:
@@ -446,7 +456,7 @@ def _annotation_widget(
             'shapes'
             )
         
-        _annotation_widget.class_name.value = ""
+        add_new_annotations_widget.class_name.value = ""
         
         return layer
 

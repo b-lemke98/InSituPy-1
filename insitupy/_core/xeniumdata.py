@@ -54,8 +54,8 @@ from ._layers import _add_annotations_as_layer
 from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
 from ._scanorama import scanorama
-from ._widgets import (_annotation_widget, _create_points_layer,
-                       _initialize_widgets)
+from ._widgets import (_create_points_layer, _initialize_widgets,
+                       add_new_annotations_widget)
 from .dataclasses import (AnnotationsData, BoundariesData, CellData, ImageData,
                           RegionsData)
 
@@ -860,50 +860,52 @@ class XeniumData:
                     print(err)
 
     def read_annotations(self,
-                    annotations_dir: Union[str, os.PathLike, Path] = None, # "../annotations",
-                    suffix: str = ".geojson",
-                    pattern_annotations_file: str = "annotations-{slide_id}__{sample_id}__{name}"
+                    files: Optional[Union[str, os.PathLike, Path]] = None, # "../annotations",
+                    keys: Optional[str] = None,
+                    #suffix: str = ".geojson",
+                    #pattern_annotations_file: str = "annotations-{slide_id}__{sample_id}__{name}"
                     ):
         print("Reading annotations...", flush=True)
-        if self.from_xeniumdata:
-            try:
-                p = self.xd_metadata["annotations"]
-            except KeyError:
-                raise ModalityNotFoundError(modality="annotations")
-            self.annotations = read_annotationsdata(path=self.path / p)
-            
-            # # check if annotations data is stored in this XeniumData
-            # if "annotations" not in self.xd_metadata:
-            #     raise ModalityNotFoundError(modality="annotations")
-            
-            # # get path and names of annotation files
-            # keys = self.xd_metadata["annotations"].keys()
-            # files = [self.path / self.xd_metadata["annotations"][n] for n in keys]
-            
-        else:
-            if annotations_dir is None:
-                raise ModalityNotFoundError(modality="annotations")
+        if files is None:
+            if self.from_xeniumdata:
+                try:
+                    p = self.xd_metadata["annotations"]
+                except KeyError:
+                    raise ModalityNotFoundError(modality="annotations")
+                self.annotations = read_annotationsdata(path=self.path / p)
+                
+                # # check if annotations data is stored in this XeniumData
+                # if "annotations" not in self.xd_metadata:
+                #     raise ModalityNotFoundError(modality="annotations")
+                
+                # # get path and names of annotation files
+                # keys = self.xd_metadata["annotations"].keys()
+                # files = [self.path / self.xd_metadata["annotations"][n] for n in keys]
             else:
-                # convert to Path
-                annotations_dir = Path(annotations_dir)
-                
-                # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
-                if not annotations_dir.is_dir():
-                    annotations_dir = Path(os.path.normpath(self.path / annotations_dir))
-                    if not annotations_dir.is_dir():
-                        raise FileNotFoundError(f"`annotations_dir` {annotations_dir} is neither a direct path nor a relative path.")
-                
-                # get list annotation files that match the current slide id and sample id
-                files = []
-                keys = []
-                for file in annotations_dir.glob(f"*{suffix}"):
-                    if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
-                        parsed = parse(pattern_annotations_file, file.stem)
-                        keys.append(parsed.named["name"])
-                        files.append(file)
+                raise ModalityNotFoundError(modality="annotations")
+        else:
+            files = convert_to_list(files)
+            keys = convert_to_list(keys)
+            # # convert to Path
+            # annotations_dir = Path(annotations_dir)
             
+            # # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
+            # if not annotations_dir.is_dir():
+            #     annotations_dir = Path(os.path.normpath(self.path / annotations_dir))
+            #     if not annotations_dir.is_dir():
+            #         raise FileNotFoundError(f"`annotations_dir` {annotations_dir} is neither a direct path nor a relative path.")
+            
+            # # get list annotation files that match the current slide id and sample id
+            # files = []
+            # keys = []
+            # for file in annotations_dir.glob(f"*{suffix}"):
+            #     if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
+            #         parsed = parse(pattern_annotations_file, file.stem)
+            #         keys.append(parsed.named["name"])
+            #         files.append(file)
+        
             self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
-            
+        
 
         
     def read_regions(self,
@@ -1689,7 +1691,7 @@ class XeniumData:
             pass
         else:
             # initialize the widgets
-            add_points_widget, locate_cells_widget, add_region_widget, add_annotations_widget, add_boundaries_widget, select_data = _initialize_widgets(xdata=self)
+            add_points_widget, locate_cells_widget, add_region_widget, show_annotations_widget, add_boundaries_widget, select_data = _initialize_widgets(xdata=self)
             
             # add widgets to napari window
             if select_data is not None:
@@ -1717,13 +1719,13 @@ class XeniumData:
                 add_region_widget.max_height = 150
                 add_region_widget.max_width = widgets_max_width
                 
-            if add_annotations_widget is not None:
-                self.viewer.window.add_dock_widget(add_annotations_widget, name="Show annotations", area="right")
-                add_annotations_widget.max_height = 150
-                add_annotations_widget.max_width = widgets_max_width
+            if show_annotations_widget is not None:
+                self.viewer.window.add_dock_widget(show_annotations_widget, name="Show annotations", area="right")
+                show_annotations_widget.max_height = 150
+                show_annotations_widget.max_width = widgets_max_width
         
         # add annotation widget to napari
-        annot_widget = _annotation_widget()
+        annot_widget = add_new_annotations_widget()
         annot_widget.max_height = 100
         annot_widget.max_width = widgets_max_width
         self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
