@@ -80,8 +80,9 @@ class ShapesData(DeepCopyMixin):
                     f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} ' 
                     f'{self.shape_name}, {lc} '
                     f'{"classes" if lc>1 else "class"} '
-                    f'({",".join(classes)}) {m["analyzed"]}'
                 )
+                if lc < 10:
+                    r += f'({",".join(classes)}) {m["analyzed"]}'
                 repr_strings.append(r)
             # repr_strings = [
             #     #f'{tf.Bold}{l}:{tf.ResetAll}\t{m[f"n_{self.shape_name}"]} {self.shape_name}, {len(m["classes"])} classes {*m["classes"],} {m["analyzed"]}' for l, m in self.metadata.items()
@@ -92,7 +93,26 @@ class ShapesData(DeepCopyMixin):
         else:
             s = ""
         repr = f"{self.repr_color}{tf.Bold}{self.shape_name}{tf.ResetAll}\n{s}"
-        return repr   
+        return repr
+    
+    def _check_uniqueness(self,
+                          dataframe: Optional[gpd.GeoDataFrame] = None,
+                          key: Optional[str] = None,
+                          verbose: bool = True
+                          ) -> bool:
+        
+        if dataframe is None:
+            annot_df = getattr(self, key)
+        else:
+            annot_df = dataframe
+        
+        if len(annot_df.index.unique()) != len(annot_df.name.unique()):
+            warnings.warn(message=f"Names of {self.shape_name} for key '{key}' were not unique. Key was skipped.")
+            return False
+        else:
+            if verbose:
+                print(f"Names of {self.shape_name} for key '{key}' are unique.")
+            return True
     
     def _update_metadata(self, 
                          key: str,
@@ -136,10 +156,8 @@ class ShapesData(DeepCopyMixin):
             old_n = 0
             new_n = len(annot_df)
         else:
-            # concatenate the new and old dataframe
-            annot_df = getattr(self, key)
-
             # concatenate old and new annoation dataframe
+            annot_df = getattr(self, key)
             old_n = len(annot_df)
             annot_df = pd.concat([annot_df, new_df], ignore_index=False)
             
@@ -154,12 +172,18 @@ class ShapesData(DeepCopyMixin):
         if new_annotations_added:
             add = True
             if assert_uniqueness:
-                if len(annot_df.index.unique()) != len(annot_df.name.unique()):
-                    warnings.warn(message=f"Names of {self.shape_name} for key '{key}' were not unique. Key was skipped.")
+                # if len(annot_df.index.unique()) != len(annot_df.name.unique()):
+                #     warnings.warn(message=f"Names of {self.shape_name} for key '{key}' were not unique. Key was skipped.")
+                #     add = False
+                # else:
+                #     if verbose:
+                #         print(f"Names of {self.shape_name} for key '{key}' are unique.")
+                
+                # check if the shapes data for this key is unique (same number of names than indices)
+                is_unique = self._check_uniqueness(dataframe=annot_df, key=key, verbose=verbose)
+                
+                if not is_unique:
                     add = False
-                else:
-                    if verbose:
-                        print(f"Names of {self.shape_name} for key '{key}' are unique.")
             
             # check if any of the shapes are shapely MultiPolygons
             is_not_multipolygon = [not isinstance(p, MultiPolygon) for p in annot_df.geometry]

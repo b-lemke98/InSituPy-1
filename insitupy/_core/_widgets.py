@@ -39,6 +39,7 @@ def _create_points_layer(points,
     mask = pd.notnull(color_values)
     color_values = color_values[mask]
     points = points[mask]
+    point_names = point_names[mask]
 
     # check if the data should be plotted categorical or continous
     if is_numeric_dtype(color_values):
@@ -203,7 +204,7 @@ def _initialize_widgets(
             if observation is not None:
                 if observation not in viewer.layers:
                     # get observation values
-                    color_value_obs = config.adata.obs[observation].values                
+                    color_value_obs = config.adata.obs[observation].values
                     
                     # create points layer for observations
                     obs_layer = _create_points_layer(
@@ -290,7 +291,7 @@ def _initialize_widgets(
         )
         def add_region_widget(
             key,
-            tolerance: Number = 2,
+            tolerance: Number = 5,
             # region
             ):
             layer_name = f"region-{key}"

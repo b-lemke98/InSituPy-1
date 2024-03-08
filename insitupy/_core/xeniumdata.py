@@ -14,6 +14,7 @@ from uuid import uuid4
 import dask
 import dask.array as da
 import dask_image
+import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
 import napari
@@ -32,6 +33,7 @@ from rasterio.features import rasterize
 from scipy.sparse import csr_matrix, issparse
 from shapely import Point, Polygon
 from shapely.geometry.polygon import Polygon
+from tqdm import tqdm
 
 from insitupy import __version__
 from insitupy._core._save import _save_images
@@ -427,7 +429,7 @@ class XeniumData:
             metafile.write(metadata_json)
 
     def assign_annotations(self, 
-                annotation_key: str = "all",
+                annotation_keys: str = "all",
                 add_annotation_masks: bool = False
                 ):
         '''
@@ -438,17 +440,19 @@ class XeniumData:
         assert hasattr(self, "cells"), "No .cells attribute available. Run `read_cells()`."
         assert hasattr(self, "annotations"), "No .annotations attribute available. Run `read_annotations()`."
         
-        if annotation_key == "all":
-            annotation_key = self.annotations.metadata.keys()
+        if annotation_keys == "all":
+            annotation_keys = self.annotations.metadata.keys()
             
         # make sure annotation keys are a list
-        annotation_key = convert_to_list(annotation_key)
+        annotation_keys = convert_to_list(annotation_keys)
         
         # convert coordinates into shapely Point objects
-        points = [Point(elem) for elem in self.cells.matrix.obsm["spatial"]]
+        x = self.cells.matrix.obsm["spatial"][:, 0]
+        y = self.cells.matrix.obsm["spatial"][:, 1]
+        points = gpd.points_from_xy(x, y)
 
         # iterate through annotation keys
-        for annotation_key in annotation_key:
+        for annotation_key in annotation_keys:
             print(f"Assigning key '{annotation_key}'...")
             # extract pandas dataframe of current key
             annot = getattr(self.annotations, annotation_key)
@@ -488,6 +492,69 @@ class XeniumData:
                 
             # save that the current key was analyzed
             self.annotations.metadata[annotation_key]["analyzed"] = tf.TICK
+            
+    def assign_regions(self,
+                       region_keys: str = "all",
+                       ):
+        '''
+        Function to assign the annotations to the anndata object in XeniumData.matrix.
+        Annotation information is added to the DataFrame in `.obs`.
+        '''
+        # assert that prerequisites are met
+        try:
+            regions = self.regions
+        except AttributeError:
+            raise ModalityNotFoundError("regions")
+        
+        try:
+            cells = self.cells
+        except AttributeError:
+            raise ModalityNotFoundError("cells")
+        
+        # assert hasattr(self, "cells"), "No .cells attribute available. Run `read_cells()`."
+        # assert hasattr(self, "regions"), "No .annotations attribute available. Run `read_annotations()`."
+
+        if region_keys == "all":
+            region_keys = regions.metadata.keys()
+            
+        # make sure annotation keys are a list
+        region_keys = convert_to_list(region_keys)
+        
+        # convert coordinates into shapely Point objects
+        x = cells.matrix.obsm["spatial"][:, 0]
+        y = cells.matrix.obsm["spatial"][:, 1]
+        points = gpd.points_from_xy(x, y)
+
+        # iterate through annotation keys
+        for reg_key in region_keys:
+            print(f"Assigning key '{reg_key}'...")
+            # check that the names are unique
+            regions._check_uniqueness(key=reg_key)
+            
+            # extract pandas dataframe of current key
+            reg = getattr(regions, reg_key)
+            
+            # get unique list of annotation names
+            annot_names = reg.name.unique()
+            
+            # initiate dataframe as dictionary
+            df = {}
+
+            # iterate through names
+            for n in tqdm(annot_names):
+                poly = reg[reg.name == n].geometry.iloc[0]
+                
+                df[n] = poly.contains(points)
+                
+            # convert into pandas dataframe
+            df = pd.DataFrame(df)
+            df.index = self.cells.matrix.obs_names
+            
+            # create annotation from annotation masks
+            self.cells.matrix.obs[f"region-{reg_key}"] = [" & ".join(annot_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
+                        
+            # save that the current key was analyzed
+            self.regions.metadata[reg_key]["analyzed"] = tf.TICK
         
     def copy(self):
         '''
@@ -874,13 +941,6 @@ class XeniumData:
                     raise ModalityNotFoundError(modality="annotations")
                 self.annotations = read_annotationsdata(path=self.path / p)
                 
-                # # check if annotations data is stored in this XeniumData
-                # if "annotations" not in self.xd_metadata:
-                #     raise ModalityNotFoundError(modality="annotations")
-                
-                # # get path and names of annotation files
-                # keys = self.xd_metadata["annotations"].keys()
-                # files = [self.path / self.xd_metadata["annotations"][n] for n in keys]
             else:
                 raise ModalityNotFoundError(modality="annotations")
         else:
@@ -909,39 +969,42 @@ class XeniumData:
 
         
     def read_regions(self,
-                    regions_dir: Union[str, os.PathLike, Path] = None, # "../regions",
-                    suffix: str = ".geojson",
-                    pattern_regions_file: str = "regions-{slide_id}__{sample_id}__{name}"
+                    files: Optional[Union[str, os.PathLike, Path]] = None, # "../regions",
+                    keys: Optional[str] = None,
+                    #suffix: str = ".geojson",
+                    #pattern_regions_file: str = "regions-{slide_id}__{sample_id}__{name}"
                     ):
         print("Reading regions...", flush=True)
-        if self.from_xeniumdata:
-            try:
-                p = self.xd_metadata["regions"]
-            except KeyError:
+        if files is None:
+            if self.from_xeniumdata:
+                try:
+                    p = self.xd_metadata["regions"]
+                except KeyError:
+                    raise ModalityNotFoundError(modality="regions")
+                self.regions = read_regionsdata(path=self.path / p)
+            else:
                 raise ModalityNotFoundError(modality="regions")
-            self.regions = read_regionsdata(path=self.path / p)
             
         else:
-            if regions_dir is None:
-                raise ModalityNotFoundError(modality="regions")
-            else:
-                # convert to Path
-                regions_dir = Path(regions_dir)
-                
-                # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
-                if not regions_dir.is_dir():
-                    regions_dir = Path(os.path.normpath(self.path / regions_dir))
-                    if not regions_dir.is_dir():
-                        raise FileNotFoundError(f"`regions_dir` {regions_dir} is neither a direct path nor a relative path.")
-                
-                # get list annotation files that match the current slide id and sample id
-                files = []
-                keys = []
-                for file in regions_dir.glob(f"*{suffix}"):
-                    if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
-                        parsed = parse(pattern_regions_file, file.stem)
-                        keys.append(parsed.named["name"])
-                        files.append(file)
+            files = convert_to_list(files)
+            keys = convert_to_list(keys)
+            # # convert to Path
+            # regions_dir = Path(regions_dir)
+            
+            # # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
+            # if not regions_dir.is_dir():
+            #     regions_dir = Path(os.path.normpath(self.path / regions_dir))
+            #     if not regions_dir.is_dir():
+            #         raise FileNotFoundError(f"`regions_dir` {regions_dir} is neither a direct path nor a relative path.")
+            
+            # # get list annotation files that match the current slide id and sample id
+            # files = []
+            # keys = []
+            # for file in regions_dir.glob(f"*{suffix}"):
+            #     if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
+            #         parsed = parse(pattern_regions_file, file.stem)
+            #         keys.append(parsed.named["name"])
+            #         files.append(file)
             
             self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
 
@@ -1540,8 +1603,8 @@ class XeniumData:
     def show(self,
         keys: Optional[str] = None,
         annotation_keys: Optional[str] = None,
-        show_images: bool = True,
-        show_cells: bool = False,
+        #show_images: bool = True,
+        #show_cells: bool = False,
         point_size: int = 6,
         scalebar: bool = True,
         pixel_size: float = None, # if none, extract from metadata
@@ -1561,13 +1624,17 @@ class XeniumData:
         # create viewer
         self.viewer = napari.Viewer()
         
-        # optionally add images
-        if show_images:
-            # add images
-            if not hasattr(self, "images"):
-                raise XeniumDataMissingObject("images")
-                
+        # # optionally add images
+        # if show_images:
+        #     # add images
+        #     if not hasattr(self, "images"):
+        #         raise XeniumDataMissingObject("images")
+        
+        try:
             image_keys = self.images.metadata.keys()
+        except AttributeError:
+            warnings.warn("No attribute `.images` found.")
+        else:
             n_grayscales = 0 # number of grayscale images
             for i, img_name in enumerate(image_keys):
                 img = getattr(self.images, img_name)
@@ -1607,12 +1674,13 @@ class XeniumData:
                     )
         
         # optionally: add cells as points
-        if show_cells or keys is not None:
+        #if show_cells or keys is not None:
+        if keys is not None:
             try:
                 cells = self.cells
             except AttributeError:
                 raise XeniumDataMissingObject("cells")
-            else:      
+            else:
                 # convert keys to list
                 keys = convert_to_list(keys)
                 
