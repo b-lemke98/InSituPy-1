@@ -193,13 +193,13 @@ def _initialize_widgets(
                     gene_layer = _create_points_layer(
                         points=config.points,
                         color_values=color_value_gene,
-                        name=gene,
+                        name=f"{config.current_data_name}-{gene}",
                         point_names=cell_names,
                         point_size=size
                     )
                     layers.append(gene_layer)
                 else:
-                    print(f"Key '{gene}' already in layer list.")
+                    print(f"Key '{gene}' already in layer list.", flush=True)
             
             if observation is not None:
                 if observation not in viewer.layers:
@@ -210,14 +210,14 @@ def _initialize_widgets(
                     obs_layer = _create_points_layer(
                         points=config.points,
                         color_values=color_value_obs,
-                        name=observation,
+                        name=f"{config.current_data_name}-{observation}",
                         point_names=cell_names,
                         point_size=size,
                     )
                     layers.append(obs_layer)
                 else:
-                    print(f"Key '{observation}' already in layer list.")
-                        
+                    print(f"Key '{observation}' already in layer list.", flush=True)
+                    
             return layers
         
         @magicgui(
