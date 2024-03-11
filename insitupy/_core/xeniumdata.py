@@ -106,7 +106,6 @@ def _read_boundaries_from_xenium(
     path = Path(path)
     
     # create boundariesdata object
-    #boundaries = BoundariesData(pixel_size=pixel_size)
     boundaries = BoundariesData()
     
     if mode == "dataframe":
@@ -148,7 +147,6 @@ def _read_boundaries_from_xenium(
 
 def _read_matrix_from_xenium(path) -> AnnData:
     # extract parameters from metadata
-    #cf_zarr_path = path / metadata["xenium_explorer_files"]["cell_features_zarr_filepath"]
     cf_h5_path = path / "cell_feature_matrix.h5"
 
     with warnings.catch_warnings():
@@ -157,7 +155,6 @@ def _read_matrix_from_xenium(path) -> AnnData:
         adata = sc.read_10x_h5(cf_h5_path)
 
     # read cell information
-    #cells_zarr_path = path / metadata["xenium_explorer_files"]["cells_zarr_filepath"]
     cells_parquet_path = path / "cells.parquet"
     cells = pd.read_parquet(cells_parquet_path)
 
@@ -510,9 +507,6 @@ class XeniumData:
             cells = self.cells
         except AttributeError:
             raise ModalityNotFoundError("cells")
-        
-        # assert hasattr(self, "cells"), "No .cells attribute available. Run `read_cells()`."
-        # assert hasattr(self, "regions"), "No .annotations attribute available. Run `read_annotations()`."
 
         if region_keys == "all":
             region_keys = regions.metadata.keys()
@@ -656,16 +650,11 @@ class XeniumData:
                 cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim
                 )
             
-            # sync cell ids of boundaries with matrix
-            #_self.cells.sync_cell_ids()
-            
             # shift coordinates to correct for change of coordinates during cropping
             _self.cells.shift(x=-xlim[0], y=-ylim[0])
             
         if hasattr(_self, "transcripts"):
             # infer mask for selection
-            # xmask = (_self.transcripts["x_location"] >= xlim[0]) & (_self.transcripts["x_location"] <= xlim[1])
-            # ymask = (_self.transcripts["y_location"] >= ylim[0]) & (_self.transcripts["y_location"] <= ylim[1])
             xmask = (_self.transcripts["coordinates", "x"] >= xlim[0]) & (_self.transcripts["coordinates", "x"] <= xlim[1])
             ymask = (_self.transcripts["coordinates", "y"] >= ylim[0]) & (_self.transcripts["coordinates", "y"] <= ylim[1])
             mask = xmask & ymask
@@ -674,8 +663,6 @@ class XeniumData:
             _self.transcripts = _self.transcripts.loc[mask, :].copy()
             
             # move origin again to 0 by subtracting the lower limits from the coordinates
-            # _self.transcripts["x_location"] -= xlim[0]
-            # _self.transcripts["y_location"] -= ylim[0]
             _self.transcripts["coordinates", "x"] -= xlim[0]
             _self.transcripts["coordinates", "y"] -= ylim[0]
             
@@ -946,27 +933,9 @@ class XeniumData:
         else:
             files = convert_to_list(files)
             keys = convert_to_list(keys)
-            # # convert to Path
-            # annotations_dir = Path(annotations_dir)
-            
-            # # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
-            # if not annotations_dir.is_dir():
-            #     annotations_dir = Path(os.path.normpath(self.path / annotations_dir))
-            #     if not annotations_dir.is_dir():
-            #         raise FileNotFoundError(f"`annotations_dir` {annotations_dir} is neither a direct path nor a relative path.")
-            
-            # # get list annotation files that match the current slide id and sample id
-            # files = []
-            # keys = []
-            # for file in annotations_dir.glob(f"*{suffix}"):
-            #     if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
-            #         parsed = parse(pattern_annotations_file, file.stem)
-            #         keys.append(parsed.named["name"])
-            #         files.append(file)
-        
-            self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
-        
 
+            # add annotations object
+            self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
         
     def read_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]] = None, # "../regions",
@@ -988,24 +957,8 @@ class XeniumData:
         else:
             files = convert_to_list(files)
             keys = convert_to_list(keys)
-            # # convert to Path
-            # regions_dir = Path(regions_dir)
             
-            # # check if the annotation path exists. If it does not, first assume that it is a relative path and check that.
-            # if not regions_dir.is_dir():
-            #     regions_dir = Path(os.path.normpath(self.path / regions_dir))
-            #     if not regions_dir.is_dir():
-            #         raise FileNotFoundError(f"`regions_dir` {regions_dir} is neither a direct path nor a relative path.")
-            
-            # # get list annotation files that match the current slide id and sample id
-            # files = []
-            # keys = []
-            # for file in regions_dir.glob(f"*{suffix}"):
-            #     if self.slide_id in str(file.stem) and (self.sample_id in str(file.stem)):
-            #         parsed = parse(pattern_regions_file, file.stem)
-            #         keys.append(parsed.named["name"])
-            #         files.append(file)
-            
+            # add regions object
             self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
 
 
@@ -1017,7 +970,23 @@ class XeniumData:
                 cells_path = self.xd_metadata["cells"]
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
-            self.cells = read_celldata(path=self.path / cells_path, pixel_size=pixel_size)
+            else:
+                self.cells = read_celldata(path=self.path / cells_path, pixel_size=pixel_size)
+            
+            # check if alt data is there and read if yes
+            try:
+                alt_path_dict = self.xd_metadata["alt"]
+            except KeyError:
+                raise ModalityNotFoundError(modality="alt")
+            else:
+                print("\tFound alternative cells...")
+                alt_dict = {}
+                for k, p in alt_path_dict.items():
+                    alt_dict[k] = read_celldata(path=self.path / p, pixel_size=pixel_size)
+                    
+                # add attribute
+                setattr(self, "alt", alt_dict)
+            
         else:
             # read celldata
             matrix = matrix = _read_matrix_from_xenium(path=self.path)
