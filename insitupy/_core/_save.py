@@ -25,7 +25,6 @@ def _save_images(imagedata,
 
     if metadata is not None:
         metadata["images"] = {}
-        #for n, img_metadata in imagedata.metadata.items():
         for n in imagedata.metadata.keys():
             s = savepaths[n]
             # collect metadata

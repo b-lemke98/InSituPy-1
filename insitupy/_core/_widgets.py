@@ -143,7 +143,7 @@ def _initialize_widgets(
             def add_boundaries_widget(
                 key
             ):
-                layer_name = f"mask-{key}"
+                layer_name = f"{config.current_data_name}-{key}"
                 
                 if layer_name not in viewer.layers:
                     # get geopandas dataframe with regions
@@ -160,6 +160,7 @@ def _initialize_widgets(
                         mask_pyramid = mask
                     
                     # add masks as labels to napari viewer
+                    print(pixel_size, flush=True)
                     viewer.add_labels(mask_pyramid, name=layer_name, scale=(pixel_size,pixel_size))
                 else:
                     print(f"Layer '{layer_name}' already in layer list.", flush=True)
@@ -371,7 +372,6 @@ def _initialize_widgets(
         
         def _update_classes_on_key_change(widget):
             current_key = widget.key.value
-            print(current_key)
             widget.annot_class.choices = ["all"] + sorted(xdata.annotations.metadata[current_key]['classes'])
         
         # extract region keys

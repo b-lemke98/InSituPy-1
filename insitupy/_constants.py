@@ -7,3 +7,6 @@ SHRT_MIN = -(2**15-1) # -32767
 
 # create cache dir
 CACHE = Path.home() / ".cache/InSituPy/"
+
+# naming
+INSITUDATA_EXTENSION = ".ispy"

@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 
-import dask
 import dask.array as da
 import dask_image
 import geopandas as gpd
@@ -22,28 +21,30 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
-import zarr
 from anndata import AnnData
 from geopandas import GeoDataFrame
 from napari.layers import Layer, Shapes
 from napari.layers.shapes.shapes import Shapes
-from pandas.api.types import is_numeric_dtype
 from parse import *
 from rasterio.features import rasterize
 from scipy.sparse import csr_matrix, issparse
-from shapely import Point, Polygon
+from shapely import Polygon
 from shapely.geometry.polygon import Polygon
 from tqdm import tqdm
 
 from insitupy import __version__
 from insitupy._core._save import _save_images
+from insitupy._core.io import (_read_binned_expression,
+                               _read_boundaries_from_xenium,
+                               _read_matrix_from_xenium, read_annotationsdata,
+                               read_celldata, read_regionsdata)
 from insitupy.utils.io import save_and_show_figure
 from insitupy.utils.utils import get_nrows_maxcols
 
-from .._constants import CACHE
-from .._exceptions import (InvalidFileTypeError, ModalityNotFoundError,
-                           NotOneElementError, UnknownOptionError,
-                           WrongNapariLayerTypeError, XeniumDataMissingObject,
+from .._constants import CACHE, INSITUDATA_EXTENSION
+from .._exceptions import (ModalityNotFoundError, NotOneElementError,
+                           UnknownOptionError, WrongNapariLayerTypeError,
+                           XeniumDataMissingObject,
                            XeniumDataRepeatedCropError)
 from ..image import ImageRegistration, deconvolve_he, resize_image
 from ..image.utils import create_img_pyramid
@@ -61,122 +62,6 @@ from ._widgets import (_create_points_layer, _initialize_widgets,
 from .dataclasses import (AnnotationsData, BoundariesData, CellData, ImageData,
                           RegionsData)
 
-
-def _read_binned_expression(
-    path: Union[str, os.PathLike, Path],
-    gene_names_to_select = List
-):
-    # add binned expression data to .varm of self.cells.matrix
-    trans_file = path / "transcripts.zarr.zip"
-    
-    # read zarr store
-    t = zarr.open(trans_file, mode="r")
-
-    # extract sparse array
-    data_gene = t["density/gene"]
-    data = data_gene["data"][:]
-    indices = data_gene["indices"][:]
-    indptr = data_gene["indptr"][:]
-    
-    # get dimensions of the array
-    cols = data_gene.attrs["cols"]
-    rows = data_gene.attrs["rows"]
-    
-    # get info on gene names
-    gene_names = data_gene.attrs["gene_names"]
-    n_genes = len(gene_names)
-
-    sarr = csr_matrix((data, indices, indptr))
-
-    # reshape to get binned data
-    arr = sarr.toarray()
-    arr = arr.reshape((n_genes, rows, cols))
-
-    # select only genes that are available in the adata object
-    gene_mask = [elem in gene_names_to_select for elem in gene_names]
-    arr = arr[gene_mask]
-    return arr
-
-def _read_boundaries_from_xenium(
-    path: Union[str, os.PathLike, Path],
-    pixel_size: Number = 1,
-    mode: Literal["dataframe", "mask"] = "mask"
-    ) -> BoundariesData:
-    # # read boundaries data
-    path = Path(path)
-    
-    # create boundariesdata object
-    boundaries = BoundariesData()
-    
-    if mode == "dataframe":
-        files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"]
-        labels=["cellular", "nuclear"]
-        
-        # generate path for files
-        files = [path / f for f in files]
-        
-        # generate dataframes
-        data_dict = {}
-        for n, f in zip(labels, files):
-            # check the file suffix
-            if not f.suffix == ".parquet":
-                InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
-            
-            # load dataframe
-            df = pd.read_parquet(f)
-
-            # decode columns
-            df = df.apply(lambda x: decode_robust_series(x), axis=0)
-
-            # collect dataframe
-            data_dict[n] = df
-                        
-    else:
-        cells_zarr_file = path / "cells.zarr.zip"
-        
-        # open zarr directory using dask
-        data_dict = {
-            "nuclear": dask.array.from_zarr(cells_zarr_file, component="masks/0"),
-            "cellular": dask.array.from_zarr(cells_zarr_file, component="masks/1")
-        }
-    
-    boundaries.add_boundaries(data=data_dict, pixel_size=pixel_size)
-
-    return boundaries
-
-
-def _read_matrix_from_xenium(path) -> AnnData:
-    # extract parameters from metadata
-    cf_h5_path = path / "cell_feature_matrix.h5"
-
-    with warnings.catch_warnings():
-        warnings.simplefilter(action='ignore', category=FutureWarning)
-        # read matrix data
-        adata = sc.read_10x_h5(cf_h5_path)
-
-    # read cell information
-    cells_parquet_path = path / "cells.parquet"
-    cells = pd.read_parquet(cells_parquet_path)
-
-    # transform cell ids from bytes to str
-    cells = cells.set_index("cell_id")
-
-    # make sure that the indices are decoded strings
-    if is_numeric_dtype(cells.index):
-        cells.index = cells.index.astype(str)
-    else:
-        cells.index = decode_robust_series(cells.index)
-
-    # add information to anndata observations
-    adata.obs = pd.merge(left=adata.obs, right=cells, left_index=True, right_index=True)
-
-    # transfer coordinates to .obsm
-    coord_cols = ["x_centroid", "y_centroid"]
-    adata.obsm["spatial"] = adata.obs[coord_cols].values
-    adata.obsm["spatial"]
-    adata.obs.drop(coord_cols, axis=1, inplace=True)
-    
-    return adata
 
 def _restructure_transcripts_dataframe(dataframe):
     
@@ -215,87 +100,12 @@ def _restructure_transcripts_dataframe(dataframe):
     return dataframe
     
 
-def read_celldata(
-    path: Union[str, os.PathLike, Path],
-    pixel_size: Number
-    ) -> CellData:
-    # read metadata
-    path = Path(path)
-    celldata_metadata = read_json(path / ".celldata")
-    
-    # read matrix data
-    matrix = sc.read(path / celldata_metadata["matrix"])
-    
-    # read boundaries data
-    # labels = convert_to_list(celldata_metadata["boundaries"].keys())
-    # files = [path / f for f in convert_to_list(celldata_metadata["boundaries"].values())]
-    boundaries_dict = {k: path / v for k,v in celldata_metadata["boundaries"].items()}
-    boundaries_dict = {}
-    for k,v in celldata_metadata["boundaries"].items():
-        suffix = v.split(".", 1)[-1] # necessary to do this with split because of the two dots in .zarr.zip
-        f = path / v
-        if suffix == "parquet":
-            d = pd.read_parquet(f)
-        elif suffix == "zarr.zip":
-            with zarr.ZipStore(f, mode="r") as zipstore:
-                # get components of zip store
-                components = zipstore.listdir()
-
-                if ".zarray" in components:
-                    # the store is an array which can be opened
-                    d = da.from_zarr(zipstore).persist()
-                else:
-                    subres = [elem for elem in components if not elem.startswith(".")]
-                    d = []
-                    for s in subres:
-                        d.append(da.from_zarr(zipstore, component=s).persist())
-                        
-            #d = dask.array.from_zarr(f)
-        else:
-            raise ValueError(f"Boundaries saved in CellData object are neither .parquet nor .zarr.zip format: {suffix}")
-        boundaries_dict[k] = d
-    
-    boundaries = BoundariesData()
-    boundaries.add_boundaries(data=boundaries_dict, pixel_size=pixel_size)
-    #boundaries.read_boundaries(files=files, labels=labels)
-    
-    # create CellData object
-    celldata = CellData(matrix=matrix, boundaries=boundaries)
-    
-    return celldata
-
-def read_regionsdata(
-    path: Union[str, os.PathLike, Path],
-):    
-    metadata = read_json(path / "metadata.json")
-    keys = metadata.keys()
-    files = [path / f"{k}.geojson" for k in keys]
-    data = RegionsData(files, keys)
-    
-    # overwrite metadata
-    data.metadata = metadata
-    return data
-
-def read_annotationsdata(
-    path: Union[str, os.PathLike, Path],
-):
-    path = Path(path)
-    metadata = read_json(path / "metadata.json")
-    keys = metadata.keys()
-    files = [path / f"{k}.geojson" for k in keys]
-    data = AnnotationsData(files, keys)
-    
-    # overwrite metadata
-    data.metadata = metadata
-    return data
-
-
 class XeniumData:
     #TODO: Docstring of XeniumData
     
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
-                 pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{sample_id}",
+                 #pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{sample_id}",
                  metadata_filename: Optional[str] = None,
                  matrix: Optional[AnnData] = None
                  ):
@@ -313,53 +123,58 @@ class XeniumData:
         self.path = Path(path)
         self.dim = None # dimensions of the dataset
         self.from_xeniumdata = False  # flag indicating from where the data is read
-        self.metadata_filename = ".xeniumdata"
-        self.xd_metadata_file = self.path / self.metadata_filename
+        self.xd_metadata_filename = INSITUDATA_EXTENSION
+        self.xd_metadata_file = self.path / self.xd_metadata_filename
+        self.metadata = {} # initialize the metadata dict
         if (self.xd_metadata_file).exists():
             # read xeniumdata metadata
-            self.xd_metadata = read_json(self.xd_metadata_file)
+            self.metadata = read_json(self.xd_metadata_file)
             
             # read general xenium metadata
-            self.metadata = read_json(self.path / "xenium.json")
+            #self.metadata["xenium"] = read_json(self.path / "xenium.json")
             
             # retrieve slide_id and sample_id
-            self.slide_id = self.xd_metadata["slide_id"]
-            self.sample_id = self.xd_metadata["sample_id"]
+            self.slide_id = self.metadata["slide_id"]
+            self.sample_id = self.metadata["sample_id"]
             
             # set flag for xeniumdata
             self.from_xeniumdata = True
-            
         elif matrix is None:
+            # delete the non-existent metadata file variables
+            del self.xd_metadata_file
+            del self.xd_metadata_filename
+            
             # check if path exists
             if not self.path.is_dir():
                 raise FileNotFoundError(f"No such directory found: {str(self.path)}")
             
             if metadata_filename is not None:
-                self.metadata_filename = metadata_filename
+                self.experiment_xenium_filename = metadata_filename
                 
             else:
                 # check for modified metadata_filename
                 metadata_files = [elem.name for elem in self.path.glob("*.xenium")]
                 if "experiment_modified.xenium" in metadata_files:
-                    self.metadata_filename = "experiment_modified.xenium"
+                    self.experiment_xenium_filename = "experiment_modified.xenium"
                 else:
-                    self.metadata_filename = "experiment.xenium"
+                    self.experiment_xenium_filename = "experiment.xenium"
                 
             # all changes are saved to the modified .xenium json
-            self.metadata_save_path = self.path / "experiment_modified.xenium"
+            self.metadata_save_path_after_registration = self.path / "experiment_modified.xenium"
                 
             # read metadata
-            self.metadata = read_json(self.path / self.metadata_filename)
+            print(self.path / self.experiment_xenium_filename)
+            self.metadata["xenium"] = read_json(self.path / self.experiment_xenium_filename)
             
             # get slide id and sample id from metadata
-            self.slide_id = self.metadata["slide_id"]
-            self.sample_id = self.metadata["region_name"]
+            self.slide_id = self.metadata["xenium"]["slide_id"]
+            self.sample_id = self.metadata["xenium"]["region_name"]
         else:
             self.cells.matrix = matrix
             self.slide_id = ""
             self.sample_id = ""
             self.path = Path("unknown/unknown")
-            self.metadata_filename = ""
+            self.experiment_xenium_filename = ""
         
     def __repr__(self):
         repr = (
@@ -368,8 +183,17 @@ class XeniumData:
             f"{tf.Bold}Sample ID:{tf.ResetAll}\t{self.sample_id}\n"
             f"{tf.Bold}Data path:{tf.ResetAll}\t{self.path.parent}\n"
             f"{tf.Bold}Data folder:{tf.ResetAll}\t{self.path.name}\n"
-            f"{tf.Bold}Metadata file:{tf.ResetAll}\t{self.metadata_filename}"            
         )
+        
+        try:
+            mfile = self.experiment_xenium_filename
+        except AttributeError:
+            try:
+                mfile = self.xd_metadata_filename
+            except:
+                raise TypeError()
+        
+        repr += f"{tf.Bold}Metadata file:{tf.ResetAll}\t{mfile}"
         
         if hasattr(self, "images"):
             images_repr = self.images.__repr__()
@@ -412,15 +236,15 @@ class XeniumData:
             )
         return repr
 
-    def _save_metadata(self,
+    def _save_metadata_after_registration(self,
                       metadata_path: Union[str, os.PathLike, Path] = None
                       ):
         # if there is no specific path given, the metadata is written to the default path for modified metadata
         if metadata_path is None:
-            metadata_path = self.metadata_save_path
+            metadata_path = self.metadata_save_path_after_registration
             
         # write to json file
-        metadata_json = json.dumps(self.metadata, indent=4)
+        metadata_json = json.dumps(self.metadata["xenium"], indent=4)
         print(f"\t\tSave metadata to {metadata_path}", flush=True)
         with open(metadata_path, "w") as metafile:
             metafile.write(metadata_json)
@@ -613,7 +437,7 @@ class XeniumData:
             
             # select the shape from list
             crop_window = crop_shape.data[0].copy()
-            crop_window *= self.metadata["pixel_size"] # convert to metric unit (normally µm)
+            crop_window *= self.metadata["xenium"]["pixel_size"] # convert to metric unit (normally µm)
             
             # extract x and y limits from the shape (assuming a rectangle)
             xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
@@ -626,9 +450,9 @@ class XeniumData:
             _self = self.copy()
             
         # if the object was previously cropped, check if the current window is identical with the previous one
-        if np.all([elem in _self.metadata.keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
+        if np.all([elem in _self.metadata["xenium"].keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
             # test whether the limits are identical
-            if (xlim == _self.metadata["cropping_xlim"]) & (ylim == _self.metadata["cropping_ylim"]):
+            if (xlim == _self.metadata["xenium"]["cropping_xlim"]) & (ylim == _self.metadata["xenium"]["cropping_ylim"]):
                 raise XeniumDataRepeatedCropError(xlim, ylim)
         
         try:
@@ -653,6 +477,28 @@ class XeniumData:
             # shift coordinates to correct for change of coordinates during cropping
             _self.cells.shift(x=-xlim[0], y=-ylim[0])
             
+        try:
+            alt = _self.alt
+        except AttributeError:
+            pass
+        else:
+            for k, cells in alt.items():                
+                cell_coords = cells.matrix.obsm['spatial'].copy()
+                xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
+                ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
+                mask = xmask & ymask
+                
+                # select
+                cells.matrix = cells.matrix[mask, :].copy()
+                
+                # crop boundaries
+                cells.boundaries.crop(
+                    cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim
+                    )
+                
+                # shift coordinates to correct for change of coordinates during cropping
+                cells.shift(x=-xlim[0], y=-ylim[0])
+            
         if hasattr(_self, "transcripts"):
             # infer mask for selection
             xmask = (_self.transcripts["coordinates", "x"] >= xlim[0]) & (_self.transcripts["coordinates", "x"] <= xlim[1])
@@ -676,8 +522,8 @@ class XeniumData:
             _self.regions.crop(xlim=xlim, ylim=ylim)
                 
         # add information about cropping to metadata
-        _self.metadata["cropping_xlim"] = xlim
-        _self.metadata["cropping_ylim"] = ylim
+        _self.metadata["xenium"]["cropping_xlim"] = xlim
+        _self.metadata["xenium"]["cropping_ylim"] = ylim
                 
         
         if inplace:
@@ -829,7 +675,7 @@ class XeniumData:
         
         # create boundaries object
         boundaries = BoundariesData()
-        boundaries.add_boundaries(data={f"{key_to_add}_cellular": img}, pixel_size=pixel_size)
+        boundaries.add_boundaries(data={f"cellular": img}, pixel_size=pixel_size)
         
         # add data to XeniumData
         alt_attr_name = "alt"
@@ -923,7 +769,7 @@ class XeniumData:
         if files is None:
             if self.from_xeniumdata:
                 try:
-                    p = self.xd_metadata["annotations"]
+                    p = self.metadata["annotations"]
                 except KeyError:
                     raise ModalityNotFoundError(modality="annotations")
                 self.annotations = read_annotationsdata(path=self.path / p)
@@ -935,7 +781,7 @@ class XeniumData:
             keys = convert_to_list(keys)
 
             # add annotations object
-            self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
+            self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata["xenium"]['pixel_size'])
         
     def read_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]] = None, # "../regions",
@@ -947,7 +793,7 @@ class XeniumData:
         if files is None:
             if self.from_xeniumdata:
                 try:
-                    p = self.xd_metadata["regions"]
+                    p = self.metadata["regions"]
                 except KeyError:
                     raise ModalityNotFoundError(modality="regions")
                 self.regions = read_regionsdata(path=self.path / p)
@@ -959,15 +805,15 @@ class XeniumData:
             keys = convert_to_list(keys)
             
             # add regions object
-            self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata['pixel_size'])
+            self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata["xenium"]['pixel_size'])
 
 
     def read_cells(self):
         print("Reading cells...", flush=True)
-        pixel_size = self.metadata["pixel_size"]
+        pixel_size = self.metadata["xenium"]["pixel_size"]
         if self.from_xeniumdata:
             try:
-                cells_path = self.xd_metadata["cells"]
+                cells_path = self.metadata["cells"]
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
             else:
@@ -975,7 +821,7 @@ class XeniumData:
             
             # check if alt data is there and read if yes
             try:
-                alt_path_dict = self.xd_metadata["alt"]
+                alt_path_dict = self.metadata["alt"]
             except KeyError:
                 raise ModalityNotFoundError(modality="alt")
             else:
@@ -1004,19 +850,19 @@ class XeniumData:
                     ):
         if self.from_xeniumdata:
             # check if matrix data is stored in this XeniumData
-            if "images" not in self.xd_metadata:
+            if "images" not in self.metadata:
                 raise ModalityNotFoundError(modality="images")
             
             # get file paths and names
-            img_files = list(self.xd_metadata["images"].values())
-            img_names = list(self.xd_metadata["images"].keys())
+            img_files = list(self.metadata["images"].values())
+            img_names = list(self.metadata["images"].keys())
         else:
             if names == "nuclei":
                 img_keys = [f"morphology_{nuclei_type}_filepath"]
                 img_names = ["nuclei"]
             else:
                 # get available keys for registered images in metadata
-                img_keys = [elem for elem in self.metadata["images"] if elem.startswith("registered")]
+                img_keys = [elem for elem in self.metadata["xenium"]["images"] if elem.startswith("registered")]
                 
                 # extract image names from keys and add nuclei
                 img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
@@ -1033,23 +879,23 @@ class XeniumData:
                     img_names = [elem for m, elem in zip(mask, img_names) if m]
                     
             # get path of image files
-            img_files = [self.metadata["images"][k] for k in img_keys]
+            img_files = [self.metadata["xenium"]["images"][k] for k in img_keys]
             
         # load image into ImageData object
         print("Reading images...", flush=True)
-        self.images = ImageData(self.path, img_files, img_names, pixel_size=self.metadata['pixel_size'])
+        self.images = ImageData(self.path, img_files, img_names, pixel_size=self.metadata["xenium"]['pixel_size'])
 
     def read_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
                         ):
         if self.from_xeniumdata:
             # check if matrix data is stored in this XeniumData
-            if "transcripts" not in self.xd_metadata:
+            if "transcripts" not in self.metadata:
                 raise ModalityNotFoundError(modality="transcripts")
             
             # read transcripts
             print("Reading transcripts...", flush=True)
-            self.transcripts = pd.read_parquet(self.path / self.xd_metadata["transcripts"])
+            self.transcripts = pd.read_parquet(self.path / self.metadata["transcripts"])
         else:
             # read transcripts
             print("Reading transcripts...", flush=True)
@@ -1163,10 +1009,10 @@ class XeniumData:
         if len(corr_img_files) == 0:
             print(f'\tNo image corresponding to slide `{self.slide_id}` and sample `{self.sample_id}` were found.')
         else:
-            if self.metadata_filename == "experiment_modified.xenium":
-                print(f"\tFound modified `{self.metadata_filename}` file. Information will be added to this file.")
-            elif self.metadata_filename == "experiment.xenium":
-                print(f"\tOnly unmodified metadata file (`{self.metadata_filename}`) found. Information will be added to new file (`experiment_modified.xenium`).")
+            if self.experiment_xenium_filename == "experiment_modified.xenium":
+                print(f"\tFound modified `{self.experiment_xenium_filename}` file. Information will be added to this file.")
+            elif self.experiment_xenium_filename == "experiment.xenium":
+                print(f"\tOnly unmodified metadata file (`{self.experiment_xenium_filename}`) found. Information will be added to new file (`experiment_modified.xenium`).")
             else:
                 raise FileNotFoundError("Metadata file not found.")
 
@@ -1307,8 +1153,8 @@ class XeniumData:
                                         )
                     
                     # save metadata
-                    self.metadata['images'][f'registered_{self.image_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path).replace("\\", "/")
-                    self._save_metadata()
+                    self.metadata["xenium"]['images'][f'registered_{self.image_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path).replace("\\", "/")
+                    self._save_metadata_after_registration()
                         
                     del imreg_complete, imreg_selected, image, template, nuclei_img, eo, dab
                 else:
@@ -1340,8 +1186,8 @@ class XeniumData:
                                         )
                         
                         # save metadata
-                        self.metadata['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path)
-                        self._save_metadata()
+                        self.metadata["xenium"]['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path)
+                        self._save_metadata_after_registration()
 
                     # free RAM
                     del imreg_complete, imreg_selected, image, template, nuclei_img
@@ -1363,7 +1209,7 @@ class XeniumData:
             path: Path to save the data to.
         '''
         # check if the path already exists
-        # TODO: check the logic of the "zip part" below. Maybe it makes more sense to infer zip/no zip from path name?
+        #TODO: check the logic of the "zip part" below. Maybe it makes more sense to infer zip/no zip from path name?
         path = Path(path)
         
         # check overwrite
@@ -1373,20 +1219,20 @@ class XeniumData:
         zip_output = check_zip(path=path)
         
         # remove zip if available
-        path_stem = path.parent / path.stem
+        output_folder = path.parent / path.stem
         
         if zip_output:
-            check_overwrite_and_remove_if_true(path=path_stem, overwrite=overwrite)
+            check_overwrite_and_remove_if_true(path=output_folder, overwrite=overwrite)
 
         # create output directory if it does not exist yet
-        path_stem.mkdir(parents=True, exist_ok=True)
+        output_folder.mkdir(parents=True, exist_ok=True)
         
         # create a metadata dictionary
-        metadata = {}
+        #metadata = {}
         
         # store basic information about experiment
-        metadata["slide_id"] = self.slide_id
-        metadata["sample_id"] = self.sample_id
+        self.metadata["slide_id"] = self.slide_id
+        self.metadata["sample_id"] = self.sample_id
         #metadata["path"] = str(abspath(self.path))
         
         # save images
@@ -1397,8 +1243,8 @@ class XeniumData:
         else:
             _save_images(
                 imagedata=images,
-                path=path_stem,
-                metadata=metadata,
+                path=output_folder,
+                metadata=self.metadata,
                 images_as_zarr=images_as_zarr
                 )
 
@@ -1410,8 +1256,8 @@ class XeniumData:
         else:
             _save_cells(
                 cells=cells,
-                path=path_stem,
-                metadata=metadata
+                path=output_folder,
+                metadata=self.metadata
             )
             
         # save alternative cell data
@@ -1422,8 +1268,8 @@ class XeniumData:
         else:
             _save_alt(
                 attr=alt,
-                path=path_stem,
-                metadata=metadata
+                path=output_folder,
+                metadata=self.metadata
             )
 
             
@@ -1435,8 +1281,8 @@ class XeniumData:
         else:
             _save_transcripts(
                 transcripts=transcripts,
-                path=path_stem,
-                metadata=metadata
+                path=output_folder,
+                metadata=self.metadata
                 )
                 
         
@@ -1448,8 +1294,8 @@ class XeniumData:
         else:
             _save_annotations(
                 annotations=annotations,
-                path=path_stem,
-                metadata=metadata
+                path=output_folder,
+                metadata=self.metadata
             )
             
             
@@ -1461,25 +1307,28 @@ class XeniumData:
         else:
             _save_regions(
                 regions=regions,
-                path=path_stem,
-                metadata=metadata
+                path=output_folder,
+                metadata=self.metadata
             )
 
         # save version of InSituPy
-        metadata["version"] = __version__
+        self.metadata["version"] = __version__
+        
+        # move xenium key to end of metadata
+        self.metadata["xenium"] = self.metadata.pop("xenium")
             
         # write Xeniumdata metadata to json file
-        xd_metadata_path = path_stem / ".xeniumdata"
-        write_dict_to_json(dictionary=metadata, file=xd_metadata_path)
-            
-        # write Xenium metadata to json file
-        metadata_path = path_stem / "xenium.json"
-        write_dict_to_json(dictionary=self.metadata, file=metadata_path)
+        xd_metadata_path = output_folder / INSITUDATA_EXTENSION
+        write_dict_to_json(dictionary=self.metadata, file=xd_metadata_path)
+        
+        # # write Xenium metadata to json file
+        # metadata_path = path_stem / "xenium.json"
+        # write_dict_to_json(dictionary=self.metadata["xenium"], file=metadata_path)
         
         # Optionally: zip the resulting directory
         if zip_output:
-            shutil.make_archive(path_stem, 'zip', path_stem, verbose=False)
-            shutil.rmtree(path_stem) # delete directory
+            shutil.make_archive(output_folder, 'zip', output_folder, verbose=False)
+            shutil.rmtree(output_folder) # delete directory
 
     def quicksave(self, 
                   note: Optional[str] = None
@@ -1586,7 +1435,7 @@ class XeniumData:
         # get information about pixel size
         if (pixel_size is None) & (scalebar):
             # extract pixel_size
-            pixel_size = float(self.metadata["pixel_size"])
+            pixel_size = float(self.metadata["xenium"]["pixel_size"])
         else:
             pixel_size = 1
         
