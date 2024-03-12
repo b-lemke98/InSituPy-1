@@ -123,7 +123,7 @@ class XeniumData:
         self.from_xeniumdata = False  # flag indicating from where the data is read
         self.xd_metadata_filename = ISPY_METADATA_FILE
         self.xd_metadata_file = self.path / self.xd_metadata_filename
-        self.metadata = {} # initialize the metadata dict
+        
         if (self.xd_metadata_file).exists():
             # read xeniumdata metadata
             self.metadata = read_json(self.xd_metadata_file)
@@ -138,6 +138,10 @@ class XeniumData:
             # set flag for xeniumdata
             self.from_xeniumdata = True
         else:
+            # initialize the metadata dict
+            self.metadata = {}
+            self.metadata["data"] = {}
+            
             # delete the non-existent metadata file variables
             del self.xd_metadata_file
             del self.xd_metadata_filename
@@ -764,7 +768,7 @@ class XeniumData:
         if files is None:
             if self.from_xeniumdata:
                 try:
-                    p = self.metadata["annotations"]
+                    p = self.metadata["data"]["annotations"]
                 except KeyError:
                     raise ModalityNotFoundError(modality="annotations")
                 self.annotations = read_annotationsdata(path=self.path / p)
@@ -788,7 +792,7 @@ class XeniumData:
         if files is None:
             if self.from_xeniumdata:
                 try:
-                    p = self.metadata["regions"]
+                    p = self.metadata["data"]["regions"]
                 except KeyError:
                     raise ModalityNotFoundError(modality="regions")
                 self.regions = read_regionsdata(path=self.path / p)
@@ -808,7 +812,7 @@ class XeniumData:
         pixel_size = self.metadata["xenium"]["pixel_size"]
         if self.from_xeniumdata:
             try:
-                cells_path = self.metadata["cells"]
+                cells_path = self.metadata["data"]["cells"]
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
             else:
@@ -816,7 +820,7 @@ class XeniumData:
             
             # check if alt data is there and read if yes
             try:
-                alt_path_dict = self.metadata["alt"]
+                alt_path_dict = self.metadata["data"]["alt"]
             except KeyError:
                 raise ModalityNotFoundError(modality="alt")
             else:
@@ -845,12 +849,12 @@ class XeniumData:
                     ):
         if self.from_xeniumdata:
             # check if matrix data is stored in this XeniumData
-            if "images" not in self.metadata:
+            if "images" not in self.metadata["data"]:
                 raise ModalityNotFoundError(modality="images")
             
             # get file paths and names
-            img_files = list(self.metadata["images"].values())
-            img_names = list(self.metadata["images"].keys())
+            img_files = list(self.metadata["data"]["images"].values())
+            img_names = list(self.metadata["data"]["images"].keys())
         else:
             if names == "nuclei":
                 img_keys = [f"morphology_{nuclei_type}_filepath"]
@@ -885,12 +889,12 @@ class XeniumData:
                         ):
         if self.from_xeniumdata:
             # check if matrix data is stored in this XeniumData
-            if "transcripts" not in self.metadata:
+            if "transcripts" not in self.metadata["data"]:
                 raise ModalityNotFoundError(modality="transcripts")
             
             # read transcripts
             print("Reading transcripts...", flush=True)
-            self.transcripts = pd.read_parquet(self.path / self.metadata["transcripts"])
+            self.transcripts = pd.read_parquet(self.path / self.metadata["data"]["transcripts"])
         else:
             # read transcripts
             print("Reading transcripts...", flush=True)

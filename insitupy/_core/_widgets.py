@@ -160,7 +160,6 @@ def _initialize_widgets(
                         mask_pyramid = mask
                     
                     # add masks as labels to napari viewer
-                    print(pixel_size, flush=True)
                     viewer.add_labels(mask_pyramid, name=layer_name, scale=(pixel_size,pixel_size))
                 else:
                     print(f"Layer '{layer_name}' already in layer list.", flush=True)

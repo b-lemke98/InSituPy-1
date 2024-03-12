@@ -24,11 +24,11 @@ def _save_images(imagedata,
     savepaths = imagedata.save(path=img_path, images_as_zarr=images_as_zarr, return_savepaths=True)
 
     if metadata is not None:
-        metadata["images"] = {}
+        metadata["data"]["images"] = {}
         for n in imagedata.metadata.keys():
             s = savepaths[n]
             # collect metadata
-            metadata["images"][n] = Path(relpath(s, path)).as_posix()
+            metadata["data"]["images"][n] = Path(relpath(s, path)).as_posix()
         
 def _save_cells(cells, path, metadata):
     # create path for cells
@@ -38,7 +38,7 @@ def _save_cells(cells, path, metadata):
     cells.save(cells_path)
     
     if metadata is not None:
-        metadata["cells"] = Path(relpath(cells_path, path)).as_posix()
+        metadata["data"]["cells"] = Path(relpath(cells_path, path)).as_posix()
         
 def _save_alt(attr, path, metadata):
     # create path for cells
@@ -51,9 +51,9 @@ def _save_alt(attr, path, metadata):
     
         if metadata is not None:
             if "alt" not in metadata:
-                metadata["alt"] = {}
+                metadata["data"]["alt"] = {}
             
-            metadata["alt"][k] = Path(relpath(cells_path, path)).as_posix()
+            metadata["data"]["alt"][k] = Path(relpath(cells_path, path)).as_posix()
             
 def _save_transcripts(transcripts, path, metadata):
     # create file path
@@ -65,7 +65,7 @@ def _save_transcripts(transcripts, path, metadata):
     transcripts.to_parquet(trans_file)
     
     if metadata is not None:
-        metadata["transcripts"] = Path(relpath(trans_file, path)).as_posix()
+        metadata["data"]["transcripts"] = Path(relpath(trans_file, path)).as_posix()
     
 def _save_annotations(annotations, path, metadata):
     annot_path = (path / "annotations")
@@ -74,7 +74,7 @@ def _save_annotations(annotations, path, metadata):
     annotations.save(annot_path)
         
     if metadata is not None:
-        metadata["annotations"] = Path(relpath(annot_path, path)).as_posix()
+        metadata["data"]["annotations"] = Path(relpath(annot_path, path)).as_posix()
     
 def _save_regions(regions, path, metadata):
     annot_path = (path / "regions")
@@ -83,4 +83,4 @@ def _save_regions(regions, path, metadata):
     regions.save(annot_path)
         
     if metadata is not None:
-        metadata["regions"] = Path(relpath(annot_path, path)).as_posix()
+        metadata["data"]["regions"] = Path(relpath(annot_path, path)).as_posix()
