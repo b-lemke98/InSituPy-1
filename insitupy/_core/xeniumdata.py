@@ -41,7 +41,7 @@ from insitupy._core.io import (_read_binned_expression,
 from insitupy.utils.io import save_and_show_figure
 from insitupy.utils.utils import get_nrows_maxcols
 
-from .._constants import CACHE, INSITUDATA_EXTENSION
+from .._constants import CACHE, ISPY_METADATA_FILE
 from .._exceptions import (ModalityNotFoundError, NotOneElementError,
                            UnknownOptionError, WrongNapariLayerTypeError,
                            XeniumDataMissingObject,
@@ -105,9 +105,7 @@ class XeniumData:
     
     def __init__(self, 
                  path: Union[str, os.PathLike, Path],
-                 #pattern_xenium_folder: str = "output-{ins_id}__{slide_id}__{sample_id}",
                  metadata_filename: Optional[str] = None,
-                 matrix: Optional[AnnData] = None
                  ):
         """_summary_
 
@@ -123,7 +121,7 @@ class XeniumData:
         self.path = Path(path)
         self.dim = None # dimensions of the dataset
         self.from_xeniumdata = False  # flag indicating from where the data is read
-        self.xd_metadata_filename = INSITUDATA_EXTENSION
+        self.xd_metadata_filename = ISPY_METADATA_FILE
         self.xd_metadata_file = self.path / self.xd_metadata_filename
         self.metadata = {} # initialize the metadata dict
         if (self.xd_metadata_file).exists():
@@ -139,7 +137,7 @@ class XeniumData:
             
             # set flag for xeniumdata
             self.from_xeniumdata = True
-        elif matrix is None:
+        else:
             # delete the non-existent metadata file variables
             del self.xd_metadata_file
             del self.xd_metadata_filename
@@ -169,12 +167,9 @@ class XeniumData:
             # get slide id and sample id from metadata
             self.slide_id = self.metadata["xenium"]["slide_id"]
             self.sample_id = self.metadata["xenium"]["region_name"]
-        else:
-            self.cells.matrix = matrix
-            self.slide_id = ""
-            self.sample_id = ""
-            self.path = Path("unknown/unknown")
-            self.experiment_xenium_filename = ""
+            
+            # assign a uid
+            self.metadata["uid"] = str(uuid4())
         
     def __repr__(self):
         repr = (
@@ -1318,7 +1313,7 @@ class XeniumData:
         self.metadata["xenium"] = self.metadata.pop("xenium")
             
         # write Xeniumdata metadata to json file
-        xd_metadata_path = output_folder / INSITUDATA_EXTENSION
+        xd_metadata_path = output_folder / ISPY_METADATA_FILE
         write_dict_to_json(dictionary=self.metadata, file=xd_metadata_path)
         
         # # write Xenium metadata to json file
