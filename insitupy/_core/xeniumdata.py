@@ -13,7 +13,6 @@ from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 
 import dask.array as da
-import dask_image
 import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
@@ -23,6 +22,7 @@ import pandas as pd
 import scanpy as sc
 import seaborn as sns
 from anndata import AnnData
+from dask_image.imread import imread
 from geopandas import GeoDataFrame
 from napari.layers import Layer, Shapes
 from napari.layers.shapes.shapes import Shapes
@@ -1056,7 +1056,7 @@ class XeniumData:
 
                 # read images
                 print("\t\tLoading images to be registered...", flush=True)
-                image = dask_image.imread.imread(img_file) # e.g. HE image
+                image = imread(img_file) # e.g. HE image
                 
                 # sometimes images are read with an empty time dimension in the first axis. 
                 # If this is the case, it is removed here.
