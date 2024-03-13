@@ -313,29 +313,6 @@ class BoundariesData(DeepCopyMixin):
             for l in labels:
                 repr += f"\n{tf.SPACER+tf.Bold+l+tf.ResetAll}"
         return repr
-    
-    # def read_boundaries(self,
-    #     files: Union[str, os.PathLike, Path, List],
-    #     labels: Optional[Union[str, List[str]]] = None,
-    # ):
-    #     # generate dataframes
-    #     dataframes = {}
-    #     for n, f in zip(labels, files):
-    #         # check the file suffix
-    #         if not f.suffix == ".parquet":
-    #             InvalidFileTypeError(allowed_types=[".parquet"], received_type=f.suffix)
-            
-    #         # load dataframe
-    #         df = pd.read_parquet(f)
-
-    #         # decode columns
-    #         df = df.apply(lambda x: decode_robust_series(x), axis=0)
-
-    #         # collect dataframe
-    #         dataframes[n] = df
-            
-    #     # add dictionary with boundaries to BoundariesData object
-    #     self.add_boundaries(dataframes=dataframes)
         
     def add_boundaries(self,
                        data: Optional[Union[dict, List[str]]],
@@ -350,11 +327,16 @@ class BoundariesData(DeepCopyMixin):
         elif isinstance(data, list):
             if labels is None:
                 raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
+            else:
+                # make sure labels is a list
+                labels = convert_to_list(labels)
         else:
-            raise ValueError(f"Argument 'dataframes' has unknown file type ({type(data)}). Expected to be a list or dictionary.")
+            data = convert_to_list(data)
+            labels = convert_to_list(labels)
+            #raise ValueError(f"Argument 'dataframes' has unknown file type ({type(data)}). Expected to be a list or dictionary.")
         
         for l, df in zip(labels, data):
-            if isinstance(df, pd.DataFrame) or isinstance(df, dask.array.core.Array) or np.all([isinstance(elem, dask.array.core.Array) for elem in df]):             
+            if isinstance(df, pd.DataFrame) or isinstance(df, da.core.Array) or np.all([isinstance(elem, da.core.Array) for elem in df]):             
                 if l not in self.metadata or overwrite:
                     # add to object
                     setattr(self, l, df)
@@ -516,8 +498,18 @@ class CellData(DeepCopyMixin):
                                 b.to_zarr(zipstore, component=str(i))
                         else:
                             bound_data.to_zarr(zipstore)
+                            
+                        # add boundaries metadata to zarr.zip
+                        #with zarr.ZipStore(bound_file, mode="a") as zipstore:       
+                        # open zarr store save metadata in zarr store
+                        store = zarr.open(zipstore, mode="a")
+                        store.attrs.put(boundaries.metadata[n])
+                            
+                # save paths in insitupy metadata
                 metadata["boundaries"][n] = Path(relpath(bound_file, path)).as_posix()
-                
+            
+
+
         # add more things to metadata
         metadata["version"] = __version__
         
@@ -797,7 +789,7 @@ class ImageData(DeepCopyMixin):
                         
                 else:
                     # get file name for saving
-                    filename = Path(img_metadata["file"]).name
+                    filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
                     # retrieve image metadata for saving
                     photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
                     axes = img_metadata['axes']

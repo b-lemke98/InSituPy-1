@@ -1,8 +1,11 @@
+from datetime import datetime
 import math
 import os
+from uuid import uuid4
 
 from numpy import ndarray
 from pandas.api.types import is_numeric_dtype, is_string_dtype
+from parse import datetime
 
 
 class textformat:
@@ -152,3 +155,10 @@ def get_nrows_maxcols(keys, max_cols):
         max_cols = n_plots
 
     return n_plots, n_rows, max_cols
+
+
+def _generate_time_based_uid():
+    time_str = datetime.now().strftime("%y%m%d-%H%M%S%f")
+    short_uid = str(uuid4()).split("-")[0]
+    uid = f"{time_str}-{short_uid}"
+    return uid
