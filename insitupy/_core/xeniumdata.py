@@ -169,7 +169,6 @@ class XeniumData:
             self.metadata_save_path_after_registration = self.path / "experiment_modified.xenium"
                 
             # read metadata
-            print(self.path / self.experiment_xenium_filename)
             self.metadata["xenium"] = read_json(self.path / self.experiment_xenium_filename)
             
             # get slide id and sample id from metadata
