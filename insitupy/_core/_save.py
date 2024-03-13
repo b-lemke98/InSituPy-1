@@ -39,6 +39,15 @@ def _save_cells(cells, path, metadata, overwrite=False):
     cells.save(path=cells_path, overwrite=overwrite)
     
     if metadata is not None:
+        try:
+            # move old celldata paths to history
+            old_path = metadata["data"]["cells"]
+        except KeyError:
+            pass
+        else:
+            metadata["history"]["cells"].append(old_path)
+
+        # move new paths to data
         metadata["data"]["cells"] = Path(relpath(cells_path, path)).as_posix()
         
 def _save_alt(attr, path, metadata):
@@ -52,9 +61,22 @@ def _save_alt(attr, path, metadata):
         celldata.save(cells_path)
     
         if metadata is not None:
-            if "alt" not in metadata:
+            # setup the alt section in metadata
+            if "alt" not in metadata["data"]:
                 metadata["data"]["alt"] = {}
-            
+            if "alt" not in metadata["history"]:
+                metadata["history"]["alt"] = {}
+            if k not in metadata["history"]["alt"]:
+                metadata["history"]["alt"][k] = []
+                
+            try:
+                # move old celldata paths to history
+                old_path = metadata["data"]["alt"][k]
+            except KeyError:
+                pass
+            else:
+                metadata["history"]["alt"][k].append(old_path)
+                
             metadata["data"]["alt"][k] = Path(relpath(cells_path, path)).as_posix()
             
 def _save_transcripts(transcripts, path, metadata):
@@ -77,6 +99,15 @@ def _save_annotations(annotations, path, metadata):
     annotations.save(annot_path)
         
     if metadata is not None:
+        try:
+            # move old paths to history
+            old_path = metadata["data"]["annotations"]
+        except KeyError:
+            pass
+        else:
+            metadata["history"]["annotations"].append(old_path)
+        
+        # add new paths
         metadata["data"]["annotations"] = Path(relpath(annot_path, path)).as_posix()
     
 def _save_regions(regions, path, metadata):
@@ -87,4 +118,13 @@ def _save_regions(regions, path, metadata):
     regions.save(annot_path)
         
     if metadata is not None:
+        try:
+            # move old paths to history
+            old_path = metadata["data"]["regions"]
+        except KeyError:
+            pass
+        else:
+            metadata["history"]["regions"].append(old_path)
+            
+        # add new paths
         metadata["data"]["regions"] = Path(relpath(annot_path, path)).as_posix()

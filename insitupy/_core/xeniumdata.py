@@ -145,6 +145,11 @@ class XeniumData:
             # initialize the metadata dict
             self.metadata = {}
             self.metadata["data"] = {}
+            self.metadata["history"] = {}
+            self.metadata["history"]["cells"] = []
+            self.metadata["history"]["annotations"] = []
+            self.metadata["history"]["annotations"] = []
+            self.metadata["history"]["regions"] = []
             
             # delete the non-existent metadata file variables
             del self.xd_metadata_file
@@ -444,6 +449,10 @@ class XeniumData:
             # extract x and y limits from the shape (assuming a rectangle)
             xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
             ylim = (crop_window[:, 0].min(), crop_window[:, 0].max())
+            
+        # make sure there are no negative values in the limits
+        xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
+        ylim = tuple(np.clip(ylim, a_min=0, a_max=None))
             
         # check if the changes are supposed to be made in place or not
         if inplace:
@@ -1230,7 +1239,7 @@ class XeniumData:
             zippath = path / (path.stem + ".zip")
             check_overwrite_and_remove_if_true(path=zippath, overwrite=overwrite)
             
-        print(f"Saving object to {str(path)}")
+        print(f"Saving data to {str(path)}")
 
         # create output directory if it does not exist yet
         path.mkdir(parents=True, exist_ok=True)

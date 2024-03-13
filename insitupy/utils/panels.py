@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import anndata
 import pandas as pd
 
 
@@ -32,3 +33,37 @@ class XeniumPanels:
         panel_list = [elem for elem in panel_list if elem not in ["show_all"]]
         for p in panel_list:
             print(p)
+            
+            
+def generate_mock_reference(
+    dataframe: pd.DataFrame,
+    annotation_column: str = "Annotation",
+    gene_column: str = "Gene"
+    ):
+
+    # Initialize an empty dictionary to store marker genes for each annotation
+    annotation_genes = {}
+
+    # Iterate over unique annotations
+    for annotation in dataframe[annotation_column].unique():
+        # Collect marker genes for the annotation
+        marker_genes = dataframe.loc[dataframe[annotation_column] == annotation, gene_column].tolist()
+        # Add the annotation and its marker genes to the dictionary
+        annotation_genes[annotation] = marker_genes
+
+    # Create a DataFrame to store the count matrix
+    count_matrix = pd.DataFrame(0, columns=dataframe[gene_column], index=dataframe[annotation_column].unique())
+
+    # Set marker genes to 1000 in the count matrix
+    for annotation, genes in annotation_genes.items():
+        count_matrix.loc[annotation, genes] = 1000
+
+    # Create annotation DataFrame
+    annotation_df = pd.DataFrame({'Annotation': count_matrix.index})
+
+    # match index
+    annotation_df.index = count_matrix.index
+    # create adata
+    reference = anndata.AnnData(X = count_matrix, obs = annotation_df)
+    
+    return reference
