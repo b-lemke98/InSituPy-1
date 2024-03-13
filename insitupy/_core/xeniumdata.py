@@ -1227,12 +1227,6 @@ class XeniumData:
         # check overwrite
         check_overwrite_and_remove_if_true(path=path, overwrite=overwrite)
         
-        # check whether to save to zip
-        #zip_output = check_zip(path=path)
-        
-        # remove zip if available
-        #path = path.parent / path.stem
-        
         if zip_output:
             zippath = path / (path.stem + ".zip")
             check_overwrite_and_remove_if_true(path=zippath, overwrite=overwrite)
@@ -1337,7 +1331,7 @@ class XeniumData:
         print("Saved.")
             
     def save(self,
-             path: Union[str, os.PathLike, Path],
+             path: Optional[Union[str, os.PathLike, Path]] = None,
              ):
         if path is not None:
             path = Path(path)
@@ -1379,13 +1373,10 @@ class XeniumData:
                 self._update_to_existing_project(path=path)
         
                 
-    def _update_to_existing_project(self, path):
+    def _update_to_existing_project(self, 
+                                    path: Optional[Union[str, os.PathLike, Path]]
+                                    ):
         print(f"Updating project in {path}")
-        
-        # checks
-        # assert self.from_xeniumdata, "`update_project` is only available when loading data from a saved InSituPy project."
-        # assert path.exists(), "Path does not exist."
-        # assert path.is_dir(), "Path is not a directory."
         
         # save cells
         try:

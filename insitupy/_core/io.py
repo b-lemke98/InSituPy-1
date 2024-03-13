@@ -28,14 +28,12 @@ def read_celldata(
     celldata_metadata = read_json(path / ".celldata")
 
     # read matrix data
-    matrix = sc.read(path / celldata_metadata["matrix"])
+    matrix = sc.read_h5ad(path / celldata_metadata["matrix"])
     
     # create boundaries data
     boundaries = BoundariesData()
 
     # read boundaries data
-    # labels = convert_to_list(celldata_metadata["boundaries"].keys())
-    # files = [path / f for f in convert_to_list(celldata_metadata["boundaries"].values())]
     boundaries_dict = {k: path / v for k,v in celldata_metadata["boundaries"].items()}
     boundaries_dict = {}
     for k,v in celldata_metadata["boundaries"].items():
