@@ -7,6 +7,7 @@ import warnings
 from datetime import datetime
 from math import ceil
 from numbers import Number
+from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
@@ -135,6 +136,9 @@ class XeniumData:
             self.slide_id = self.metadata["slide_id"]
             self.sample_id = self.metadata["sample_id"]
             
+            # save path of this project in metadata
+            self.metadata["path"] = abspath(self.path).replace("\\", "/")
+            
             # set flag for xeniumdata
             self.from_xeniumdata = True
         else:
@@ -172,8 +176,8 @@ class XeniumData:
             self.slide_id = self.metadata["xenium"]["slide_id"]
             self.sample_id = self.metadata["xenium"]["region_name"]
             
-            # assign a uid
-            self.metadata["uid"] = str(uuid4())
+            # initialize the uid section
+            self.metadata["uids"] = [str(uuid4())]
         
     def __repr__(self):
         repr = (
@@ -521,15 +525,22 @@ class XeniumData:
             _self.regions.crop(xlim=xlim, ylim=ylim)
                 
         # add information about cropping to metadata
-        _self.metadata["xenium"]["cropping_xlim"] = xlim
-        _self.metadata["xenium"]["cropping_ylim"] = ylim
-                
+        if "cropping_history" not in _self.metadata:
+            _self.metadata["cropping_history"] = {}
+            _self.metadata["cropping_history"]["xlim"] = []
+            _self.metadata["cropping_history"]["ylim"] = []
+        _self.metadata["cropping_history"]["xlim"].append(xlim)
+        _self.metadata["cropping_history"]["ylim"].append(ylim)
+        
+        # add new uid to uid history
+        _self.metadata["uids"].append(str(uuid4()))
         
         if inplace:
             if hasattr(self, "viewer"):
                 del _self.viewer # delete viewer
         else:
             return _self
+        
 
     def hvg(self,
             hvg_batch_key: Optional[str] = None, 
@@ -800,6 +811,9 @@ class XeniumData:
                 raise ModalityNotFoundError(modality="regions")
             
         else:
+            if keys is None:
+                raise TypeError("If `files` is not None, `keys` are not allowed to be None either.")
+            
             files = convert_to_list(files)
             keys = convert_to_list(keys)
             
@@ -1195,11 +1209,11 @@ class XeniumData:
         # read images
         self.read_images()
 
-    def save(self,
+    def saveas(self,
             path: Union[str, os.PathLike, Path],
             overwrite: bool = False,
+            zip_output: bool = False,
             images_as_zarr: bool = True
-            #zip: bool = False
             ):
         '''
         Function to save the XeniumData object.
@@ -1208,31 +1222,29 @@ class XeniumData:
             path: Path to save the data to.
         '''
         # check if the path already exists
-        #TODO: check the logic of the "zip part" below. Maybe it makes more sense to infer zip/no zip from path name?
         path = Path(path)
         
         # check overwrite
         check_overwrite_and_remove_if_true(path=path, overwrite=overwrite)
         
         # check whether to save to zip
-        zip_output = check_zip(path=path)
+        #zip_output = check_zip(path=path)
         
         # remove zip if available
-        output_folder = path.parent / path.stem
+        #path = path.parent / path.stem
         
         if zip_output:
-            check_overwrite_and_remove_if_true(path=output_folder, overwrite=overwrite)
+            zippath = path / (path.stem + ".zip")
+            check_overwrite_and_remove_if_true(path=zippath, overwrite=overwrite)
+            
+        print(f"Saving object to {str(path)}")
 
         # create output directory if it does not exist yet
-        output_folder.mkdir(parents=True, exist_ok=True)
-        
-        # create a metadata dictionary
-        #metadata = {}
+        path.mkdir(parents=True, exist_ok=True)
         
         # store basic information about experiment
         self.metadata["slide_id"] = self.slide_id
         self.metadata["sample_id"] = self.sample_id
-        #metadata["path"] = str(abspath(self.path))
         
         # save images
         try:
@@ -1242,7 +1254,7 @@ class XeniumData:
         else:
             _save_images(
                 imagedata=images,
-                path=output_folder,
+                path=path,
                 metadata=self.metadata,
                 images_as_zarr=images_as_zarr
                 )
@@ -1255,7 +1267,7 @@ class XeniumData:
         else:
             _save_cells(
                 cells=cells,
-                path=output_folder,
+                path=path,
                 metadata=self.metadata
             )
             
@@ -1267,11 +1279,10 @@ class XeniumData:
         else:
             _save_alt(
                 attr=alt,
-                path=output_folder,
+                path=path,
                 metadata=self.metadata
             )
-
-            
+ 
         # save transcripts
         try:
             transcripts = self.transcripts
@@ -1280,11 +1291,10 @@ class XeniumData:
         else:
             _save_transcripts(
                 transcripts=transcripts,
-                path=output_folder,
+                path=path,
                 metadata=self.metadata
                 )
                 
-        
         # save annotations
         try:
             annotations = self.annotations
@@ -1293,10 +1303,9 @@ class XeniumData:
         else:
             _save_annotations(
                 annotations=annotations,
-                path=output_folder,
+                path=path,
                 metadata=self.metadata
             )
-            
             
         # save regions
         try:
@@ -1306,7 +1315,7 @@ class XeniumData:
         else:
             _save_regions(
                 regions=regions,
-                path=output_folder,
+                path=path,
                 metadata=self.metadata
             )
 
@@ -1317,19 +1326,134 @@ class XeniumData:
         self.metadata["xenium"] = self.metadata.pop("xenium")
             
         # write Xeniumdata metadata to json file
-        xd_metadata_path = output_folder / ISPY_METADATA_FILE
+        xd_metadata_path = path / ISPY_METADATA_FILE
         write_dict_to_json(dictionary=self.metadata, file=xd_metadata_path)
-        
-        # # write Xenium metadata to json file
-        # metadata_path = path_stem / "xenium.json"
-        # write_dict_to_json(dictionary=self.metadata["xenium"], file=metadata_path)
         
         # Optionally: zip the resulting directory
         if zip_output:
-            shutil.make_archive(output_folder, 'zip', output_folder, verbose=False)
-            shutil.rmtree(output_folder) # delete directory
+            shutil.make_archive(path, 'zip', path, verbose=False)
+            shutil.rmtree(path) # delete directory
+            
+        print("Saved.")
+            
+    def save(self,
+             path: Union[str, os.PathLike, Path],
+             ):
+        if path is not None:
+            path = Path(path)
+            if path.exists():
+                assert path.is_dir(), f"Path {path} is not a directory."
+                # check if the folder is a InSituPy project
+                metadata_file = path / ISPY_METADATA_FILE
+                if metadata_file.exists():
+                    # read metadata file and check uid
+                    project_meta = read_json(metadata_file)
+                    
+                    # check uid
+                    project_uid = project_meta["uids"][-1]  # [-1] to select latest uid
+                    current_uid = self.metadata["uids"][-1]
+                    if current_uid == project_uid:
+                        self._update_to_existing_project(path=path)
+                    else:
+                        warnings.warn(
+                            f"UID of current object {current_uid} not identical with UID in project path {path}: {project_uid}.\n"
+                            f"Project is neither saved nor updated. Try `saveas()` instead to save the data to a new project folder."
+                        )
+                else:
+                    warnings.warn(
+                        f"No `.ispy` metadata file in {path}. Directory is probably no valid InSituPy project. "
+                        f"Use `saveas()` instead to save the data to a new InSituPy project."
+                        )
+            else:
+                # save to the respective directory
+                self.saveas(path=path)
+        else:
+            try:
+                path = Path(self.metadata["path"])
+            except KeyError:
+                warnings.warn(
+                    f"Metadata of current object does not contain the key 'path', "
+                    f"meaning that it is no valid InSituPy project. Try `saveas()` instead to save the data to a new project folder."
+                    )
+            else:
+                self._update_to_existing_project(path=path)
+        
+                
+    def _update_to_existing_project(self, path):
+        print(f"Updating project in {path}")
+        
+        # checks
+        # assert self.from_xeniumdata, "`update_project` is only available when loading data from a saved InSituPy project."
+        # assert path.exists(), "Path does not exist."
+        # assert path.is_dir(), "Path is not a directory."
+        
+        # save cells
+        try:
+            cells = self.cells
+        except AttributeError:
+            pass
+        else:
+            print("\tUpdating cells...", flush=True)
+            _save_cells(
+                cells=cells,
+                path=path,
+                metadata=self.metadata,
+                overwrite=True
+            )
+            
+        # save alternative cell data
+        try:
+            alt = self.alt
+        except AttributeError:
+            pass
+        else:
+            print("\tUpdating alternative segmentations...", flush=True)
+            _save_alt(
+                attr=alt,
+                path=path,
+                metadata=self.metadata
+            )
+                
+        # save annotations
+        try:
+            annotations = self.annotations
+        except AttributeError:
+            pass
+        else:
+            print("\tUpdating annotations...", flush=True)
+            _save_annotations(
+                annotations=annotations,
+                path=path,
+                metadata=self.metadata
+            )
+            
+        # save regions
+        try:
+            regions = self.regions
+        except AttributeError:
+            pass
+        else:
+            print("\tUpdating regions...", flush=True)
+            _save_regions(
+                regions=regions,
+                path=path,
+                metadata=self.metadata
+            )
+            
+        # save version of InSituPy
+        self.metadata["version"] = __version__
+        
+        # move xenium key to end of metadata
+        self.metadata["xenium"] = self.metadata.pop("xenium")
+            
+        # write Xeniumdata metadata to json file
+        xd_metadata_path = path / ISPY_METADATA_FILE
+        write_dict_to_json(dictionary=self.metadata, file=xd_metadata_path)
+        
+        print("Saved.")
+        
 
-    def quicksave(self, 
+    def quicksave(self,
                   note: Optional[str] = None
                   ):
         # create quicksave directory if it does not exist already

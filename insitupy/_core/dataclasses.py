@@ -789,7 +789,7 @@ class ImageData(DeepCopyMixin):
                         
                 else:
                     # get file name for saving
-                    filename = Path(img_metadata["file"]).name
+                    filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
                     # retrieve image metadata for saving
                     photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
                     axes = img_metadata['axes']

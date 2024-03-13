@@ -15,7 +15,7 @@ from .utils import resize_image
 
 def write_ome_tiff(
     file: Union[str, os.PathLike, Path],
-    image: np.ndarray,
+    image: Union[np.ndarray, da.core.Array, List[da.core.Array]],
     axes: str = "YXS", # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
     metadata: dict = {},
     subresolutions = 7, 
@@ -35,6 +35,11 @@ def write_ome_tiff(
 
     For parameters optimal for Xenium see: https://www.10xgenomics.com/support/software/xenium-explorer/tutorials/xe-image-file-conversion
     '''
+    # check if the image is an image pyramid
+    if isinstance(image, list):
+        # if it is a pyramid, select only the highest resolution image
+        image = image[0]
+        
     # check dtype of image
     if image.dtype not in [np.dtype('uint16'), np.dtype('uint8')]:
         warnings.warn("Image does not have dtype 'uint8' or 'uint16'. Is converted to 'uint16'.")
