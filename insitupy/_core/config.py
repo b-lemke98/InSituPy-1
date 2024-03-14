@@ -1,4 +1,5 @@
 import dask
+import napari
 import numpy as np
 from scipy.sparse import issparse
 
@@ -46,7 +47,20 @@ def update_viewer_config(
             
 def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget):
     update_viewer_config(xdata)
+    
+    # set choices
     points_widget.gene.choices = genes
     points_widget.observation.choices = observations
     boundaries_widget.key.choices = masks
     
+    # reset the currently selected key to None
+    points_widget.gene.value = None
+    points_widget.observation.value = None
+    
+    # set only the last layer visible
+    point_layers = [elem for elem in xdata.viewer.layers if isinstance(elem, napari.layers.points.points.Points)]
+    n_point_layers = len(point_layers)
+    
+    for i, l in enumerate(point_layers):
+        if i < n_point_layers-1:
+            l.visible = False
