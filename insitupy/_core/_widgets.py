@@ -66,14 +66,14 @@ def _create_points_layer(points,
         {
             'name': name,
             'properties': {
-                "expression": color_values,
+                "value": color_values,
                 "cell_name": point_names
                 },
             'symbol': 'o',
             'size': point_size,
             'face_color': {
                 "color_mode": color_mode, # workaround (see https://github.com/napari/napari/issues/6433)
-                "colors": "expression"
+                "colors": "value"
                 },
             'face_color_cycle': color_cycle,
             'face_colormap': color_map,
