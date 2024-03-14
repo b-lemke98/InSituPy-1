@@ -844,7 +844,7 @@ class XeniumData:
             try:
                 alt_path_dict = self.metadata["data"]["alt"]
             except KeyError:
-                raise ModalityNotFoundError(modality="alt")
+                print("\tNo alternative cells found...")
             else:
                 print("\tFound alternative cells...")
                 alt_dict = {}
