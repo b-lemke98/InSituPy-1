@@ -39,7 +39,7 @@ from insitupy._core.io import (_read_binned_expression,
                                _read_boundaries_from_xenium,
                                _read_matrix_from_xenium, read_annotationsdata,
                                read_celldata, read_regionsdata)
-from insitupy.utils.io import save_and_show_figure
+from insitupy.utils.io import read_json, save_and_show_figure
 from insitupy.utils.utils import get_nrows_maxcols
 
 from .._constants import CACHE, ISPY_METADATA_FILE
@@ -99,14 +99,16 @@ def _restructure_transcripts_dataframe(dataframe):
     grouped_column_names = [elem for i, elem in zip(in_df, grouped_column_names) if i]
     dataframe.columns = pd.MultiIndex.from_tuples(grouped_column_names)
     return dataframe
-    
 
-class XeniumData:
-    #TODO: Docstring of XeniumData
+class InSituData:
+    #TODO: Docstring of InSituData
     
-    def __init__(self, 
+    def __init__(self,
                  path: Union[str, os.PathLike, Path],
-                 metadata_filename: Optional[str] = None,
+                 metadata: dict,
+                 slide_id: str,
+                 sample_id: str,
+                 from_insitudata: bool
                  ):
         """_summary_
 
@@ -118,70 +120,11 @@ class XeniumData:
         Raises:
             FileNotFoundError: _description_
         """
-        path = Path(path) # make sure the path is a pathlib path
-        self.path = Path(path)
-        self.dim = None # dimensions of the dataset
-        self.from_xeniumdata = False  # flag indicating from where the data is read
-        self.xd_metadata_filename = ISPY_METADATA_FILE
-        self.xd_metadata_file = self.path / self.xd_metadata_filename
-        
-        if (self.xd_metadata_file).exists():
-            # read xeniumdata metadata
-            self.metadata = read_json(self.xd_metadata_file)
-            
-            # read general xenium metadata
-            #self.metadata["xenium"] = read_json(self.path / "xenium.json")
-            
-            # retrieve slide_id and sample_id
-            self.slide_id = self.metadata["slide_id"]
-            self.sample_id = self.metadata["sample_id"]
-            
-            # save path of this project in metadata
-            self.metadata["path"] = abspath(self.path).replace("\\", "/")
-            
-            # set flag for xeniumdata
-            self.from_xeniumdata = True
-        else:
-            # initialize the metadata dict
-            self.metadata = {}
-            self.metadata["data"] = {}
-            self.metadata["history"] = {}
-            self.metadata["history"]["cells"] = []
-            self.metadata["history"]["annotations"] = []
-            self.metadata["history"]["annotations"] = []
-            self.metadata["history"]["regions"] = []
-            
-            # delete the non-existent metadata file variables
-            del self.xd_metadata_file
-            del self.xd_metadata_filename
-            
-            # check if path exists
-            if not self.path.is_dir():
-                raise FileNotFoundError(f"No such directory found: {str(self.path)}")
-            
-            if metadata_filename is not None:
-                self.experiment_xenium_filename = metadata_filename
-                
-            else:
-                # check for modified metadata_filename
-                metadata_files = [elem.name for elem in self.path.glob("*.xenium")]
-                if "experiment_modified.xenium" in metadata_files:
-                    self.experiment_xenium_filename = "experiment_modified.xenium"
-                else:
-                    self.experiment_xenium_filename = "experiment.xenium"
-                
-            # all changes are saved to the modified .xenium json
-            self.metadata_save_path_after_registration = self.path / "experiment_modified.xenium"
-                
-            # read metadata
-            self.metadata["xenium"] = read_json(self.path / self.experiment_xenium_filename)
-            
-            # get slide id and sample id from metadata
-            self.slide_id = self.metadata["xenium"]["slide_id"]
-            self.sample_id = self.metadata["xenium"]["region_name"]
-            
-            # initialize the uid section
-            self.metadata["uids"] = [str(uuid4())]
+        self.path = path
+        self.metadata = metadata
+        self.slide_id = slide_id
+        self.sample_id = sample_id
+        self.from_insitudata = from_insitudata
         
     def __repr__(self):
         repr = (
@@ -192,13 +135,15 @@ class XeniumData:
             f"{tf.Bold}Data folder:{tf.ResetAll}\t{self.path.name}\n"
         )
         
-        try:
-            mfile = self.experiment_xenium_filename
-        except AttributeError:
-            try:
-                mfile = self.xd_metadata_filename
-            except:
-                raise TypeError()
+        # try:
+        #     mfile = self.experiment_xenium_filename
+        # except AttributeError:
+        #     try:
+        #         mfile = self.xd_metadata_filename
+        #     except:
+        #         raise TypeError()
+            
+        mfile = self.metadata["metadata_file"]
         
         repr += f"{tf.Bold}Metadata file:{tf.ResetAll}\t{mfile}"
         
@@ -785,7 +730,7 @@ class XeniumData:
                     ):
         print("Reading annotations...", flush=True)
         if files is None:
-            if self.from_xeniumdata:
+            if self.from_insitudata:
                 try:
                     p = self.metadata["data"]["annotations"]
                 except KeyError:
@@ -809,7 +754,7 @@ class XeniumData:
                     ):
         print("Reading regions...", flush=True)
         if files is None:
-            if self.from_xeniumdata:
+            if self.from_insitudata:
                 try:
                     p = self.metadata["data"]["regions"]
                 except KeyError:
@@ -832,7 +777,7 @@ class XeniumData:
     def read_cells(self):
         print("Reading cells...", flush=True)
         pixel_size = self.metadata["xenium"]["pixel_size"]
-        if self.from_xeniumdata:
+        if self.from_insitudata:
             try:
                 cells_path = self.metadata["data"]["cells"]
             except KeyError:
@@ -869,7 +814,7 @@ class XeniumData:
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
                     nuclei_type: Literal["focus", "mip", ""] = "mip"
                     ):
-        if self.from_xeniumdata:
+        if self.from_insitudata:
             # check if matrix data is stored in this XeniumData
             if "images" not in self.metadata["data"]:
                 raise ModalityNotFoundError(modality="images")
@@ -909,7 +854,7 @@ class XeniumData:
     def read_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
                         ):
-        if self.from_xeniumdata:
+        if self.from_insitudata:
             # check if matrix data is stored in this XeniumData
             if "transcripts" not in self.metadata["data"]:
                 raise ModalityNotFoundError(modality="transcripts")
@@ -1895,4 +1840,94 @@ class XeniumData:
             save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save)
         else:
             return fig, axs
+
+
+def read_xenium(
+    path: Union[str, os.PathLike, Path],
+    metadata_filename: Optional[str] = None,
+) -> InSituData:
+        """_summary_
+
+        Args:
+            path (Union[str, os.PathLike, Path]): _description_
+            pattern_xenium_folder (str, optional): _description_. Defaults to "output-{ins_id}__{slide_id}__{sample_id}".
+            matrix (Optional[AnnData], optional): _description_. Defaults to None.
+
+        Raises:
+            FileNotFoundError: _description_
+        """
+        path = Path(path) # make sure the path is a pathlib path
+        path = Path(path)
+        dim = None # dimensions of the dataset
+        from_insitudata = False  # flag indicating from where the data is read
+        if (path / ISPY_METADATA_FILE).exists():
+            # read xeniumdata metadata
+            xd_metadata_file = path / ISPY_METADATA_FILE
+            metadata = read_json(xd_metadata_file)
+
+            # retrieve slide_id and sample_id
+            slide_id = metadata["slide_id"]
+            sample_id = metadata["sample_id"]
+
+            # save paths of this project in metadata
+            metadata["path"] = abspath(path).replace("\\", "/")
+            metadata["metadata_file"] = ISPY_METADATA_FILE
+
+            # set flag for xeniumdata
+            from_insitudata = True
+        else:
+            # initialize the metadata dict
+            metadata = {}
+            metadata["data"] = {}
+            metadata["history"] = {}
+            metadata["history"]["cells"] = []
+            metadata["history"]["annotations"] = []
+            metadata["history"]["annotations"] = []
+            metadata["history"]["regions"] = []
+
+            # check if path exists
+            if not path.is_dir():
+                raise FileNotFoundError(f"No such directory found: {str(path)}")
+
+            if metadata_filename is not None:
+                experiment_xenium_filename = metadata_filename
+
+            else:
+                # check for modified metadata_filename
+                metadata_files = [elem.name for elem in path.glob("*.xenium")]
+                if "experiment_modified.xenium" in metadata_files:
+                    experiment_xenium_filename = "experiment_modified.xenium"
+                else:
+                    experiment_xenium_filename = "experiment.xenium"
+
+            # all changes are saved to the modified .xenium json
+            metadata_save_path_after_registration = path / "experiment_modified.xenium"
+            
+            # save paths of this project in metadata
+            metadata["path"] = abspath(path).replace("\\", "/")
+            metadata["metadata_file"] = experiment_xenium_filename
+
+            # read metadata
+            metadata["xenium"] = read_json(path / experiment_xenium_filename)
+
+            # get slide id and sample id from metadata
+            slide_id = metadata["xenium"]["slide_id"]
+            sample_id = metadata["xenium"]["region_name"]
+
+            # initialize the uid section
+            metadata["uids"] = [str(uuid4())]
+
+        data = InSituData(path=path, 
+                          metadata=metadata, 
+                          slide_id=slide_id, 
+                          sample_id=sample_id,
+                          from_insitudata=from_insitudata
+                          )
+
+        return data
+    
+class XeniumData:
+    def __init__(self, *args, **kwargs):
+        warnings.warn("`XeniumData` is deprecated. Use `read_xenium` instead. This reads Xenium data and stores it into an `InSituData` object.")
+        return read_xenium(*args, **kwargs)
  

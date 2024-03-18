@@ -2,7 +2,7 @@ import os
 import warnings
 from numbers import Number
 from pathlib import Path
-from typing import List, Literal, Union
+from typing import List, Literal, Optional, Union
 
 import dask.array as da
 import pandas as pd
@@ -10,13 +10,19 @@ import scanpy as sc
 import zarr
 from anndata import AnnData
 from pandas.api.types import is_numeric_dtype
+from parse import *
 from scipy.sparse import csr_matrix
 
+from insitupy import __version__
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
                                         CellData, RegionsData)
 from insitupy._exceptions import InvalidFileTypeError
 from insitupy.utils.io import read_json
 from insitupy.utils.utils import decode_robust_series
+
+from ..utils.io import read_json
+from ..utils.utils import decode_robust_series
+from .dataclasses import AnnotationsData, BoundariesData, CellData, RegionsData
 
 
 def read_celldata(
@@ -219,3 +225,5 @@ def _read_binned_expression(
     gene_mask = [elem in gene_names_to_select for elem in gene_names]
     arr = arr[gene_mask]
     return arr
+
+
