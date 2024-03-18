@@ -488,6 +488,11 @@ class InSituData:
         # add new uid to uid history
         _self.metadata["uids"].append(str(uuid4()))
         
+        # empty current data and data history entry in metadata
+        _self.metadata["data"] = {}
+        for k in _self.metadata["history"].keys():
+            _self.metadata["history"][k] = []
+        
         if inplace:
             if hasattr(self, "viewer"):
                 del _self.viewer # delete viewer
@@ -1192,6 +1197,9 @@ class InSituData:
         # store basic information about experiment
         self.metadata["slide_id"] = self.slide_id
         self.metadata["sample_id"] = self.sample_id
+        
+        # clean old entries in data metadata
+        self.metadata["data"] = {}
         
         # save images
         try:
