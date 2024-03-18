@@ -165,17 +165,18 @@ def _generate_time_based_uid():
     uid = f"{time_str}-{short_uid}"
     return uid
 
-def convert_int_to_xenium_hex(value, final_length=8):
-    """Generate Xenium-style hexadecimal representation of integers.
+def convert_int_to_xenium_hex(value, dataset_suffix=1, final_length=8):
+    """Convert integers into Xenium-style hexadecimal representation.
     Described here: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/analysis/xoa-output-zarr#cellID
 
     Args:
         value (_type_): _description_
+        dataset_suffix (int, optional): _description_. Defaults to 1.
         final_length (int, optional): _description_. Defaults to 8.
 
     Returns:
         _type_: _description_
-    """    
+    """
     # generate hexadecimal representation
     hex_repr = hex(value)[2:]
     
@@ -184,10 +185,36 @@ def convert_int_to_xenium_hex(value, final_length=8):
     
     # add a to the beginning to fill to final length
     hex_repr = hex_repr.rjust(final_length, 'a')
+    
+    # add dataset suffix
+    hex_repr += f"-{dataset_suffix}"
+    
     return hex_repr
 
 def convert_xenium_hex_to_int(hex_repr):
-    # remove leading as
+    """Convert Xenium-style hexadecimal representation into integers.
+    Described here: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/analysis/xoa-output-zarr#cellID
+
+
+    Args:
+        hex_repr (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    # remove dataset suffix
+    hex_repr_split = hex_repr.split("-")
+    
+    # try to extract a dataset suffix
+    try:
+        dataset_suffix = int(hex_repr_split[1])
+    except IndexError:
+        dataset_suffix = None
+        
+    # extract the hex repr
+    hex_repr = hex_repr_split[0]
+    
+    # remove leading a
     hex_repr = hex_repr.lstrip("a")
     
     # convert xenium-modified hex to normal hex
@@ -195,4 +222,5 @@ def convert_xenium_hex_to_int(hex_repr):
     
     # generate decimal representation
     dec = int(hex_repr, 16)
-    return dec
+    
+    return dec, dataset_suffix
