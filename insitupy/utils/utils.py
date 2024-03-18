@@ -7,7 +7,7 @@ from numpy import ndarray
 from pandas.api.types import is_numeric_dtype, is_string_dtype
 from parse import datetime
 
-from insitupy._constants import HEX_CONV_DICT
+from insitupy._constants import HEX_TO_INT_CONV_DICT, INT_TO_HEX_CONV_DICT
 
 
 class textformat:
@@ -165,7 +165,7 @@ def _generate_time_based_uid():
     uid = f"{time_str}-{short_uid}"
     return uid
 
-def convert_to_xenium_hex(value, final_length=8):
+def convert_int_to_xenium_hex(value, final_length=8):
     """Generate Xenium-style hexadecimal representation of integers.
     Described here: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/analysis/xoa-output-zarr#cellID
 
@@ -179,9 +179,20 @@ def convert_to_xenium_hex(value, final_length=8):
     # generate hexadecimal representation
     hex_repr = hex(value)[2:]
     
-    # modify the 
-    hex_repr = "".join([str(HEX_CONV_DICT[elem]) for elem in hex_repr])
+    # convert normal hex to xenium-modified hex
+    hex_repr = "".join([str(INT_TO_HEX_CONV_DICT[elem]) for elem in hex_repr])
     
     # add a to the beginning to fill to final length
     hex_repr = hex_repr.rjust(final_length, 'a')
     return hex_repr
+
+def convert_xenium_hex_to_int(hex_repr):
+    # remove leading as
+    hex_repr = hex_repr.lstrip("a")
+    
+    # convert xenium-modified hex to normal hex
+    hex_repr = "".join([str(HEX_TO_INT_CONV_DICT[elem]) for elem in hex_repr])
+    
+    # generate decimal representation
+    dec = int(hex_repr, 16)
+    return dec
