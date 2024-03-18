@@ -517,34 +517,41 @@ class CellData(DeepCopyMixin):
         write_dict_to_json(dictionary=metadata, file=path / ".celldata")
             
     
-    # def sync_cell_ids(self):
-    #     '''
-    #     Function to synchronize matrix and boundaries of CellData.
+    def sync_cell_ids(self):
+        '''
+        Function to synchronize matrix and boundaries of CellData.
         
-    #     Procedure:
-    #     1. Select matrix cell IDs
-    #     2. Check if all matrix cell IDs are in boundaries
-    #         - if not all are in boundaries, throw error saying that those will also be removed
-    #     3. Select only matrix cell IDs which are also in boundaries and filter for them
-    #     '''
-    #     # get cell IDs from matrix
-    #     cell_ids = self.matrix.obs_names.astype(str)
+        Procedure:
+        1. Select matrix cell IDs
+        2. Check if all matrix cell IDs are in boundaries
+            - if not all are in boundaries, throw error saying that those will also be removed
+        3. Select only matrix cell IDs which are also in boundaries and filter for them
+        '''
+        # get cell IDs from matrix
+        cell_ids = self.matrix.obs_names.astype(str)
         
-    #     try:
-    #         boundaries = self.boundaries
-    #     except AttributeError:
-    #         print('No `boundaries` attribute found in CellData found.')
-    #         pass
-    #     else:
-    #         for n in ["cellular", "nuclear"]:
-    #             # get dataframe
-    #             df = getattr(boundaries, n)
+        try:
+            boundaries = self.boundaries
+        except AttributeError:
+            print('No `boundaries` attribute found in CellData found.')
+            pass
+        else:
+            for n in boundaries.metadata.keys():
+                # get data
+                bound_data = getattr(boundaries, n)
                 
-    #             # filter dataframe
-    #             df = df.loc[df["cell_id"].astype(str).isin(cell_ids), :]
+                if isinstance(bound_data, da.core.Array):
+                    pass
+                elif isinstance(bound_data, pd.DataFrame):                    
+                    # filter dataframe
+                    bound_data = bound_data.loc[bound_data["cell_id"].astype(str).isin(cell_ids), :]
+                    
+                    # add to object
+                    setattr(self.boundaries, n, bound_data)
+                else:
+                    warnings.warn(f"Unknown data type for boundaries key '{n}'. Skipped synchronization of cell ids.")
                 
-    #             # add to object
-    #             setattr(self.boundaries, n, df)
+                
             
     def shift(self, 
               x: Union[int, float], 

@@ -1,11 +1,13 @@
-from datetime import datetime
 import math
 import os
+from datetime import datetime
 from uuid import uuid4
 
 from numpy import ndarray
 from pandas.api.types import is_numeric_dtype, is_string_dtype
 from parse import datetime
+
+from insitupy._constants import HEX_CONV_DICT
 
 
 class textformat:
@@ -162,3 +164,24 @@ def _generate_time_based_uid():
     short_uid = str(uuid4()).split("-")[0]
     uid = f"{time_str}-{short_uid}"
     return uid
+
+def convert_to_xenium_hex(value, final_length=8):
+    """Generate Xenium-style hexadecimal representation of integers.
+    Described here: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/analysis/xoa-output-zarr#cellID
+
+    Args:
+        value (_type_): _description_
+        final_length (int, optional): _description_. Defaults to 8.
+
+    Returns:
+        _type_: _description_
+    """    
+    # generate hexadecimal representation
+    hex_repr = hex(value)[2:]
+    
+    # modify the 
+    hex_repr = "".join([str(HEX_CONV_DICT[elem]) for elem in hex_repr])
+    
+    # add a to the beginning to fill to final length
+    hex_repr = hex_repr.rjust(final_length, 'a')
+    return hex_repr
