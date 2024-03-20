@@ -20,6 +20,8 @@ from shapely.geometry.multipolygon import MultiPolygon
 from tifffile import TiffFile
 
 from insitupy import __version__
+from insitupy.utils.utils import (convert_int_to_xenium_hex,
+                                  convert_xenium_hex_to_int)
 
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
 from ..image.io import read_ome_tiff, write_ome_tiff
@@ -299,9 +301,15 @@ class BoundariesData(DeepCopyMixin):
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self,
+                 cell_ids: Optional[da.core.Array] = None,
+                 seg_mask_value: Optional[da.core.Array] = None,
                  #pixel_size: Number = 1, # required for boundaries that are saved as masks
                  ):
         self.metadata = {}
+        
+        # store cell ids
+        self.cell_ids = cell_ids
+        self.seg_mask_value = seg_mask_value
         
     def __repr__(self):
         labels = list(self.metadata.keys())
@@ -346,7 +354,6 @@ class BoundariesData(DeepCopyMixin):
                     raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
             else:
                 print(f"Boundaries element `{l}` is neither a pandas DataFrame nor a Dask Array. Was not added.")
-            
                 
     def crop(self,
              cell_ids: List[str],
@@ -472,16 +479,12 @@ class CellData(DeepCopyMixin):
             bound_path.mkdir(parents=True, exist_ok=True) # create directory
             
             metadata["boundaries"] = {}
-            for n in boundaries.metadata.keys():
-                bound_data = getattr(boundaries, n)
-                
-                if isinstance(bound_data, pd.DataFrame):
-                    bound_file = bound_path / f"{n}.parquet"
-                    bound_data.to_parquet(bound_file)
-                else:
-                    # it is assumed that it is a dask array or a list of dask arrays in this case
-                    bound_file = bound_path / f"{n}.zarr.zip"
-                    
+            metadata["boundaries"]["keys"] = []
+            bound_file = bound_path / f"boundaries.zarr.zip"
+            with zarr.ZipStore(bound_file, mode='w') as zipstore:
+                for n in boundaries.metadata.keys():
+                    bound_data = getattr(boundaries, n)
+                        
                     # check data
                     if isinstance(bound_data, list):
                         if not boundaries_as_pyramid:
@@ -489,34 +492,39 @@ class CellData(DeepCopyMixin):
                     else:
                         if boundaries_as_pyramid:
                             # create pyramid
-                            bound_data = create_img_pyramid(img=bound_data, nsubres=6)
+                            bound_data = create_img_pyramid(img=bound_data, nsubres=6)        
+                        
                     
-                    with zarr.ZipStore(bound_file, mode='w') as zipstore:
-                        #if isinstance(bound_data, dask.array.core.Array):
-                        if isinstance(bound_data, list):
-                            for i, b in enumerate(bound_data):
-                                b.to_zarr(zipstore, component=str(i))
-                        else:
-                            bound_data.to_zarr(zipstore)
-                            
-                        # add boundaries metadata to zarr.zip
-                        #with zarr.ZipStore(bound_file, mode="a") as zipstore:       
-                        # open zarr store save metadata in zarr store
-                        store = zarr.open(zipstore, mode="a")
-                        store.attrs.put(boundaries.metadata[n])
-                            
+                    #if isinstance(bound_data, dask.array.core.Array):
+                    if isinstance(bound_data, list):
+                        for i, b in enumerate(bound_data):
+                            comp = f"masks/{n}/{i}"
+                            b.to_zarr(zipstore, component=comp)
+                    else:
+                        bound_data.to_zarr(zipstore, component=f"masks/{n}")
+                        
+                    # add boundaries metadata to zarr.zip
+                    store = zarr.open(zipstore, mode="a")
+                    store[f"masks/{n}"].attrs.put(boundaries.metadata[n])
+                    
+                    # save keys in insitupy metadata
+                    metadata["boundaries"]["keys"].append(n)
+                
                 # save paths in insitupy metadata
-                metadata["boundaries"][n] = Path(relpath(bound_file, path)).as_posix()
-            
-
-
+                metadata["boundaries"]["path"] = Path(relpath(bound_file, path)).as_posix()
+                
+                boundaries.cell_ids.to_zarr(zipstore, component="cell_id")
+                
+                if boundaries.seg_mask_value is not None:
+                    boundaries.seg_mask_value.to_zarr(zipstore, component="seg_mask_value")
+                    
         # add more things to metadata
         metadata["version"] = __version__
         
         # save metadata
         write_dict_to_json(dictionary=metadata, file=path / ".celldata")
+        
             
-    
     def sync_cell_ids(self):
         '''
         Function to synchronize matrix and boundaries of CellData.
@@ -528,7 +536,10 @@ class CellData(DeepCopyMixin):
         3. Select only matrix cell IDs which are also in boundaries and filter for them
         '''
         # get cell IDs from matrix
-        cell_ids = self.matrix.obs_names.astype(str)
+        cell_ids_hex = self.matrix.obs_names.astype(str)
+        
+        # convert hex cell IDs into integers
+        #cell_ids_int = [convert_xenium_hex_to_int(elem)[0] for elem in cell_ids_hex]
         
         try:
             boundaries = self.boundaries
@@ -536,23 +547,30 @@ class CellData(DeepCopyMixin):
             print('No `boundaries` attribute found in CellData found.')
             pass
         else:
+            # retrieve cell_ids of boundaries
+            bound_cell_ids_int = boundaries.cell_ids[:,0].compute()
+            bound_cell_ids_hex = [convert_int_to_xenium_hex(elem, dataset_suffix=1) for elem in bound_cell_ids_int]
+            
+            # check which ids are not in 
+            not_in_matrix = boundaries.seg_mask_value[np.where([elem not in cell_ids_hex for elem in bound_cell_ids_hex])[0]].compute()
+            
             for n in boundaries.metadata.keys():
                 # get data
                 bound_data = getattr(boundaries, n)
                 
                 if isinstance(bound_data, da.core.Array):
-                    pass
+                    # set all non existent cell ids to zero
+                    bound_data[da.isin(bound_data, not_in_matrix)] = 0
                 elif isinstance(bound_data, pd.DataFrame):                    
                     # filter dataframe
-                    bound_data = bound_data.loc[bound_data["cell_id"].astype(str).isin(cell_ids), :]
+                    bound_data = bound_data.loc[bound_data["cell_id"].astype(str).isin(cell_ids_hex), :]
                     
-                    # add to object
-                    setattr(self.boundaries, n, bound_data)
+
                 else:
                     warnings.warn(f"Unknown data type for boundaries key '{n}'. Skipped synchronization of cell ids.")
+                # add to object
+                setattr(self.boundaries, n, bound_data)
                 
-                
-            
     def shift(self, 
               x: Union[int, float], 
               y: Union[int, float]

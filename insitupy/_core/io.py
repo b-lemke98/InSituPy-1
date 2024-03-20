@@ -12,6 +12,7 @@ from anndata import AnnData
 from pandas.api.types import is_numeric_dtype
 from parse import *
 from scipy.sparse import csr_matrix
+from zarr.errors import ArrayNotFoundError
 
 from insitupy import __version__
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
@@ -36,45 +37,46 @@ def read_celldata(
     # read matrix data
     matrix = sc.read_h5ad(path / celldata_metadata["matrix"])
     
+    # get path of boundaries data
+    bound_path = path / celldata_metadata["boundaries"]["path"]
+    
+    # read cell ids and seg_mask_values
+    cell_ids = da.from_zarr(bound_path, component="cell_id")
+    
+    try:
+        # in older datasets sometimes seg_mask_value is missing
+        seg_mask_value = da.from_zarr(bound_path, component="seg_mask_value")
+    except ArrayNotFoundError:
+        seg_mask_value = None
+    
     # create boundaries data
-    boundaries = BoundariesData()
+    boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
 
     # read boundaries data
-    boundaries_dict = {k: path / v for k,v in celldata_metadata["boundaries"].items()}
-    boundaries_dict = {}
-    for k,v in celldata_metadata["boundaries"].items():
-        suffix = v.split(".", 1)[-1] # necessary to do this with split because of the two dots in .zarr.zip
-        f = path / v
-        if suffix == "parquet":
-            d = pd.read_parquet(f)
-        elif suffix == "zarr.zip":
-            with zarr.ZipStore(f, mode="r") as zipstore:
-                # get components of zip store
-                components = zipstore.listdir()
-
-                if ".zarray" in components:
-                    # the store is an array which can be opened
-                    d = da.from_zarr(zipstore).persist()
-                else:
-                    subres = [elem for elem in components if not elem.startswith(".")]
-                    d = []
-                    for s in subres:
-                        d.append(da.from_zarr(zipstore, component=s).persist())
-                        
-                # retrieve boundaries metadata
-                store = zarr.open(zipstore)
-                meta = store.attrs.asdict()
-                
-                # add boundaries
-                boundaries.add_boundaries(data={k: d}, pixel_size=meta["pixel_size"])
-
-            #d = dask.array.from_zarr(f)
-        else:
-            raise ValueError(f"Boundaries saved in CellData object are neither .parquet nor .zarr.zip format: {suffix}")
-        boundaries_dict[k] = d
-
-    #boundaries = BoundariesData()
-    #boundaries.add_boundaries(data=boundaries_dict, pixel_size=pixel_size)
+    bound_data = {}
+    for k in celldata_metadata["boundaries"]["keys"]:            
+        with zarr.ZipStore(bound_path, mode="r") as zipstore:
+            # iterate through subresolutions
+            components = zipstore.listdir(f"masks/{k}")
+            
+            if ".zarray" in components:
+                bound_data[k] = da.from_zarr(zipstore).persist()
+            else:
+                # it is stored as pyramid -> initialize a list for the pyramid
+                bound_data[k] = []
+                for c in components:
+                    if not c.startswith("."):
+                        # append the pyramid to the list
+                        bound_data[k].append(da.from_zarr(zipstore, component=f"masks/{k}/{c}").persist())
+            
+            # retrieve boundaries metadata
+            store = zarr.open(zipstore)
+            meta = store[f"masks/{k}"].attrs.asdict()
+    
+    # add boundaries
+    boundaries.add_boundaries(data=bound_data,
+                                pixel_size=meta["pixel_size"]
+                                )
 
     # create CellData object
     celldata = CellData(matrix=matrix, boundaries=boundaries)
@@ -185,8 +187,20 @@ def _read_boundaries_from_xenium(
             "nuclear": da.from_zarr(cells_zarr_file, component="masks/0"),
             "cellular": da.from_zarr(cells_zarr_file, component="masks/1")
         }
+        
+        # read cell ids and seg mask value
+        # for info see: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/analysis/xoa-output-zarr#cells
+        cell_ids = da.from_zarr(cells_zarr_file, component="cell_id")
+        
+        try:
+            seg_mask_value = da.from_zarr(cells_zarr_file, component="seg_mask_value")
+        except ArrayNotFoundError:
+            seg_mask_value = None
 
-    boundaries.add_boundaries(data=data_dict, pixel_size=pixel_size)
+    boundaries.add_boundaries(data=data_dict, 
+                              cell_ids=cell_ids, 
+                              seg_mask_value=seg_mask_value, 
+                              pixel_size=pixel_size)
 
     return boundaries
 
