@@ -391,7 +391,6 @@ class BoundariesData(DeepCopyMixin):
             # add to object
             setattr(self, n, data)
             
-                
     def convert_to_shapely_objects(self):
         for n in self.metadata.keys():
             print(f"Converting `{n}` to GeoPandas DataFrame with shapely objects.")
@@ -411,6 +410,60 @@ class BoundariesData(DeepCopyMixin):
                 setattr(self, n, pd.DataFrame(df))
             else:
                 print(f"Boundaries element `{n} was no Dataframe. Skipped.")
+                
+    def save(self, 
+             bound_file : Union[str, os.PathLike, Path] = "boundaries.zarr.zip", 
+             save_as_pyramid: bool = True
+             ):
+        
+        suffix = bound_file.name.split(".", maxsplit=1)[-1]
+        
+        if not suffix == "zarr.zip":
+            raise InvalidFileTypeError(allowed_types=[".zarr.zip"], received_type=suffix)
+        
+        with zarr.ZipStore(bound_file, mode='w') as zipstore:
+            for n in self.metadata.keys():
+                bound_data = getattr(self, n)
+                    
+                # check data
+                if isinstance(bound_data, list):
+                    if not save_as_pyramid:
+                        bound_data = bound_data[0]
+                else:
+                    if save_as_pyramid:
+                        # create pyramid
+                        bound_data = create_img_pyramid(img=bound_data, nsubres=6)        
+                    
+                
+                #if isinstance(bound_data, dask.array.core.Array):
+                if isinstance(bound_data, list):
+                    for i, b in enumerate(bound_data):
+                        comp = f"masks/{n}/{i}"
+                        b.to_zarr(zipstore, component=comp)
+                else:
+                    bound_data.to_zarr(zipstore, component=f"masks/{n}")
+                    
+                # add boundaries metadata to zarr.zip
+                store = zarr.open(zipstore, mode="a")
+                store[f"masks/{n}"].attrs.put(self.metadata[n])
+                
+                # save keys in insitupy metadata
+                #metadata["boundaries"]["keys"].append(n)
+            
+            # save paths in insitupy metadata
+            #metadata["boundaries"]["path"] = Path(relpath(bound_file, path)).as_posix()
+            
+            self.cell_ids.to_zarr(zipstore, component="cell_id")
+            
+            if self.seg_mask_value is not None:
+                self.seg_mask_value.to_zarr(zipstore, component="seg_mask_value")
+                    
+        # # add version to metadata
+        # metadata_to_save = self.metadata.copy()
+        # metadata_to_save["version"] = __version__
+        
+        # # save metadata
+        # write_dict_to_json(dictionary=metadata_to_save, file=path / ".boundariesdata")
 
 class CellData(DeepCopyMixin):
     '''
@@ -455,19 +508,22 @@ class CellData(DeepCopyMixin):
              ):
         
         path = Path(path)
-        metadata = {}
+        celldata_metadata = {}
         
         # check if the output file should be overwritten
         check_overwrite_and_remove_if_true(path, overwrite=overwrite)
         
-        # create path for matrix
-        mtx_path = path / "matrix"
-        mtx_path.mkdir(parents=True, exist_ok=True) # create directory
+        # create directory
+        path.mkdir(parents=True, exist_ok=True)
+        
+        # # create path for matrix
+        # mtx_path = path / "matrix"
+        # mtx_path.mkdir(parents=True, exist_ok=True) # create directory
         
         # write matrix to file
-        mtx_file = mtx_path / "matrix.h5ad"
+        mtx_file = path / "matrix.h5ad"
         self.matrix.write(mtx_file)
-        metadata["matrix"] = Path(relpath(mtx_file, path)).as_posix()
+        celldata_metadata["matrix"] = Path(relpath(mtx_file, path)).as_posix()
         
         # save boundaries
         try:
@@ -475,54 +531,58 @@ class CellData(DeepCopyMixin):
         except AttributeError:
             pass
         else:
-            bound_path = (path / "boundaries")
-            bound_path.mkdir(parents=True, exist_ok=True) # create directory
+            bound_file = path / "boundaries.zarr.zip"
+            boundaries.save(bound_file, save_as_pyramid=True)
             
-            metadata["boundaries"] = {}
-            metadata["boundaries"]["keys"] = []
-            bound_file = bound_path / f"boundaries.zarr.zip"
-            with zarr.ZipStore(bound_file, mode='w') as zipstore:
-                for n in boundaries.metadata.keys():
-                    bound_data = getattr(boundaries, n)
+            # add entry for boundaries to metadata
+            celldata_metadata["boundaries"] = Path(relpath(bound_file, path)).as_posix()
+            # bound_path.mkdir(parents=True, exist_ok=True) # create directory
+            
+            # metadata["boundaries"] = {}
+            # metadata["boundaries"]["keys"] = []
+            # bound_file = bound_path / "boundaries.zarr.zip"
+            # with zarr.ZipStore(bound_file, mode='w') as zipstore:
+            #     for n in boundaries.metadata.keys():
+            #         bound_data = getattr(boundaries, n)
                         
-                    # check data
-                    if isinstance(bound_data, list):
-                        if not boundaries_as_pyramid:
-                            bound_data = bound_data[0]
-                    else:
-                        if boundaries_as_pyramid:
-                            # create pyramid
-                            bound_data = create_img_pyramid(img=bound_data, nsubres=6)        
+            #         # check data
+            #         if isinstance(bound_data, list):
+            #             if not boundaries_as_pyramid:
+            #                 bound_data = bound_data[0]
+            #         else:
+            #             if boundaries_as_pyramid:
+            #                 # create pyramid
+            #                 bound_data = create_img_pyramid(img=bound_data, nsubres=6)        
                         
                     
-                    #if isinstance(bound_data, dask.array.core.Array):
-                    if isinstance(bound_data, list):
-                        for i, b in enumerate(bound_data):
-                            comp = f"masks/{n}/{i}"
-                            b.to_zarr(zipstore, component=comp)
-                    else:
-                        bound_data.to_zarr(zipstore, component=f"masks/{n}")
+            #         #if isinstance(bound_data, dask.array.core.Array):
+            #         if isinstance(bound_data, list):
+            #             for i, b in enumerate(bound_data):
+            #                 comp = f"masks/{n}/{i}"
+            #                 b.to_zarr(zipstore, component=comp)
+            #         else:
+            #             bound_data.to_zarr(zipstore, component=f"masks/{n}")
                         
-                    # add boundaries metadata to zarr.zip
-                    store = zarr.open(zipstore, mode="a")
-                    store[f"masks/{n}"].attrs.put(boundaries.metadata[n])
+            #         # add boundaries metadata to zarr.zip
+            #         store = zarr.open(zipstore, mode="a")
+            #         store[f"masks/{n}"].attrs.put(boundaries.metadata[n])
                     
-                    # save keys in insitupy metadata
-                    metadata["boundaries"]["keys"].append(n)
+            #         # save keys in insitupy metadata
+            #         metadata["boundaries"]["keys"].append(n)
                 
-                # save paths in insitupy metadata
-                metadata["boundaries"]["path"] = Path(relpath(bound_file, path)).as_posix()
+            #     # save paths in insitupy metadata
+            #     metadata["boundaries"]["path"] = Path(relpath(bound_file, path)).as_posix()
                 
-                boundaries.cell_ids.to_zarr(zipstore, component="cell_id")
+            #     boundaries.cell_ids.to_zarr(zipstore, component="cell_id")
                 
-                if boundaries.seg_mask_value is not None:
-                    boundaries.seg_mask_value.to_zarr(zipstore, component="seg_mask_value")
+            #     if boundaries.seg_mask_value is not None:
+            #         boundaries.seg_mask_value.to_zarr(zipstore, component="seg_mask_value")
                     
-        # add more things to metadata
-        metadata["version"] = __version__
+        # add version to metadata
+        celldata_metadata["version"] = __version__
         
         # save metadata
-        write_dict_to_json(dictionary=metadata, file=path / ".celldata")
+        write_dict_to_json(dictionary=celldata_metadata, file=path / ".celldata")
         
             
     def sync_cell_ids(self):

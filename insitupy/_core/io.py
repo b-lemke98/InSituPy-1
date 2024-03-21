@@ -38,7 +38,7 @@ def read_celldata(
     matrix = sc.read_h5ad(path / celldata_metadata["matrix"])
     
     # get path of boundaries data
-    bound_path = path / celldata_metadata["boundaries"]["path"]
+    bound_path = path / celldata_metadata["boundaries"]
     
     # read cell ids and seg_mask_values
     cell_ids = da.from_zarr(bound_path, component="cell_id")
@@ -49,34 +49,36 @@ def read_celldata(
     except ArrayNotFoundError:
         seg_mask_value = None
     
-    # create boundaries data
+    # create boundaries data object
     boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
 
-    # read boundaries data
+    # retrieve the boundaries data
     bound_data = {}
-    for k in celldata_metadata["boundaries"]["keys"]:            
-        with zarr.ZipStore(bound_path, mode="r") as zipstore:
-            # iterate through subresolutions
-            components = zipstore.listdir(f"masks/{k}")
-            
-            if ".zarray" in components:
-                bound_data[k] = da.from_zarr(zipstore).persist()
-            else:
-                # it is stored as pyramid -> initialize a list for the pyramid
-                bound_data[k] = []
-                for c in components:
-                    if not c.startswith("."):
-                        # append the pyramid to the list
-                        bound_data[k].append(da.from_zarr(zipstore, component=f"masks/{k}/{c}").persist())
-            
-            # retrieve boundaries metadata
-            store = zarr.open(zipstore)
-            meta = store[f"masks/{k}"].attrs.asdict()
+    meta = {}
+    with zarr.ZipStore(bound_path, mode="r") as zipstore:
+        for k in zipstore.listdir("masks"):
+            if not k.startswith("."):
+                # iterate through subresolutions
+                subresolutions = zipstore.listdir(f"masks/{k}")
+                
+                if ".zarray" in subresolutions:
+                    bound_data[k] = da.from_zarr(zipstore).persist()
+                else:
+                    # it is stored as pyramid -> initialize a list for the pyramid
+                    bound_data[k] = []
+                    for subres in subresolutions:
+                        if not subres.startswith("."):
+                            # append the pyramid to the list
+                            bound_data[k].append(da.from_zarr(zipstore, component=f"masks/{k}/{subres}").persist())
+                
+                # retrieve boundaries metadata
+                store = zarr.open(zipstore)
+                meta[k] = store[f"masks/{k}"].attrs.asdict()
     
     # add boundaries
     boundaries.add_boundaries(data=bound_data,
-                                pixel_size=meta["pixel_size"]
-                                )
+                              pixel_size=meta[k]["pixel_size"]
+                              )
 
     # create CellData object
     celldata = CellData(matrix=matrix, boundaries=boundaries)
@@ -153,9 +155,6 @@ def _read_boundaries_from_xenium(
     # # read boundaries data
     path = Path(path)
 
-    # create boundariesdata object
-    boundaries = BoundariesData()
-
     if mode == "dataframe":
         files=["cell_boundaries.parquet", "nucleus_boundaries.parquet"]
         labels=["cellular", "nuclear"]
@@ -178,6 +177,9 @@ def _read_boundaries_from_xenium(
 
             # collect dataframe
             data_dict[n] = df
+            
+        # create boundariesdata object
+        boundaries = BoundariesData()
 
     else:
         cells_zarr_file = path / "cells.zarr.zip"
@@ -196,10 +198,11 @@ def _read_boundaries_from_xenium(
             seg_mask_value = da.from_zarr(cells_zarr_file, component="seg_mask_value")
         except ArrayNotFoundError:
             seg_mask_value = None
+            
+        # create boundariesdata object
+        boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
 
     boundaries.add_boundaries(data=data_dict, 
-                              cell_ids=cell_ids, 
-                              seg_mask_value=seg_mask_value, 
                               pixel_size=pixel_size)
 
     return boundaries
