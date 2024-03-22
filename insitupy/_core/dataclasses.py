@@ -655,6 +655,8 @@ class CellData(DeepCopyMixin):
                 # add to object
                 setattr(self.boundaries, n, synced_bound_data)
 
+            print(f"Successfully synchronized.")
+
     def shift(self,
               x: Union[int, float],
               y: Union[int, float]

@@ -3,7 +3,6 @@ import gc
 import json
 import os
 import shutil
-import warnings
 from datetime import datetime
 from math import ceil
 from numbers import Number
@@ -11,6 +10,7 @@ from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
+from warnings import warn
 
 import dask.array as da
 import geopandas as gpd
@@ -210,8 +210,8 @@ class InSituData:
         Annotation information is added to the DataFrame in `.obs`.
         '''
         # assert that prerequisites are met
-        assert hasattr(self, "cells"), "No .cells attribute available. Run `read_cells()`."
-        assert hasattr(self, "annotations"), "No .annotations attribute available. Run `read_annotations()`."
+        assert hasattr(self, "cells"), "No .cells attribute available. Run `load_cells()`."
+        assert hasattr(self, "annotations"), "No .annotations attribute available. Run `load_annotations()`."
 
         if annotation_keys == "all":
             annotation_keys = self.annotations.metadata.keys()
@@ -712,12 +712,12 @@ class InSituData:
             plt.savefig(save)
         plt.show()
 
-    def read_all(self,
+    def load_all(self,
                  skip: Optional[str] = None,
                  ):
         # extract read functions
-        read_funcs = [elem for elem in dir(self) if elem.startswith("read_")]
-        read_funcs = [elem for elem in read_funcs if elem != "read_all"]
+        read_funcs = [elem for elem in dir(self) if elem.startswith("load_")]
+        read_funcs = [elem for elem in read_funcs if elem not in ["load_all", "load_quicksave"]]
 
         for f in read_funcs:
             if skip is None or skip not in f:
@@ -727,7 +727,7 @@ class InSituData:
                 except ModalityNotFoundError as err:
                     print(err)
 
-    def read_annotations(self,
+    def load_annotations(self,
                     files: Optional[Union[str, os.PathLike, Path]] = None, # "../annotations",
                     keys: Optional[str] = None,
                     #suffix: str = ".geojson",
@@ -751,7 +751,7 @@ class InSituData:
             # add annotations object
             self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata["xenium"]['pixel_size'])
 
-    def read_regions(self,
+    def load_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]] = None, # "../regions",
                     keys: Optional[str] = None,
                     #suffix: str = ".geojson",
@@ -779,7 +779,7 @@ class InSituData:
             self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata["xenium"]['pixel_size'])
 
 
-    def read_cells(self):
+    def load_cells(self):
         print("Reading cells...", flush=True)
         pixel_size = self.metadata["xenium"]["pixel_size"]
         if self.from_insitudata:
@@ -815,7 +815,7 @@ class InSituData:
             self.cells.matrix.varm["binned_expression"] = arr
 
 
-    def read_images(self,
+    def load_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
                     nuclei_type: Literal["focus", "mip", ""] = "mip"
                     ):
@@ -856,7 +856,7 @@ class InSituData:
         print("Reading images...", flush=True)
         self.images = ImageData(self.path, img_files, img_names, pixel_size=self.metadata["xenium"]['pixel_size'])
 
-    def read_transcripts(self,
+    def load_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
                         ):
         if self.from_insitudata:
@@ -1023,7 +1023,7 @@ class InSituData:
                     image = image[0]
 
                 # read images in XeniumData object
-                self.read_images(names="nuclei")
+                self.load_images(names="nuclei")
                 template = self.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
 
                 # extract OME metadata
@@ -1165,7 +1165,7 @@ class InSituData:
                 gc.collect()
 
         # read images
-        self.read_images()
+        self.load_images()
 
     def saveas(self,
             path: Union[str, os.PathLike, Path],
@@ -1312,12 +1312,12 @@ class InSituData:
                     if current_uid == project_uid:
                         self._update_to_existing_project(path=path)
                     else:
-                        warnings.warn(
+                        warn(
                             f"UID of current object {current_uid} not identical with UID in project path {path}: {project_uid}.\n"
                             f"Project is neither saved nor updated. Try `saveas()` instead to save the data to a new project folder."
                         )
                 else:
-                    warnings.warn(
+                    warn(
                         f"No `.ispy` metadata file in {path}. Directory is probably no valid InSituPy project. "
                         f"Use `saveas()` instead to save the data to a new InSituPy project."
                         )
@@ -1329,14 +1329,14 @@ class InSituData:
                 path = Path(self.metadata["path"])
                 self._update_to_existing_project(path=path)
             else:
-                warnings.warn(
+                warn(
                     f"Data as not loaded from an InSituPy project. "
                     f"Use `saveas()` instead to save the data to a new project folder."
                     )
             # try:
             #     path = Path(self.metadata["path"])
             # except KeyError:
-            #     warnings.warn(
+            #     warn(
             #         f"Metadata of current object does not contain the key 'path', "
             #         f"meaning that it is no valid InSituPy project. Try `saveas()` instead to save the data to a new project folder."
             #         )
@@ -1536,7 +1536,7 @@ class InSituData:
         try:
             image_keys = self.images.metadata.keys()
         except AttributeError:
-            warnings.warn("No attribute `.images` found.")
+            warn("No attribute `.images` found.")
         else:
             n_grayscales = 0 # number of grayscale images
             for i, img_name in enumerate(image_keys):
@@ -1859,6 +1859,25 @@ class InSituData:
         else:
             return fig, axs
 
+    ### DEPRECATED FUNCTIONS
+    def read_all(self):
+        warn("`read_all` is deprecated. Use `load_all` instead.", DeprecationWarning, stacklevel=2)
+
+    def read_annotations(self):
+        warn("`read_annotations` is deprecated. Use `load_annotations` instead.", DeprecationWarning, stacklevel=2)
+
+    def read_regions(self):
+        warn("`read_regions` is deprecated. Use `load_regions` instead.", DeprecationWarning, stacklevel=2)
+
+    def read_cells(self):
+        warn("`read_cells` is deprecated. Use `load_cells` instead.", DeprecationWarning, stacklevel=2)
+
+    def read_images(self):
+        warn("`read_images` is deprecated. Use `load_images` instead.", DeprecationWarning, stacklevel=2)
+
+    def read_transcripts(self):
+        warn("`read_transcripts` is deprecated. Use `load_transcripts` instead.", DeprecationWarning, stacklevel=2)
+
 
 def read_xenium(
     path: Union[str, os.PathLike, Path],
@@ -1946,5 +1965,5 @@ def read_xenium(
 
 class XeniumData:
     def __init__(self, *args, **kwargs):
-        warnings.warn("`XeniumData` is deprecated. Use `read_xenium` instead. This reads Xenium data and stores it into an `InSituData` object.")
+        warn("`XeniumData` is deprecated. Use `read_xenium` instead. This reads Xenium data and stores it into an `InSituData` object.", DeprecationWarning, stacklevel=2)
         return read_xenium(*args, **kwargs)
