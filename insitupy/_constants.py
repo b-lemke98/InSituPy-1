@@ -13,5 +13,5 @@ CACHE = Path.home() / ".cache/InSituPy/"
 ISPY_METADATA_FILE = ".ispy"
 XENIUM_HEX_RANGE = string.ascii_lowercase[:16]
 NORMAL_HEX_RANGE = "".join([str(e) for e in range(10)]) + string.ascii_lowercase[:6]
-INT_TO_HEX_CONV_DICT = {k:v for k,v in zip(NORMAL_HEX_RANGE, XENIUM_HEX_RANGE)}
-HEX_TO_INT_CONV_DICT = {v:k for k,v in zip(NORMAL_HEX_RANGE, XENIUM_HEX_RANGE)}
+XENIUM_INT_TO_HEX_CONV_DICT = {k:v for k,v in zip(NORMAL_HEX_RANGE, XENIUM_HEX_RANGE)}
+XENIUM_HEX_TO_INT_CONV_DICT = {v:k for k,v in zip(NORMAL_HEX_RANGE, XENIUM_HEX_RANGE)}

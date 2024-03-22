@@ -36,19 +36,19 @@ def read_celldata(
 
     # read matrix data
     matrix = sc.read_h5ad(path / celldata_metadata["matrix"])
-    
+
     # get path of boundaries data
     bound_path = path / celldata_metadata["boundaries"]
-    
+
     # read cell ids and seg_mask_values
     cell_ids = da.from_zarr(bound_path, component="cell_id")
-    
+
     try:
         # in older datasets sometimes seg_mask_value is missing
         seg_mask_value = da.from_zarr(bound_path, component="seg_mask_value")
     except ArrayNotFoundError:
         seg_mask_value = None
-    
+
     # create boundaries data object
     boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
 
@@ -60,7 +60,7 @@ def read_celldata(
             if not k.startswith("."):
                 # iterate through subresolutions
                 subresolutions = zipstore.listdir(f"masks/{k}")
-                
+
                 if ".zarray" in subresolutions:
                     bound_data[k] = da.from_zarr(zipstore).persist()
                 else:
@@ -70,11 +70,11 @@ def read_celldata(
                         if not subres.startswith("."):
                             # append the pyramid to the list
                             bound_data[k].append(da.from_zarr(zipstore, component=f"masks/{k}/{subres}").persist())
-                
+
                 # retrieve boundaries metadata
                 store = zarr.open(zipstore)
                 meta[k] = store[f"masks/{k}"].attrs.asdict()
-    
+
     # add boundaries
     boundaries.add_boundaries(data=bound_data,
                               pixel_size=meta[k]["pixel_size"]
@@ -177,7 +177,7 @@ def _read_boundaries_from_xenium(
 
             # collect dataframe
             data_dict[n] = df
-            
+
         # create boundariesdata object
         boundaries = BoundariesData()
 
@@ -189,20 +189,20 @@ def _read_boundaries_from_xenium(
             "nuclear": da.from_zarr(cells_zarr_file, component="masks/0"),
             "cellular": da.from_zarr(cells_zarr_file, component="masks/1")
         }
-        
+
         # read cell ids and seg mask value
         # for info see: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/analysis/xoa-output-zarr#cells
         cell_ids = da.from_zarr(cells_zarr_file, component="cell_id")
-        
+
         try:
             seg_mask_value = da.from_zarr(cells_zarr_file, component="seg_mask_value")
         except ArrayNotFoundError:
             seg_mask_value = None
-            
+
         # create boundariesdata object
         boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
 
-    boundaries.add_boundaries(data=data_dict, 
+    boundaries.add_boundaries(data=data_dict,
                               pixel_size=pixel_size)
 
     return boundaries
