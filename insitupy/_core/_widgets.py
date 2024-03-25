@@ -24,9 +24,9 @@ from ..utils.utils import convert_to_list
 from ._layers import _add_annotations_as_layer
 
 
-def _create_points_layer(points, 
-                         color_values: List[Number], 
-                         name: str, 
+def _create_points_layer(points,
+                         color_values: List[Number],
+                         name: str,
                          point_names: List[str],
                          point_size: int = 6, # is in scale unit (so mostly µm)
                          opacity: float = 1,
@@ -34,7 +34,7 @@ def _create_points_layer(points,
                          edge_width: float = 0,
                          edge_color: str = 'red'
                          ) -> LayerDataTuple:
-    
+
     # remove entries with NaN
     mask = pd.notnull(color_values)
     color_values = color_values[mask]
@@ -46,7 +46,7 @@ def _create_points_layer(points,
         categorical = False # if the data is numeric it should be plotted continous
     else:
         categorical = True # if the data is not numeric it should be plotted categorically
-        
+
     if categorical:
         # get color cycle for categorical data
         color_mode = "cycle"
@@ -59,10 +59,10 @@ def _create_points_layer(points,
         color_map = "viridis"
         color_cycle = None
         climits = [0, np.percentile(color_values, 95)]
-    
+
     # generate point layer
     layer = (
-        points, 
+        points,
         {
             'name': name,
             'properties': {
@@ -82,7 +82,7 @@ def _create_points_layer(points,
             'visible': visible,
             'edge_width': edge_width,
             'edge_color': edge_color
-            }, 
+            },
         'points'
         )
     return layer
@@ -91,10 +91,10 @@ def _create_points_layer(points,
 def _initialize_widgets(
     xdata # xenium data object
     ) -> List[FunctionGui]:
-    
+
     # access viewer from xeniumdata
     viewer = xdata.viewer
-    
+
     if not hasattr(xdata, "cells"):
         add_points_widget = None
         move_to_cell_widget = None
@@ -104,10 +104,10 @@ def _initialize_widgets(
         config.init_data_name()
         # initialize viewer configuration
         #config_mod.get_data_name(data_widget=select_data)
-        config.update_viewer_config(xdata=xdata, 
+        config.update_viewer_config(xdata=xdata,
                                     #data_name=config.current_data_name
                                     )
-        
+
         data_names = ["main"]
         try:
             alt = xdata.alt
@@ -116,7 +116,7 @@ def _initialize_widgets(
         else:
             for k in alt.keys():
                 data_names.append(k)
-                
+
         @magicgui(
             call_button=False,
             data_name= {'choices': data_names, 'label': 'Dataset:'}
@@ -126,15 +126,15 @@ def _initialize_widgets(
         ):
             #print(data_name)
             pass
-            
+
         # connect key change with update function
         @select_data.data_name.changed.connect
         def update_widgets_on_data_change(event=None):
             config.current_data_name = select_data.data_name.value
-            config._refresh_widgets_after_data_change(xdata, 
-                                                  add_points_widget, 
+            config._refresh_widgets_after_data_change(xdata,
+                                                  add_points_widget,
                                                   add_boundaries_widget)
-        
+
         if len(config.masks) > 0:
             @magicgui(
                 call_button='Add',
@@ -144,28 +144,28 @@ def _initialize_widgets(
                 key
             ):
                 layer_name = f"{config.current_data_name}-{key}"
-                
+
                 if layer_name not in viewer.layers:
                     # get geopandas dataframe with regions
                     mask = getattr(config.boundaries, key)
-                    
+
                     # get metadata for mask
                     metadata = config.boundaries.metadata
                     pixel_size = metadata[key]["pixel_size"]
-                    
+
                     if not isinstance(mask, list):
                         # generate pyramid of the mask
                         mask_pyramid = create_img_pyramid(img=mask, nsubres=6)
                     else:
                         mask_pyramid = mask
-                    
+
                     # add masks as labels to napari viewer
                     viewer.add_labels(mask_pyramid, name=layer_name, scale=(pixel_size,pixel_size))
                 else:
                     print(f"Layer '{layer_name}' already in layer list.", flush=True)
         else:
             add_boundaries_widget = None
-        
+
         @magicgui(
             call_button='Add',
             gene={'choices': config.genes, 'label': "Gene:"},
@@ -178,17 +178,17 @@ def _initialize_widgets(
             size=6,
             viewer=viewer
             ) -> napari.types.LayerDataTuple:
-            
+
             # get names of cells
             cell_names = config.adata.obs_names.values
-            
+
             layers = []
             if gene is not None:
                 if gene not in viewer.layers:
                     # get expression values
                     gene_loc = config.adata.var_names.get_loc(gene)
                     color_value_gene = config.X[:, gene_loc]
-                    
+
                     # create points layer for genes
                     gene_layer = _create_points_layer(
                         points=config.points,
@@ -200,12 +200,12 @@ def _initialize_widgets(
                     layers.append(gene_layer)
                 else:
                     print(f"Key '{gene}' already in layer list.", flush=True)
-            
+
             if observation is not None:
                 if observation not in viewer.layers:
                     # get observation values
                     color_value_obs = config.adata.obs[observation].values
-                    
+
                     # create points layer for observations
                     obs_layer = _create_points_layer(
                         points=config.points,
@@ -217,9 +217,9 @@ def _initialize_widgets(
                     layers.append(obs_layer)
                 else:
                     print(f"Key '{observation}' already in layer list.", flush=True)
-                    
+
             return layers
-        
+
         @magicgui(
             call_button='Show',
             cell={'label': "Cells:"},
@@ -236,11 +236,11 @@ def _initialize_widgets(
                 # get location of selected cell
                 cell_loc = config.adata.obs_names.get_loc(cell)
                 cell_position = config.points[cell_loc]
-            
+
                 # move center of camera to cell position
                 viewer.camera.center = (0, cell_position[0], cell_position[1])
                 viewer.camera.zoom = zoom
-                
+
                 if highlight:
                     name = f"cell-{cell}"
                     if name not in viewer.layers:
@@ -255,7 +255,7 @@ def _initialize_widgets(
                         )
             else:
                 print(f"Cell '{cell}' not found in `xeniumdata.cells.matrix.obs_names()`.")
-                
+
         def callback(event=None):
             # after the points widget is run, the widgets have to be refreshed to current data layer
             config._refresh_widgets_after_data_change(xdata,
@@ -266,14 +266,14 @@ def _initialize_widgets(
             add_points_widget.call_button.clicked.connect(callback)
         if add_boundaries_widget is not None:
             add_boundaries_widget.call_button.clicked.connect(callback)
-        
-    
+
+
     if not hasattr(xdata, "regions"):
         add_region_widget = None
     else:
         # get colormap for regions
         cmap_regions = matplotlib.colormaps["tab10"]
-        
+
         def _update_region_on_key_change(widget):
             current_key = widget.key.value
             widget.region.choices = sorted(xdata.regions.metadata[current_key]['classes'])
@@ -283,7 +283,7 @@ def _initialize_widgets(
         region_keys = list(xdata.regions.metadata.keys())
         first_region_key = list(region_keys)[0] # for dropdown menu
         #first_regions = xdata.regions.metadata[first_region_key]['classes']
-        
+
         @magicgui(
             call_button='Show',
             key={"choices": region_keys, "label": "Key:"},
@@ -295,14 +295,14 @@ def _initialize_widgets(
             # region
             ):
             layer_name = f"region-{key}"
-            
+
             if layer_name not in viewer.layers:
                 # get geopandas dataframe with regions
                 reg_df = getattr(xdata.regions, key)
-                
+
                 # simplify polygons for visualization
                 reg_df["geometry"] = reg_df["geometry"].simplify(tolerance)
-                
+
                 # iterate through shapes and collect them as list
                 shapes_list = []
                 uids_list = []
@@ -310,25 +310,25 @@ def _initialize_widgets(
                 for uid, row in reg_df.iterrows():
                     # get coordinates
                     polygon = row["geometry"]
-                    
+
                     if isinstance(polygon, MultiPolygon):
                         raise TypeError("Region is a shapely 'MultiPolygon'. This is not supported in regions. Make sure to only have simple polygons as regions.")
-                    
+
                     # extract exterior coordinates from shapely object
                     # Note: the last coordinate is removed since it is identical with the first
                     # in shapely objects, leading sometimes to visualization bugs in napari
                     exterior_array = np.array([polygon.exterior.coords.xy[1].tolist()[:-1],
                                             polygon.exterior.coords.xy[0].tolist()[:-1]]).T
-                    
+
                     # collect data
                     shapes_list.append(exterior_array)
                     uids_list.append(uid)
                     names_list.append(row["name"])
-                    
+
                 # determine hexcolor for this region key
                 hexcolor = rgb2hex([elem / 255 for elem in cmap_regions(region_keys.index(key))])
                 hexcolor = rgb2hex(cmap_regions(region_keys.index(key)))
-                
+
                 text = {
                     'string': '{name}',
                     'anchor': 'upper_left',
@@ -336,7 +336,7 @@ def _initialize_widgets(
                     'size': 8,
                     'color': hexcolor,
                     }
-                
+
                 viewer.add_shapes(
                     shapes_list,
                     name=layer_name,
@@ -352,15 +352,15 @@ def _initialize_widgets(
                     )
             else:
                 print(f"Key '{key}' already in layer list.")
-                
+
                 # restore original configuration of dropdown lists
                 #add_region_widget.key.value = first_region_key
                 #add_region_widget.region.choices = first_regions
-                
+
         @add_region_widget.key.changed.connect
         def update_region_on_key_change(event=None):
             _update_region_on_key_change(add_region_widget)
-            
+
     if not hasattr(xdata, "annotations"):
         show_annotations_widget = None
     else:
@@ -368,61 +368,61 @@ def _initialize_widgets(
         cmap_annotations = "Dark2"
         cmap_annot = matplotlib.colormaps[cmap_annotations]
         cc_annot = cmap_annot.colors
-        
+
         def _update_classes_on_key_change(widget):
             current_key = widget.key.value
             widget.annot_class.choices = ["all"] + sorted(xdata.annotations.metadata[current_key]['classes'])
-        
+
         # extract region keys
         annot_keys = list(xdata.annotations.metadata.keys())
         first_annot_key = list(annot_keys)[0] # for dropdown menu
         first_classes = ["all"] + sorted(xdata.annotations.metadata[first_annot_key]['classes'])
-        
+
         @magicgui(
             call_button='Show',
             key={"choices": annot_keys, "label": "Key:"},
             annot_class={"choices": first_classes, "label": "Class:"}
         )
-        def show_annotations_widget(key, 
+        def show_annotations_widget(key,
                                    annot_class,
                                    tolerance: Number = 2
                                    ):
-            
+
             # get annotation dataframe
             annot_df = getattr(xdata.annotations, key)
-            
+
             if annot_class == "all":
                 # get classes
                 classes = annot_df['name'].unique()
             else:
                 classes = [annot_class]
-            
+
             # iterate through classes
             for cl in classes:
                 # generate layer name
                 layer_name = f"*{cl} ({key})"
-                
+
                 if layer_name not in viewer.layers:
                     # get dataframe for this class
                     class_df = annot_df[annot_df["name"] == cl]
-                    
+
                     # simplify polygons for visualization
                     class_df["geometry"] = class_df["geometry"].simplify(tolerance)
-                    
+
                     # add layer to viewer
                     _add_annotations_as_layer(
                         dataframe=class_df,
                         viewer=viewer,
                         layer_name=layer_name
                     )
-            
+
         # connect key change with update function
         @show_annotations_widget.key.changed.connect
         def update_classes_on_key_change(event=None):
             _update_classes_on_key_change(show_annotations_widget)
-        
-        
-    
+
+
+
     return add_points_widget, move_to_cell_widget, add_region_widget, show_annotations_widget, add_boundaries_widget, select_data #add_genes, add_observations
 
 
@@ -452,12 +452,12 @@ def add_new_annotations_widget(
                 'properties': {
                     'uid': np.array([], dtype='object')
                 }
-                }, 
+                },
             'shapes'
             )
-        
+
         add_new_annotations_widget.class_name.value = ""
-        
+
         return layer
 
     else:

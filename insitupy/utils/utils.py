@@ -1,11 +1,14 @@
-from datetime import datetime
 import math
 import os
+from datetime import datetime
 from uuid import uuid4
 
 from numpy import ndarray
 from pandas.api.types import is_numeric_dtype, is_string_dtype
 from parse import datetime
+
+from insitupy._constants import (XENIUM_HEX_TO_INT_CONV_DICT,
+                                 XENIUM_INT_TO_HEX_CONV_DICT)
 
 
 class textformat:
@@ -24,7 +27,7 @@ class textformat:
     # BOLD = '\033[1m'
     # UNDERLINE = '\033[4m'
     # END = '\033[0m'
-    
+
     ResetAll = "\033[0m"
 
     Bold       = "\033[1m"
@@ -91,21 +94,21 @@ class textformat:
 
     # spacer
     SPACER = "    "
-    
+
 def remove_last_line_from_csv(filename):
     with open(filename) as myFile:
         lines = myFile.readlines()
         last_line = lines[len(lines)-1]
         lines[len(lines)-1] = last_line.rstrip()
-    with open(filename, 'w') as myFile:    
+    with open(filename, 'w') as myFile:
         myFile.writelines(lines)
-        
+
 def decode_robust(s, encoding="utf-8"):
     try:
         return s.decode(encoding)
     except (UnicodeDecodeError, AttributeError):
         return s
-    
+
 def decode_robust_series(s, encoding="utf-8"):
     '''
     Function to decode a pandas series in a robust fashion with different checks.
@@ -125,7 +128,7 @@ def decode_robust_series(s, encoding="utf-8"):
         return decoded
     except (UnicodeDecodeError, AttributeError):
         return s
-    
+
 def convert_to_list(elem):
     '''
     Return element to list if it is not a list already.
@@ -138,7 +141,7 @@ def nested_dict_numpy_to_list(dictionary):
             dictionary[key] = value.tolist()
         elif isinstance(value, dict):
             nested_dict_numpy_to_list(value)
-            
+
 def get_nrows_maxcols(keys, max_cols):
     '''
     Determine optimal number of rows and columns for `plt.subplot` based on
@@ -162,3 +165,63 @@ def _generate_time_based_uid():
     short_uid = str(uuid4()).split("-")[0]
     uid = f"{time_str}-{short_uid}"
     return uid
+
+def convert_int_to_xenium_hex(value, dataset_suffix=1, final_length=8):
+    """Convert integers into Xenium-style hexadecimal representation.
+    Described here: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/analysis/xoa-output-zarr#cellID
+
+    Args:
+        value (_type_): _description_
+        dataset_suffix (int, optional): _description_. Defaults to 1.
+        final_length (int, optional): _description_. Defaults to 8.
+
+    Returns:
+        _type_: _description_
+    """
+    # generate hexadecimal representation
+    hex_repr = hex(value)[2:]
+
+    # convert normal hex to xenium-modified hex
+    hex_repr = "".join([str(XENIUM_INT_TO_HEX_CONV_DICT[elem]) for elem in hex_repr])
+
+    # add a to the beginning to fill to final length
+    hex_repr = hex_repr.rjust(final_length, 'a')
+
+    # add dataset suffix
+    hex_repr += f"-{dataset_suffix}"
+
+    return hex_repr
+
+def convert_xenium_hex_to_int(hex_repr):
+    """Convert Xenium-style hexadecimal representation into integers.
+    Described here: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/analysis/xoa-output-zarr#cellID
+
+
+    Args:
+        hex_repr (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    # remove dataset suffix
+    hex_repr_split = hex_repr.split("-")
+
+    # try to extract a dataset suffix
+    try:
+        dataset_suffix = int(hex_repr_split[1])
+    except IndexError:
+        dataset_suffix = None
+
+    # extract the hex repr
+    hex_repr = hex_repr_split[0]
+
+    # remove leading a
+    hex_repr = hex_repr.lstrip("a")
+
+    # convert xenium-modified hex to normal hex
+    hex_repr = "".join([str(XENIUM_HEX_TO_INT_CONV_DICT[elem]) for elem in hex_repr])
+
+    # generate decimal representation
+    dec = int(hex_repr, 16)
+
+    return dec, dataset_suffix
