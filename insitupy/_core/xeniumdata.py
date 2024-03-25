@@ -733,7 +733,7 @@ class InSituData:
                     #suffix: str = ".geojson",
                     #pattern_annotations_file: str = "annotations-{slide_id}__{sample_id}__{name}"
                     ):
-        print("Reading annotations...", flush=True)
+        print("Loading annotations...", flush=True)
         if files is None:
             if self.from_insitudata:
                 try:
@@ -757,7 +757,7 @@ class InSituData:
                     #suffix: str = ".geojson",
                     #pattern_regions_file: str = "regions-{slide_id}__{sample_id}__{name}"
                     ):
-        print("Reading regions...", flush=True)
+        print("Loading regions...", flush=True)
         if files is None:
             if self.from_insitudata:
                 try:
@@ -780,7 +780,7 @@ class InSituData:
 
 
     def load_cells(self):
-        print("Reading cells...", flush=True)
+        print("Loading cells...", flush=True)
         pixel_size = self.metadata["xenium"]["pixel_size"]
         if self.from_insitudata:
             try:
@@ -853,7 +853,7 @@ class InSituData:
             img_files = [self.metadata["xenium"]["images"][k] for k in img_keys]
 
         # load image into ImageData object
-        print("Reading images...", flush=True)
+        print("Loading images...", flush=True)
         self.images = ImageData(self.path, img_files, img_names, pixel_size=self.metadata["xenium"]['pixel_size'])
 
     def load_transcripts(self,
@@ -865,11 +865,11 @@ class InSituData:
                 raise ModalityNotFoundError(modality="transcripts")
 
             # read transcripts
-            print("Reading transcripts...", flush=True)
+            print("Loading transcripts...", flush=True)
             self.transcripts = pd.read_parquet(self.path / self.metadata["data"]["transcripts"])
         else:
             # read transcripts
-            print("Reading transcripts...", flush=True)
+            print("Loading transcripts...", flush=True)
             transcript_dataframe = pd.read_parquet(self.path / transcript_filename)
 
             self.transcripts = _restructure_transcripts_dataframe(transcript_dataframe)
@@ -1294,55 +1294,50 @@ class InSituData:
     def save(self,
              path: Optional[Union[str, os.PathLike, Path]] = None,
              ):
+
+        # check path
         if path is not None:
             path = Path(path)
-            if path.exists():
-                if not path.is_dir():
-                    raise NotADirectoryError(f"Path is not a directory: {str(path)}")
-
-                # check if the folder is a InSituPy project
-                metadata_file = path / ISPY_METADATA_FILE
-                if metadata_file.exists():
-                    # read metadata file and check uid
-                    project_meta = read_json(metadata_file)
-
-                    # check uid
-                    project_uid = project_meta["uids"][-1]  # [-1] to select latest uid
-                    current_uid = self.metadata["uids"][-1]
-                    if current_uid == project_uid:
-                        self._update_to_existing_project(path=path)
-                    else:
-                        warn(
-                            f"UID of current object {current_uid} not identical with UID in project path {path}: {project_uid}.\n"
-                            f"Project is neither saved nor updated. Try `saveas()` instead to save the data to a new project folder."
-                        )
-                else:
-                    warn(
-                        f"No `.ispy` metadata file in {path}. Directory is probably no valid InSituPy project. "
-                        f"Use `saveas()` instead to save the data to a new InSituPy project."
-                        )
-            else:
-                # save to the respective directory
-                self.saveas(path=path)
         else:
             if self.from_insitudata:
                 path = Path(self.metadata["path"])
-                self._update_to_existing_project(path=path)
             else:
                 warn(
                     f"Data as not loaded from an InSituPy project. "
                     f"Use `saveas()` instead to save the data to a new project folder."
                     )
-            # try:
-            #     path = Path(self.metadata["path"])
-            # except KeyError:
-            #     warn(
-            #         f"Metadata of current object does not contain the key 'path', "
-            #         f"meaning that it is no valid InSituPy project. Try `saveas()` instead to save the data to a new project folder."
-            #         )
-            # else:
-            #     self._update_to_existing_project(path=path)
 
+        if path.exists():
+            # check if path is a valid directory
+            if not path.is_dir():
+                raise NotADirectoryError(f"Path is not a directory: {str(path)}")
+
+            # check if the folder is a InSituPy project
+            metadata_file = path / ISPY_METADATA_FILE
+
+            if metadata_file.exists():
+                # read metadata file and check uid
+                project_meta = read_json(metadata_file)
+
+                # check uid
+                project_uid = project_meta["uids"][-1]  # [-1] to select latest uid
+                current_uid = self.metadata["uids"][-1]
+                if current_uid == project_uid:
+                    self._update_to_existing_project(path=path)
+                else:
+                    warn(
+                        f"UID of current object {current_uid} not identical with UID in project path {path}: {project_uid}.\n"
+                        f"Project is neither saved nor updated. Try `saveas()` instead to save the data to a new project folder."
+                        f"A reason for this could be the data has been cropped in the meantime."
+                    )
+            else:
+                warn(
+                    f"No `.ispy` metadata file in {path}. Directory is probably no valid InSituPy project. "
+                    f"Use `saveas()` instead to save the data to a new InSituPy project."
+                    )
+        else:
+            # save to the respective directory
+            self.saveas(path=path)
 
     def _update_to_existing_project(self,
                                     path: Optional[Union[str, os.PathLike, Path]]
