@@ -16,7 +16,6 @@ import dask.array as da
 import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
-import napari
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -24,8 +23,6 @@ import seaborn as sns
 from anndata import AnnData
 from dask_image.imread import imread
 from geopandas import GeoDataFrame
-from napari.layers import Layer, Shapes
-from napari.layers.shapes.shapes import Shapes
 from parse import *
 from rasterio.features import rasterize
 from scipy.sparse import csr_matrix, issparse
@@ -33,7 +30,7 @@ from shapely import Polygon
 from shapely.geometry.polygon import Polygon
 from tqdm import tqdm
 
-from insitupy import __version__
+from insitupy import WITH_NAPARI, __version__
 from insitupy._core._save import _save_images
 from insitupy._core.io import (_read_binned_expression,
                                _read_boundaries_from_xenium,
@@ -54,14 +51,21 @@ from ..utils.io import (check_overwrite_and_remove_if_true,
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._checks import check_raw, check_zip
-from ._layers import _add_annotations_as_layer
 from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
 from ._scanorama import scanorama
-from ._widgets import (_create_points_layer, _initialize_widgets,
-                       add_new_annotations_widget)
 from .dataclasses import (AnnotationsData, BoundariesData, CellData, ImageData,
                           RegionsData)
+
+# optional packages that are not always installed
+if WITH_NAPARI:
+    import napari
+    from napari.layers import Layer, Shapes
+    from napari.layers.shapes.shapes import Shapes
+
+    from ._layers import _add_annotations_as_layer
+    from ._widgets import (_create_points_layer, _initialize_widgets,
+                           add_new_annotations_widget)
 
 
 def _restructure_transcripts_dataframe(dataframe):
@@ -1913,7 +1917,6 @@ def read_xenium(
             metadata["data"] = {}
             metadata["history"] = {}
             metadata["history"]["cells"] = []
-            metadata["history"]["annotations"] = []
             metadata["history"]["annotations"] = []
             metadata["history"]["regions"] = []
 
