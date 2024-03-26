@@ -9,6 +9,8 @@ from shapely.geometry.polygon import LinearRing, Polygon
 from insitupy import WITH_NAPARI
 
 if WITH_NAPARI:
+    import napari
+
     def _add_annotations_as_layer(
         dataframe: pd.DataFrame,
         viewer: napari.Viewer,
