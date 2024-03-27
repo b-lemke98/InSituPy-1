@@ -325,10 +325,14 @@ class InSituData:
             df.index = self.cells.matrix.obs_names
 
             # create annotation from annotation masks
-            self.cells.matrix.obs[f"region-{reg_key}"] = [" & ".join(annot_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
+            print("Adding information to `.obs`...")
+            obs_key = f"region-{reg_key}"
+            self.cells.matrix.obs[obs_key] = [" & ".join(annot_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
 
             # save that the current key was analyzed
             self.regions.metadata[reg_key]["analyzed"] = tf.TICK
+
+            print(f"Information added to `.obs['{obs_key}']`.")
 
     def copy(self):
         '''

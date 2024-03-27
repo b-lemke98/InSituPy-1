@@ -719,7 +719,7 @@ class ImageData(DeepCopyMixin):
 
             else:
                 raise InvalidFileTypeError(
-                    allowed_types=["zarr.zip", "ome.tif", "ome.tiff"],
+                    allowed_types=["zarr", "zarr.zip", "ome.tif", "ome.tiff"],
                     received_type=suffix
                     )
 
