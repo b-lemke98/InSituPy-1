@@ -1306,6 +1306,7 @@ class InSituData:
 
     def save(self,
              path: Optional[Union[str, os.PathLike, Path]] = None,
+             zarr_zipped: bool = False
              ):
 
         # check path
@@ -1336,7 +1337,7 @@ class InSituData:
                 project_uid = project_meta["uids"][-1]  # [-1] to select latest uid
                 current_uid = self.metadata["uids"][-1]
                 if current_uid == project_uid:
-                    self._update_to_existing_project(path=path)
+                    self._update_to_existing_project(path=path, zarr_zipped=zarr_zipped)
                 else:
                     warn(
                         f"UID of current object {current_uid} not identical with UID in project path {path}: {project_uid}.\n"
