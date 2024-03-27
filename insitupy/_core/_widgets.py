@@ -403,7 +403,7 @@ if WITH_NAPARI:
 
                     if layer_name not in viewer.layers:
                         # get dataframe for this class
-                        class_df = annot_df[annot_df["name"] == cl]
+                        class_df = annot_df.loc[annot_df["name"] == cl]
 
                         # simplify polygons for visualization
                         class_df["geometry"] = class_df["geometry"].simplify(tolerance)

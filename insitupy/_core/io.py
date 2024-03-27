@@ -40,6 +40,9 @@ def read_celldata(
     # get path of boundaries data
     bound_path = path / celldata_metadata["boundaries"]
 
+    # check whether it is zipped or not
+    suffix = bound_path.name.split(".", maxsplit=1)[-1]
+
     # read cell ids and seg_mask_values
     cell_ids = da.from_zarr(bound_path, component="cell_id")
 
@@ -55,24 +58,27 @@ def read_celldata(
     # retrieve the boundaries data
     bound_data = {}
     meta = {}
-    with zarr.ZipStore(bound_path, mode="r") as zipstore:
-        for k in zipstore.listdir("masks"):
+    with zarr.ZipStore(bound_path, mode='w') if suffix == "zarr.zip" else zarr.DirectoryStore(bound_path) as dirstore:
+    #with zarr.ZipStore(bound_path, mode="r") as zipstore:
+        for k in dirstore.listdir("masks"):
             if not k.startswith("."):
                 # iterate through subresolutions
-                subresolutions = zipstore.listdir(f"masks/{k}")
+                subresolutions = dirstore.listdir(f"masks/{k}")
 
                 if ".zarray" in subresolutions:
-                    bound_data[k] = da.from_zarr(zipstore).persist()
+                    bound_data[k] = da.from_zarr(dirstore).persist()
                 else:
                     # it is stored as pyramid -> initialize a list for the pyramid
                     bound_data[k] = []
                     for subres in subresolutions:
                         if not subres.startswith("."):
                             # append the pyramid to the list
-                            bound_data[k].append(da.from_zarr(zipstore, component=f"masks/{k}/{subres}").persist())
+                            bound_data[k].append(
+                                da.from_zarr(dirstore, component=f"masks/{k}/{subres}")#.persist()
+                                )
 
                 # retrieve boundaries metadata
-                store = zarr.open(zipstore)
+                store = zarr.open(dirstore)
                 meta[k] = store[f"masks/{k}"].attrs.asdict()
 
     # add boundaries

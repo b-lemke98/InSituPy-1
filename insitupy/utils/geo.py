@@ -8,7 +8,7 @@ import pandas as pd
 from geopandas.geodataframe import GeoDataFrame
 
 # force geopandas to use shapely. Default in future versions of geopandas.
-os.environ['USE_PYGEOS'] = '0' 
+os.environ['USE_PYGEOS'] = '0'
 
 
 def parse_geopandas(
@@ -31,16 +31,16 @@ def parse_geopandas(
             df["origin"] = "file"
         else:
             raise ValueError(f"Unknown file extension: {data.suffix}. File is expected to be `.geojson` or `.parquet`.")
-        
+
     # set the crs to EPSG:4326 (does not matter for us but to circumvent errors it is better to set it)
     df = df.set_crs(4326)
-    
+
     if df.index.name != uid_col:
         # set uid column as index
         df = df.set_index(uid_col)
-    
+
     return df
-        
+
 def read_qupath_geojson(file: Union[str, os.PathLike, Path]) -> pd.DataFrame:
     """
     Reads a QuPath-compatible GeoJSON file and transforms it into a flat DataFrame.
@@ -57,12 +57,12 @@ def read_qupath_geojson(file: Union[str, os.PathLike, Path]) -> pd.DataFrame:
     # annotation geojsons contain a classification column where each entry is a dict with name and color of the annotation
     if "classification" in dataframe.columns:
         # Flatten the "classification" column into separate "name" and "color" columns
-        dataframe["name"] = [elem["name"] for elem in dataframe["classification"]]
-        dataframe["color"] = [elem["color"] for elem in dataframe["classification"]]
+        dataframe["name"] = [elem["name"] if elem is not None else "unclassified" for elem in dataframe["classification"]]
+        dataframe["color"] = [elem["color"] if elem is not None else [0,0,0] for elem in dataframe["classification"]]
 
         # Remove the redundant "classification" column
         dataframe = dataframe.drop(["classification"], axis=1)
-        
+
     # Exported TMA cores instead contain the columns 'name' and 'isMissing'. These we just leave.
 
     # Return the transformed DataFrame
@@ -80,8 +80,8 @@ def write_qupath_geojson(dataframe: GeoDataFrame,
     - dataframe (geopandas.GeoDataFrame): The input GeoDataFrame containing "name" and "color" columns.
     - file (Union[str, os.PathLike, Path]): The file path (as a string or pathlib.Path) where the GeoJSON data will be saved.
     """
-    
-    if np.all([elem in dataframe.columns for elem in ["name", "color"]]):        
+
+    if np.all([elem in dataframe.columns for elem in ["name", "color"]]):
         # Initialize an empty list to store dictionaries for each row
         classification_list = []
 
