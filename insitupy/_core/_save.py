@@ -17,11 +17,17 @@ from ._checks import check_zip
 def _save_images(imagedata,
                  path,
                  metadata,
-                 images_as_zarr
+                 images_as_zarr,
+                 zipped
                  ):
     img_path = (path / "images")
 
-    savepaths = imagedata.save(path=img_path, images_as_zarr=images_as_zarr, return_savepaths=True)
+    savepaths = imagedata.save(
+        path=img_path,
+        as_zarr=images_as_zarr,
+        zipped=zipped,
+        return_savepaths=True
+        )
 
     if metadata is not None:
         metadata["data"]["images"] = {}
@@ -30,13 +36,22 @@ def _save_images(imagedata,
             # collect metadata
             metadata["data"]["images"][n] = Path(relpath(s, path)).as_posix()
 
-def _save_cells(cells, path, metadata, overwrite=False):
+def _save_cells(cells,
+                path,
+                metadata,
+                boundaries_zipped=False,
+                overwrite=False
+                ):
     # create path for cells
     uid = _generate_time_based_uid()
     cells_path = path / "cells" / uid
 
     # save cells to path and write info to metadata
-    cells.save(path=cells_path, overwrite=overwrite)
+    cells.save(
+        path=cells_path,
+        boundaries_zipped=boundaries_zipped,
+        overwrite=overwrite
+        )
 
     if metadata is not None:
         try:
@@ -50,7 +65,11 @@ def _save_cells(cells, path, metadata, overwrite=False):
         # move new paths to data
         metadata["data"]["cells"] = Path(relpath(cells_path, path)).as_posix()
 
-def _save_alt(attr, path, metadata):
+def _save_alt(attr,
+              path,
+              metadata,
+              boundaries_zipped=False
+              ):
     # create path for cells
     alt_path = path / "alt"
 
@@ -58,7 +77,7 @@ def _save_alt(attr, path, metadata):
         uid = _generate_time_based_uid()
         cells_path = alt_path / k / uid
         # save cells to path and write info to metadata
-        celldata.save(cells_path)
+        celldata.save(cells_path, boundaries_zipped=boundaries_zipped)
 
         if metadata is not None:
             # setup the alt section in metadata

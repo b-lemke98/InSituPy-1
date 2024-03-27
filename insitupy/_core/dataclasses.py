@@ -418,10 +418,11 @@ class BoundariesData(DeepCopyMixin):
 
         suffix = bound_file.name.split(".", maxsplit=1)[-1]
 
-        if not suffix == "zarr.zip":
-            raise InvalidFileTypeError(allowed_types=[".zarr.zip"], received_type=suffix)
+        if suffix not in ["zarr", "zarr.zip"]:
+            raise InvalidFileTypeError(allowed_types=[".zarr", ".zarr.zip"], received_type=suffix)
 
-        with zarr.ZipStore(bound_file, mode='w') as zipstore:
+        with zarr.ZipStore(bound_file, mode='w') if suffix == "zarr.zip" else zarr.DirectoryStore(bound_file) as dirstore:
+            # for conditional 'with' see also: https://stackoverflow.com/questions/27803059/conditional-with-statement-in-python
             for n in self.metadata.keys():
                 bound_data = getattr(self, n)
 
@@ -439,12 +440,12 @@ class BoundariesData(DeepCopyMixin):
                 if isinstance(bound_data, list):
                     for i, b in enumerate(bound_data):
                         comp = f"masks/{n}/{i}"
-                        b.to_zarr(zipstore, component=comp)
+                        b.to_zarr(dirstore, component=comp)
                 else:
-                    bound_data.to_zarr(zipstore, component=f"masks/{n}")
+                    bound_data.to_zarr(dirstore, component=f"masks/{n}")
 
                 # add boundaries metadata to zarr.zip
-                store = zarr.open(zipstore, mode="a")
+                store = zarr.open(dirstore, mode="a")
                 store[f"masks/{n}"].attrs.put(self.metadata[n])
 
                 # save keys in insitupy metadata
@@ -453,10 +454,10 @@ class BoundariesData(DeepCopyMixin):
             # save paths in insitupy metadata
             #metadata["boundaries"]["path"] = Path(relpath(bound_file, path)).as_posix()
 
-            self.cell_ids.to_zarr(zipstore, component="cell_id")
+            self.cell_ids.to_zarr(dirstore, component="cell_id")
 
             if self.seg_mask_value is not None:
-                self.seg_mask_value.to_zarr(zipstore, component="seg_mask_value")
+                self.seg_mask_value.to_zarr(dirstore, component="seg_mask_value")
 
         # # add version to metadata
         # metadata_to_save = self.metadata.copy()
@@ -503,8 +504,9 @@ class CellData(DeepCopyMixin):
 
     def save(self,
              path: Union[str, os.PathLike, Path],
+             boundaries_zipped: bool = False,
+             boundaries_as_pyramid: bool = True,
              overwrite: bool = False,
-             boundaries_as_pyramid: bool = True
              ):
 
         path = Path(path)
@@ -531,52 +533,17 @@ class CellData(DeepCopyMixin):
         except AttributeError:
             pass
         else:
-            bound_file = path / "boundaries.zarr.zip"
+            if boundaries_zipped:
+                bound_file = path / "boundaries.zarr.zip"
+            else:
+                bound_file = path / "boundaries.zarr"
+
+            # save boundaries
             boundaries.save(bound_file, save_as_pyramid=True)
 
             # add entry for boundaries to metadata
             celldata_metadata["boundaries"] = Path(relpath(bound_file, path)).as_posix()
             # bound_path.mkdir(parents=True, exist_ok=True) # create directory
-
-            # metadata["boundaries"] = {}
-            # metadata["boundaries"]["keys"] = []
-            # bound_file = bound_path / "boundaries.zarr.zip"
-            # with zarr.ZipStore(bound_file, mode='w') as zipstore:
-            #     for n in boundaries.metadata.keys():
-            #         bound_data = getattr(boundaries, n)
-
-            #         # check data
-            #         if isinstance(bound_data, list):
-            #             if not boundaries_as_pyramid:
-            #                 bound_data = bound_data[0]
-            #         else:
-            #             if boundaries_as_pyramid:
-            #                 # create pyramid
-            #                 bound_data = create_img_pyramid(img=bound_data, nsubres=6)
-
-
-            #         #if isinstance(bound_data, dask.array.core.Array):
-            #         if isinstance(bound_data, list):
-            #             for i, b in enumerate(bound_data):
-            #                 comp = f"masks/{n}/{i}"
-            #                 b.to_zarr(zipstore, component=comp)
-            #         else:
-            #             bound_data.to_zarr(zipstore, component=f"masks/{n}")
-
-            #         # add boundaries metadata to zarr.zip
-            #         store = zarr.open(zipstore, mode="a")
-            #         store[f"masks/{n}"].attrs.put(boundaries.metadata[n])
-
-            #         # save keys in insitupy metadata
-            #         metadata["boundaries"]["keys"].append(n)
-
-            #     # save paths in insitupy metadata
-            #     metadata["boundaries"]["path"] = Path(relpath(bound_file, path)).as_posix()
-
-            #     boundaries.cell_ids.to_zarr(zipstore, component="cell_id")
-
-            #     if boundaries.seg_mask_value is not None:
-            #         boundaries.seg_mask_value.to_zarr(zipstore, component="seg_mask_value")
 
         # add version to metadata
         celldata_metadata["version"] = __version__
@@ -714,23 +681,26 @@ class ImageData(DeepCopyMixin):
             impath = impath.resolve() # resolve relative path
             suffix = impath.name.split(".", maxsplit=1)[-1]
 
-            if suffix == "zarr.zip":
-                # load image from .zarr.zip
-                with zarr.ZipStore(impath, mode="r") as zipstore:
+            if "zarr" in suffix:
+            #if suffix == "zarr.zip":
+            # load image from .zarr.zip
+                with zarr.ZipStore(impath, mode="r") if suffix == "zarr.zip" else zarr.DirectoryStore(impath) as dirstore:
                     # get components of zip store
-                    components = zipstore.listdir()
+                    components = dirstore.listdir()
 
                     if ".zarray" in components:
                         # the store is an array which can be opened
-                        img = da.from_zarr(zipstore).persist()
+                        img = da.from_zarr(dirstore)#.persist()
                     else:
                         subres = [elem for elem in components if not elem.startswith(".")]
                         img = []
                         for s in subres:
-                            img.append(da.from_zarr(zipstore, component=s).persist())
+                            img.append(
+                                da.from_zarr(dirstore, component=s)#.persist()
+                                        )
 
                     # retrieve OME metadata
-                    store = zarr.open(zipstore)
+                    store = zarr.open(dirstore)
                     meta = store.attrs.asdict()
                     ome_meta = meta["OME"]
                     axes = meta["axes"]
@@ -844,7 +814,8 @@ class ImageData(DeepCopyMixin):
     def save(self,
              path: Union[str, os.PathLike, Path],
              keys_to_save: Optional[str] = None,
-             images_as_zarr: bool = True,
+             as_zarr: bool = True,
+             zipped: bool = False,
              save_pyramid: bool = True,
              return_savepaths: bool = False,
              overwrite: bool = False
@@ -870,9 +841,12 @@ class ImageData(DeepCopyMixin):
                 # extract image
                 img = getattr(self, n)
 
-                if images_as_zarr:
+                if as_zarr:
                     # generate filename
-                    filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
+                    if zipped:
+                        filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
+                    else:
+                        filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr"
 
                     # decide whether to save as pyramid or not
                     if isinstance(img, list):
@@ -883,17 +857,18 @@ class ImageData(DeepCopyMixin):
                             # create img pyramid
                             img = create_img_pyramid(img=img, nsubres=6)
 
-                    with zarr.ZipStore(path / filename, mode="w") as zipstore:
+                    img_path = path / filename
+                    with zarr.ZipStore(img_path, mode="w") if zipped else zarr.DirectoryStore(img_path) as dirstore:
                         # check whether to save the image as pyramid or not
                         if save_pyramid:
                             for i, im in enumerate(img):
-                                im.to_zarr(zipstore, component=str(i))
+                                im.to_zarr(dirstore, component=str(i))
                         else:
                             # save image data in zipstore without pyramid
-                            img.to_zarr(zipstore)
+                            img.to_zarr(dirstore)
 
                         # open zarr store save metadata in zarr store
-                        store = zarr.open(zipstore, mode="a")
+                        store = zarr.open(dirstore, mode="a")
                         store.attrs.put(img_metadata)
                         # for k,v in img_metadata.items():
                         #     store.attrs[k] = v

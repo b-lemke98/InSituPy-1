@@ -1175,7 +1175,9 @@ class InSituData:
             path: Union[str, os.PathLike, Path],
             overwrite: bool = False,
             zip_output: bool = False,
-            images_as_zarr: bool = True
+            images_as_zarr: bool = True,
+            boundaries_as_zarr: bool = True,
+            zarr_zipped: bool = False
             ):
         '''
         Function to save the XeniumData object.
@@ -1215,7 +1217,8 @@ class InSituData:
                 imagedata=images,
                 path=path,
                 metadata=self.metadata,
-                images_as_zarr=images_as_zarr
+                images_as_zarr=images_as_zarr,
+                zipped=zarr_zipped
                 )
 
         # save cells
@@ -1227,7 +1230,8 @@ class InSituData:
             _save_cells(
                 cells=cells,
                 path=path,
-                metadata=self.metadata
+                metadata=self.metadata,
+                boundaries_zipped=zarr_zipped
             )
 
         # save alternative cell data
@@ -1239,7 +1243,8 @@ class InSituData:
             _save_alt(
                 attr=alt,
                 path=path,
-                metadata=self.metadata
+                metadata=self.metadata,
+                boundaries_zipped=zarr_zipped
             )
 
         # save transcripts
@@ -1344,7 +1349,8 @@ class InSituData:
             self.saveas(path=path)
 
     def _update_to_existing_project(self,
-                                    path: Optional[Union[str, os.PathLike, Path]]
+                                    path: Optional[Union[str, os.PathLike, Path]],
+                                    zarr_zipped: bool = False
                                     ):
         print(f"Updating project in {path}")
 
@@ -1359,6 +1365,7 @@ class InSituData:
                 cells=cells,
                 path=path,
                 metadata=self.metadata,
+                boundaries_zipped=zarr_zipped,
                 overwrite=True
             )
 
@@ -1372,7 +1379,8 @@ class InSituData:
             _save_alt(
                 attr=alt,
                 path=path,
-                metadata=self.metadata
+                metadata=self.metadata,
+                boundaries_zipped=zarr_zipped
             )
 
         # save annotations
@@ -1505,8 +1513,6 @@ class InSituData:
     def show(self,
         keys: Optional[str] = None,
         annotation_keys: Optional[str] = None,
-        #show_images: bool = True,
-        #show_cells: bool = False,
         point_size: int = 6,
         scalebar: bool = True,
         pixel_size: float = None, # if none, extract from metadata
@@ -1859,22 +1865,22 @@ class InSituData:
             return fig, axs
 
     ### DEPRECATED FUNCTIONS
-    def read_all(self):
+    def read_all(self, *args, **kwargs):
         warn("`read_all` is deprecated. Use `load_all` instead.", DeprecationWarning, stacklevel=2)
 
-    def read_annotations(self):
+    def read_annotations(self, *args, **kwargs):
         warn("`read_annotations` is deprecated. Use `load_annotations` instead.", DeprecationWarning, stacklevel=2)
 
-    def read_regions(self):
+    def read_regions(self, *args, **kwargs):
         warn("`read_regions` is deprecated. Use `load_regions` instead.", DeprecationWarning, stacklevel=2)
 
-    def read_cells(self):
+    def read_cells(self, *args, **kwargs):
         warn("`read_cells` is deprecated. Use `load_cells` instead.", DeprecationWarning, stacklevel=2)
 
-    def read_images(self):
+    def read_images(self, *args, **kwargs):
         warn("`read_images` is deprecated. Use `load_images` instead.", DeprecationWarning, stacklevel=2)
 
-    def read_transcripts(self):
+    def read_transcripts(self, *args, **kwargs):
         warn("`read_transcripts` is deprecated. Use `load_transcripts` instead.", DeprecationWarning, stacklevel=2)
 
 
