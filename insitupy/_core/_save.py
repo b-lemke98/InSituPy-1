@@ -2,9 +2,11 @@ import shutil
 from os.path import relpath
 from pathlib import Path
 
+import zarr
 from parse import *
 
 from insitupy import __version__
+from insitupy.utils.utils import _generate_time_based_uid
 
 from ..image.io import write_ome_tiff
 from ..utils.geo import write_qupath_geojson
@@ -12,73 +14,136 @@ from ..utils.io import write_dict_to_json
 from ._checks import check_zip
 
 
-def _save_images(imagedata, path, metadata):
+def _save_images(imagedata,
+                 path,
+                 metadata,
+                 images_as_zarr,
+                 zipped
+                 ):
     img_path = (path / "images")
-    img_path.mkdir(parents=True, exist_ok=True) # create image directory
-    
+
+    savepaths = imagedata.save(
+        path=img_path,
+        as_zarr=images_as_zarr,
+        zipped=zipped,
+        return_savepaths=True
+        )
+
     if metadata is not None:
-        metadata["images"] = {}
-    for n, img_metadata in imagedata.metadata.items():
-        # extract image
-        img = getattr(imagedata, n)[0]
-        
-        # get file name for saving
-        filename = Path(img_metadata["file"]).name
-        
-        # retrieve image metadata for saving
-        photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
-        axes = img_metadata['axes']
-        
-        # retrieve OME metadata
-        ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY", "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
-        pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
-        selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
-        
-        # write images as OME-TIFF
-        write_ome_tiff(img_path / filename, img, 
-                       photometric=photometric, axes=axes, 
-                       metadata=selected_metadata, overwrite=False)
-        
-        if metadata is not None:
+        metadata["data"]["images"] = {}
+        for n in imagedata.metadata.keys():
+            s = savepaths[n]
             # collect metadata
-            metadata["images"][n] = Path(relpath(img_path / filename, path)).as_posix()
-        
-def _save_cells(cells, path, metadata):
+            metadata["data"]["images"][n] = Path(relpath(s, path)).as_posix()
+
+def _save_cells(cells,
+                path,
+                metadata,
+                boundaries_zipped=False,
+                overwrite=False
+                ):
     # create path for cells
-    cells_path = path / "cells"
-    
+    uid = _generate_time_based_uid()
+    cells_path = path / "cells" / uid
+
     # save cells to path and write info to metadata
-    cells.save(cells_path)
-    
+    cells.save(
+        path=cells_path,
+        boundaries_zipped=boundaries_zipped,
+        overwrite=overwrite
+        )
+
     if metadata is not None:
-        metadata["cells"] = Path(relpath(cells_path, path)).as_posix()
-        
+        try:
+            # move old celldata paths to history
+            old_path = metadata["data"]["cells"]
+        except KeyError:
+            pass
+        else:
+            metadata["history"]["cells"].append(old_path)
+
+        # move new paths to data
+        metadata["data"]["cells"] = Path(relpath(cells_path, path)).as_posix()
+
+def _save_alt(attr,
+              path,
+              metadata,
+              boundaries_zipped=False
+              ):
+    # create path for cells
+    alt_path = path / "alt"
+
+    for k, celldata in attr.items():
+        uid = _generate_time_based_uid()
+        cells_path = alt_path / k / uid
+        # save cells to path and write info to metadata
+        celldata.save(cells_path, boundaries_zipped=boundaries_zipped)
+
+        if metadata is not None:
+            # setup the alt section in metadata
+            if "alt" not in metadata["data"]:
+                metadata["data"]["alt"] = {}
+            if "alt" not in metadata["history"]:
+                metadata["history"]["alt"] = {}
+            if k not in metadata["history"]["alt"]:
+                metadata["history"]["alt"][k] = []
+
+            try:
+                # move old celldata paths to history
+                old_path = metadata["data"]["alt"][k]
+            except KeyError:
+                pass
+            else:
+                metadata["history"]["alt"][k].append(old_path)
+
+            metadata["data"]["alt"][k] = Path(relpath(cells_path, path)).as_posix()
+
 def _save_transcripts(transcripts, path, metadata):
     # create file path
-    trans_path = (path / "transcripts")
+    trans_path = path / "transcripts"
     trans_path.mkdir(parents=True, exist_ok=True) # create directory
     trans_file = trans_path / "transcripts.parquet"
-    
+
     # save transcripts as parquet and modify metadata
     transcripts.to_parquet(trans_file)
-    
+
     if metadata is not None:
-        metadata["transcripts"] = Path(relpath(trans_file, path)).as_posix()
-    
+        metadata["data"]["transcripts"] = Path(relpath(trans_file, path)).as_posix()
+
 def _save_annotations(annotations, path, metadata):
-    annot_path = (path / "annotations")
-    
+    uid = _generate_time_based_uid()
+    annot_path = path / "annotations" / uid
+
     # save annotations
     annotations.save(annot_path)
-        
+
     if metadata is not None:
-        metadata["annotations"] = Path(relpath(annot_path, path)).as_posix()
-    
+        try:
+            # move old paths to history
+            old_path = metadata["data"]["annotations"]
+        except KeyError:
+            pass
+        else:
+            metadata["history"]["annotations"].append(old_path)
+
+        # add new paths
+        metadata["data"]["annotations"] = Path(relpath(annot_path, path)).as_posix()
+
 def _save_regions(regions, path, metadata):
-    annot_path = (path / "regions")
-    
+    uid = _generate_time_based_uid()
+    annot_path = path / "regions" / uid
+
     # save annotations
     regions.save(annot_path)
-        
+
     if metadata is not None:
-        metadata["regions"] = Path(relpath(annot_path, path)).as_posix()
+        try:
+            # move old paths to history
+            old_path = metadata["data"]["regions"]
+        except KeyError:
+            pass
+        else:
+            metadata["history"]["regions"].append(old_path)
+
+        # add new paths
+        metadata["data"]["regions"] = Path(relpath(annot_path, path)).as_posix()

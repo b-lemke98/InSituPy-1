@@ -68,7 +68,7 @@ def plot_qc(
         axs[i].set_title(cat)
         axs[i].set_ylabel(None)
         
-        if i+1 == max_cols:
+        if i+1 == ncols:
             # move legend out of the plot
             axs[i].legend(loc='center left', bbox_to_anchor=(1, 0.5))
         else:

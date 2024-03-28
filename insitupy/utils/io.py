@@ -1,32 +1,16 @@
 import json
-import matplotlib.pyplot as plt
 import os
-import pandas as pd
 import shutil
 from pathlib import Path
-from typing import Union, List
+from typing import Union
 
-import dask.array as da
-import zarr
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import shapely
 
 from .utils import nested_dict_numpy_to_list
 
-def load_pyramid(store):
-    '''
-    Function to load pyramid.
-    From: https://www.youtube.com/watch?v=8TlAAZcJnvA
-    '''
-    # Open store (root group)
-    grp = zarr.open(store, mode='r')
 
-    # Read multiscale metadata
-    datasets = grp.attrs["multiscales"][0]["datasets"]
-
-    return [
-        da.from_zarr(store, component=d["path"])
-        for d in datasets
-    ]
-    
 def read_json(
     file: Union[str, os.PathLike, Path],
     ) -> dict:
@@ -38,6 +22,50 @@ def read_json(
         metadata = json.load(metafile)
         
     return metadata
+
+def read_baysor_polygons(
+    file: Union[str, os.PathLike, Path]
+    ) -> gpd.GeoDataFrame:
+    
+    d = read_json(file)
+    
+    # prepare output dictionary
+    df = {
+    "geometry": [],
+    "cell": [],
+    "type": [],
+    "minx": [],
+    "miny": [],
+    "maxx": [],
+    "maxy": []
+    }
+    
+    for elem in d["geometries"]:
+        coords = elem["coordinates"][0]
+        
+        # check if there are enough coordinates for a Polygon (some segmented cells are very small in Baysor)
+        if len(coords) > 3:
+            p = shapely.Polygon(coords)
+            df["geometry"].append(p)
+            df["type"].append("polygon")
+        
+        else:
+            p = shapely.LineString(coords)
+            df["geometry"].append(p)
+            df["type"].append("line")
+        df["cell"].append(elem["cell"])
+        
+        # extract bounding box
+        bounds = p.bounds
+        df["minx"].append(bounds[0])
+        df["miny"].append(bounds[1])
+        df["maxx"].append(bounds[2])
+        df["maxy"].append(bounds[3])
+
+    # create geopandas dataframe
+    df = gpd.GeoDataFrame(df)
+    
+    return df
 
 def write_dict_to_json(
     dictionary: dict,
