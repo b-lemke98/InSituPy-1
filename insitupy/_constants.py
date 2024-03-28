@@ -9,6 +9,9 @@ SHRT_MIN = -(2**15-1) # -32767
 # create cache dir
 CACHE = Path.home() / ".cache/InSituPy/"
 
+# modalities
+MODALITIES = ["annotations", "cells", "images", "regions", "transcripts"]
+
 # naming
 ISPY_METADATA_FILE = ".ispy"
 XENIUM_HEX_RANGE = string.ascii_lowercase[:16]

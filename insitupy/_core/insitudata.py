@@ -39,7 +39,7 @@ from insitupy._core.io import (_read_binned_expression,
 from insitupy.utils.io import read_json, save_and_show_figure
 from insitupy.utils.utils import get_nrows_maxcols
 
-from .._constants import CACHE, ISPY_METADATA_FILE
+from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
 from .._exceptions import (ModalityNotFoundError, NotOneElementError,
                            UnknownOptionError, WrongNapariLayerTypeError,
                            XeniumDataMissingObject,
@@ -138,14 +138,6 @@ class InSituData:
             f"{tf.Bold}Data path:{tf.ResetAll}\t{self.path.parent}\n"
             f"{tf.Bold}Data folder:{tf.ResetAll}\t{self.path.name}\n"
         )
-
-        # try:
-        #     mfile = self.experiment_xenium_filename
-        # except AttributeError:
-        #     try:
-        #         mfile = self.xd_metadata_filename
-        #     except:
-        #         raise TypeError()
 
         mfile = self.metadata["metadata_file"]
 
@@ -1349,9 +1341,14 @@ class InSituData:
                     f"No `.ispy` metadata file in {path}. Directory is probably no valid InSituPy project. "
                     f"Use `saveas()` instead to save the data to a new InSituPy project."
                     )
+            # reload the modalities
+            self.reload()
+
         else:
             # save to the respective directory
             self.saveas(path=path)
+
+
 
     def _update_to_existing_project(self,
                                     path: Optional[Union[str, os.PathLike, Path]],
@@ -1861,13 +1858,37 @@ class InSituData:
                 # remove empty plots
                 axs[i].set_axis_off()
 
-
-
         if show:
             fig.tight_layout()
             save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save)
         else:
             return fig, axs
+
+    def reload(self):
+        current_modalities = [m for m in MODALITIES if hasattr(self, m)]
+        print(f"Reloading following modalities: {','.join(current_modalities)}")
+        for cm in current_modalities:
+            func = getattr(self, f"load_{cm}")
+            func()
+
+    def remove_history(self,
+                       verbose: bool = True
+                       ):
+
+        for cat in ["annotations", "cells", "regions"]:
+            dirs_to_remove = []
+            if hasattr(self, cat):
+                files = sorted((self.path / cat).glob("*"))
+                if len(files) > 1:
+                    dirs_to_remove = files[:-1]
+
+                    for d in dirs_to_remove:
+                        shutil.rmtree(d)
+
+                    print(f"Removed {len(dirs_to_remove)} entries from '.{cat}'.") if verbose else None
+                else:
+                    print(f"No history found for '{cat}'.") if verbose else None
+
 
     ### DEPRECATED FUNCTIONS
     def read_all(self, *args, **kwargs):
