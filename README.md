@@ -46,7 +46,7 @@ To install InSituPy within a conda environment, you can follow these steps:
    # for installation with napari use
    pip install .[napari]
 
-   # for developmental purposes
+   # for developmental purposes add the -e flag
    pip install -e .[napari]
    ```
 
