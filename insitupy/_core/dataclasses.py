@@ -191,7 +191,10 @@ class ShapesData(DeepCopyMixin):
             is_not_multipolygon = [not isinstance(p, MultiPolygon) for p in annot_df.geometry]
             if not np.all(is_not_multipolygon):
                 annot_df = annot_df.loc[is_not_multipolygon]
-                warnings.warn(f"Some {self.shape_name} were a shapely 'MultiPolygon' objects and skipped.")
+                warnings.warn(
+                    f"Some {self.shape_name} were a shapely 'MultiPolygon' objects and skipped.",
+                    stacklevel=2
+                    )
 
             if add:
                 # add dataframe to AnnotationData object

@@ -107,6 +107,10 @@ def _restructure_transcripts_dataframe(dataframe):
 class InSituData:
     #TODO: Docstring of InSituData
 
+    # import deprecated functions
+    from ._deprecated import (read_all, read_annotations, read_cells,
+                              read_images, read_regions, read_transcripts)
+
     def __init__(self,
                  path: Union[str, os.PathLike, Path],
                  metadata: dict,
@@ -189,7 +193,7 @@ class InSituData:
                       ):
         # if there is no specific path given, the metadata is written to the default path for modified metadata
         if metadata_path is None:
-            metadata_path = self.metadata_save_path_after_registration
+            metadata_path = self.path / "experiment_modified.xenium"
 
         # write to json file
         metadata_json = json.dumps(self.metadata["xenium"], indent=4)
@@ -727,56 +731,47 @@ class InSituData:
                 except ModalityNotFoundError as err:
                     print(err)
 
-    def load_annotations(self,
-                    files: Optional[Union[str, os.PathLike, Path]] = None, # "../annotations",
-                    keys: Optional[str] = None,
-                    #suffix: str = ".geojson",
-                    #pattern_annotations_file: str = "annotations-{slide_id}__{sample_id}__{name}"
-                    ):
+    def load_annotations(self):
         print("Loading annotations...", flush=True)
-        if files is None:
-            if self.from_insitudata:
-                try:
-                    p = self.metadata["data"]["annotations"]
-                except KeyError:
-                    raise ModalityNotFoundError(modality="annotations")
-                self.annotations = read_annotationsdata(path=self.path / p)
+        try:
+            p = self.metadata["data"]["annotations"]
+        except KeyError:
+            raise ModalityNotFoundError(modality="annotations")
+        self.annotations = read_annotationsdata(path=self.path / p)
 
-            else:
-                raise ModalityNotFoundError(modality="annotations")
-        else:
-            files = convert_to_list(files)
-            keys = convert_to_list(keys)
 
-            # add annotations object
-            self.annotations = AnnotationsData(files=files, keys=keys, pixel_size=self.metadata["xenium"]['pixel_size'])
+    def import_annotations(self,
+                           files: Optional[Union[str, os.PathLike, Path]],
+                           keys: Optional[str]
+                           ):
+        print("Importing annotations...", flush=True)
 
-    def load_regions(self,
-                    files: Optional[Union[str, os.PathLike, Path]] = None, # "../regions",
-                    keys: Optional[str] = None,
-                    #suffix: str = ".geojson",
-                    #pattern_regions_file: str = "regions-{slide_id}__{sample_id}__{name}"
-                    ):
+        # add annotations object
+        files = convert_to_list(files)
+        keys = convert_to_list(keys)
+        self.annotations = AnnotationsData(files=files,
+                                           keys=keys,
+                                           pixel_size=self.metadata["xenium"]['pixel_size']
+                                           )
+
+    def load_regions(self):
         print("Loading regions...", flush=True)
-        if files is None:
-            if self.from_insitudata:
-                try:
-                    p = self.metadata["data"]["regions"]
-                except KeyError:
-                    raise ModalityNotFoundError(modality="regions")
-                self.regions = read_regionsdata(path=self.path / p)
-            else:
-                raise ModalityNotFoundError(modality="regions")
+        try:
+            p = self.metadata["data"]["regions"]
+        except KeyError:
+            raise ModalityNotFoundError(modality="regions")
+        self.regions = read_regionsdata(path=self.path / p)
 
-        else:
-            if keys is None:
-                raise TypeError("If `files` is not None, `keys` are not allowed to be None either.")
+    def import_regions(self,
+                    files: Optional[Union[str, os.PathLike, Path]],
+                    keys: Optional[str]
+                    ):
+        print("Importing regions...", flush=True)
 
-            files = convert_to_list(files)
-            keys = convert_to_list(keys)
-
-            # add regions object
-            self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata["xenium"]['pixel_size'])
+        # add regions object
+        files = convert_to_list(files)
+        keys = convert_to_list(keys)
+        self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata["xenium"]['pixel_size'])
 
 
     def load_cells(self):
@@ -980,10 +975,11 @@ class InSituData:
         if len(corr_img_files) == 0:
             print(f'\tNo image corresponding to slide `{self.slide_id}` and sample `{self.sample_id}` were found.')
         else:
-            if self.experiment_xenium_filename == "experiment_modified.xenium":
-                print(f"\tFound modified `{self.experiment_xenium_filename}` file. Information will be added to this file.")
-            elif self.experiment_xenium_filename == "experiment.xenium":
-                print(f"\tOnly unmodified metadata file (`{self.experiment_xenium_filename}`) found. Information will be added to new file (`experiment_modified.xenium`).")
+            metafile = self.metadata["metadata_file"]
+            if metafile == "experiment_modified.xenium":
+                print(f"\tFound modified `{metafile}` file. Information will be added to this file.")
+            elif metafile == "experiment.xenium":
+                print(f"\tOnly unmodified metadata file (`{metafile}`) found. Information will be added to new file (`experiment_modified.xenium`).")
             else:
                 raise FileNotFoundError("Metadata file not found.")
 
@@ -1164,8 +1160,8 @@ class InSituData:
                     del imreg_complete, imreg_selected, image, template, nuclei_img
                 gc.collect()
 
-        # read images
-        self.load_images()
+            # read images
+            self.load_images()
 
     def saveas(self,
             path: Union[str, os.PathLike, Path],
@@ -1330,10 +1326,13 @@ class InSituData:
                 current_uid = self.metadata["uids"][-1]
                 if current_uid == project_uid:
                     self._update_to_existing_project(path=path, zarr_zipped=zarr_zipped)
+
+                    # reload the modalities
+                    self.reload()
                 else:
                     warn(
                         f"UID of current object {current_uid} not identical with UID in project path {path}: {project_uid}.\n"
-                        f"Project is neither saved nor updated. Try `saveas()` instead to save the data to a new project folder."
+                        f"Project is neither saved nor updated. Try `saveas()` instead to save the data to a new project folder. "
                         f"A reason for this could be the data has been cropped in the meantime."
                     )
             else:
@@ -1341,8 +1340,7 @@ class InSituData:
                     f"No `.ispy` metadata file in {path}. Directory is probably no valid InSituPy project. "
                     f"Use `saveas()` instead to save the data to a new InSituPy project."
                     )
-            # reload the modalities
-            self.reload()
+
 
         else:
             # save to the respective directory
@@ -1865,11 +1863,27 @@ class InSituData:
             return fig, axs
 
     def reload(self):
-        current_modalities = [m for m in MODALITIES if hasattr(self, m)]
-        print(f"Reloading following modalities: {','.join(current_modalities)}")
-        for cm in current_modalities:
-            func = getattr(self, f"load_{cm}")
-            func()
+        data_meta = self.metadata["data"]
+        current_modalities = [m for m in MODALITIES if hasattr(self, m) and m in data_meta]
+        # # check if there is a path for the modalities in self.metadata
+        # data_meta = self.metadata["data"]
+        # print(data_meta)
+        # for cm in current_modalities:
+        #     print(cm)
+        #     if cm in data_meta:
+        #         print('blubb')
+        #         pass
+        #     else:
+        #         print(f"No data path found for modality '{cm}'. Modality skipped during reload and needs to be saved first.")
+        #         #current_modalities.remove(cm)
+
+        if len(current_modalities) > 0:
+            print(f"Reloading following modalities: {','.join(current_modalities)}")
+            for cm in current_modalities:
+                func = getattr(self, f"load_{cm}")
+                func()
+        else:
+            print("No modalities with existing save path found. Consider saving the data with `saveas()` first.")
 
     def remove_history(self,
                        verbose: bool = True
@@ -1889,25 +1903,6 @@ class InSituData:
                 else:
                     print(f"No history found for '{cat}'.") if verbose else None
 
-
-    ### DEPRECATED FUNCTIONS
-    def read_all(self, *args, **kwargs):
-        warn("`read_all` is deprecated. Use `load_all` instead.", DeprecationWarning, stacklevel=2)
-
-    def read_annotations(self, *args, **kwargs):
-        warn("`read_annotations` is deprecated. Use `load_annotations` instead.", DeprecationWarning, stacklevel=2)
-
-    def read_regions(self, *args, **kwargs):
-        warn("`read_regions` is deprecated. Use `load_regions` instead.", DeprecationWarning, stacklevel=2)
-
-    def read_cells(self, *args, **kwargs):
-        warn("`read_cells` is deprecated. Use `load_cells` instead.", DeprecationWarning, stacklevel=2)
-
-    def read_images(self, *args, **kwargs):
-        warn("`read_images` is deprecated. Use `load_images` instead.", DeprecationWarning, stacklevel=2)
-
-    def read_transcripts(self, *args, **kwargs):
-        warn("`read_transcripts` is deprecated. Use `load_transcripts` instead.", DeprecationWarning, stacklevel=2)
 
 
 def read_xenium(
@@ -1967,8 +1962,8 @@ def read_xenium(
                 else:
                     experiment_xenium_filename = "experiment.xenium"
 
-            # all changes are saved to the modified .xenium json
-            metadata_save_path_after_registration = path / "experiment_modified.xenium"
+            # # all changes are saved to the modified .xenium json
+            # metadata_save_path_after_registration = path / "experiment_modified.xenium"
 
             # save paths of this project in metadata
             metadata["path"] = abspath(path).replace("\\", "/")
@@ -1993,7 +1988,3 @@ def read_xenium(
 
         return data
 
-class XeniumData:
-    def __init__(self, *args, **kwargs):
-        warn("`XeniumData` is deprecated. Use `read_xenium` instead. This reads Xenium data and stores it into an `InSituData` object.", DeprecationWarning, stacklevel=2)
-        return read_xenium(*args, **kwargs)
