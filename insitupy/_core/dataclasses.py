@@ -14,14 +14,13 @@ import pandas as pd
 import xmltodict
 import zarr
 from anndata import AnnData
+from insitupy import __version__
+from insitupy.utils.utils import (convert_int_to_xenium_hex,
+                                  convert_xenium_hex_to_int)
 from parse import *
 from shapely import Polygon, affinity
 from shapely.geometry.multipolygon import MultiPolygon
 from tifffile import TiffFile
-
-from insitupy import __version__
-from insitupy.utils.utils import (convert_int_to_xenium_hex,
-                                  convert_xenium_hex_to_int)
 
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
 from ..image.io import read_ome_tiff, write_ome_tiff
@@ -304,10 +303,17 @@ class BoundariesData(DeepCopyMixin):
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self,
-                 cell_ids: Optional[da.core.Array] = None,
-                 seg_mask_value: Optional[da.core.Array] = None,
+                 cell_ids: Optional[da.core.Array],
+                 seg_mask_value: Optional[da.core.Array],
                  #pixel_size: Number = 1, # required for boundaries that are saved as masks
                  ):
+        """_summary_
+        For details on `cell_ids` and `seg_mask_value` see: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/1.9/tutorials/outputs/xoa-output-zarr
+
+        Args:
+            cell_ids (Optional[da.core.Array]): _description_
+            seg_mask_value (Optional[da.core.Array]): _description_
+        """
         self.metadata = {}
 
         # store cell ids
@@ -685,34 +691,39 @@ class ImageData(DeepCopyMixin):
             suffix = impath.name.split(".", maxsplit=1)[-1]
 
             if "zarr" in suffix:
-            #if suffix == "zarr.zip":
             # load image from .zarr.zip
-                with zarr.ZipStore(impath, mode="r") if suffix == "zarr.zip" else zarr.DirectoryStore(impath) as dirstore:
+                zipped = True if suffix == "zarr.zip" else False
+                with zarr.ZipStore(impath, mode="r") if zipped else zarr.DirectoryStore(impath) as dirstore:
                     # get components of zip store
                     components = dirstore.listdir()
 
                     if ".zarray" in components:
                         # the store is an array which can be opened
-                        img = da.from_zarr(dirstore)#.persist()
+                        if zipped:
+                            img = da.from_zarr(dirstore).persist()
+                        else:
+                            img = da.from_zarr(dirstore)
                     else:
                         subres = [elem for elem in components if not elem.startswith(".")]
                         img = []
                         for s in subres:
-                            img.append(
-                                da.from_zarr(dirstore, component=s)#.persist()
-                                        )
+                            if zipped:
+                                img.append(
+                                    da.from_zarr(dirstore, component=s).persist()
+                                            )
+                            else:
+                                img.append(
+                                    da.from_zarr(dirstore, component=s)
+                                            )
 
                     # retrieve OME metadata
                     store = zarr.open(dirstore)
                     meta = store.attrs.asdict()
                     ome_meta = meta["OME"]
                     axes = meta["axes"]
-                    # except KeyError:
-                    #     warnings.warn("No OME metadata in `zarr.zip` file. Skipped collection of metadata.")
 
             elif suffix in ["ome.tif", "ome.tiff"]:
                 # load image from .ome.tiff
-                #img = read_ome_tiff(path=impath, levels=0)
                 img = read_ome_tiff(path=impath, levels=None)
                 # read ome metadata
                 with TiffFile(path / f) as tif:

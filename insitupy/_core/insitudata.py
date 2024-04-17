@@ -23,13 +23,6 @@ import seaborn as sns
 from anndata import AnnData
 from dask_image.imread import imread
 from geopandas import GeoDataFrame
-from parse import *
-from rasterio.features import rasterize
-from scipy.sparse import csr_matrix, issparse
-from shapely import Polygon
-from shapely.geometry.polygon import Polygon
-from tqdm import tqdm
-
 from insitupy import WITH_NAPARI, __version__
 from insitupy._core._save import _save_images
 from insitupy._core.io import (_read_binned_expression,
@@ -38,6 +31,12 @@ from insitupy._core.io import (_read_binned_expression,
                                read_celldata, read_regionsdata)
 from insitupy.utils.io import read_json, save_and_show_figure
 from insitupy.utils.utils import get_nrows_maxcols
+from parse import *
+from rasterio.features import rasterize
+from scipy.sparse import csr_matrix, issparse
+from shapely import Polygon
+from shapely.geometry.polygon import Polygon
+from tqdm import tqdm
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
 from .._exceptions import (ModalityNotFoundError, NotOneElementError,
@@ -595,11 +594,14 @@ class InSituData:
         else:
             raise ValueError(f'`transformation_method` is not one of ["log1p", "sqrt"]')
 
-    def parse_baysor(self,
+    def add_baysor(self,
                     baysor_output: Union[str, os.PathLike, Path],
                     key_to_add: str = "baysor",
                     pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
                     ):
+
+        # convert to pathlib path
+        baysor_output = Path(baysor_output)
 
         try:
             cells = self.cells
@@ -646,7 +648,9 @@ class InSituData:
         img = da.from_array(img)
 
         # create boundaries object
-        boundaries = BoundariesData()
+        cell_ids = da.from_array(matrix.obs["CellID"].values) # extract cell ids from adata
+        seg_mask_value = da.from_array(sorted(df["cell"]))
+        boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
         boundaries.add_boundaries(data={f"cellular": img}, pixel_size=pixel_size)
 
         # add data to XeniumData
@@ -674,7 +678,8 @@ class InSituData:
             baysor_transcript_dataframe = pd.read_csv(segcsv_file)
 
             print("\tMerge with existing data", flush=True)
-            baysor_results = baysor_transcript_dataframe.set_index("transcript_id")[["cell"]]
+            transcript_id_col = [elem for elem in ["transcript_id", "molecule_id"] if elem in baysor_transcript_dataframe.columns][0]
+            baysor_results = baysor_transcript_dataframe.set_index(transcript_id_col)[["cell"]]
             baysor_results.columns = pd.MultiIndex.from_tuples([("cell_id", key_to_add)])
             trans_attr = pd.merge(left=trans_attr,
                                   right=baysor_results,
@@ -1168,7 +1173,6 @@ class InSituData:
             overwrite: bool = False,
             zip_output: bool = False,
             images_as_zarr: bool = True,
-            boundaries_as_zarr: bool = True,
             zarr_zipped: bool = False
             ):
         '''

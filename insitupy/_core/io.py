@@ -9,17 +9,16 @@ import pandas as pd
 import scanpy as sc
 import zarr
 from anndata import AnnData
-from pandas.api.types import is_numeric_dtype
-from parse import *
-from scipy.sparse import csr_matrix
-from zarr.errors import ArrayNotFoundError
-
 from insitupy import __version__
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
                                         CellData, RegionsData)
 from insitupy._exceptions import InvalidFileTypeError
 from insitupy.utils.io import read_json
 from insitupy.utils.utils import decode_robust_series
+from pandas.api.types import is_numeric_dtype
+from parse import *
+from scipy.sparse import csr_matrix
+from zarr.errors import ArrayNotFoundError
 
 from ..utils.io import read_json
 from ..utils.utils import decode_robust_series
@@ -58,24 +57,32 @@ def read_celldata(
     # retrieve the boundaries data
     bound_data = {}
     meta = {}
-    with zarr.ZipStore(bound_path, mode='w') if suffix == "zarr.zip" else zarr.DirectoryStore(bound_path) as dirstore:
-    #with zarr.ZipStore(bound_path, mode="r") as zipstore:
+    zipped = True if suffix == "zarr.zip" else False
+    with zarr.ZipStore(bound_path, mode='r') if zipped else zarr.DirectoryStore(bound_path) as dirstore:
         for k in dirstore.listdir("masks"):
             if not k.startswith("."):
                 # iterate through subresolutions
                 subresolutions = dirstore.listdir(f"masks/{k}")
 
                 if ".zarray" in subresolutions:
-                    bound_data[k] = da.from_zarr(dirstore).persist()
+                    if zipped:
+                        bound_data[k] = da.from_zarr(dirstore).persist() # persist is only needed in case of zipped zarrs
+                    else:
+                        bound_data[k] = da.from_zarr(dirstore)
                 else:
                     # it is stored as pyramid -> initialize a list for the pyramid
                     bound_data[k] = []
                     for subres in subresolutions:
                         if not subres.startswith("."):
                             # append the pyramid to the list
-                            bound_data[k].append(
-                                da.from_zarr(dirstore, component=f"masks/{k}/{subres}")#.persist()
-                                )
+                            if zipped:
+                                bound_data[k].append(
+                                    da.from_zarr(dirstore, component=f"masks/{k}/{subres}").persist()
+                                    )
+                            else:
+                                bound_data[k].append(
+                                    da.from_zarr(dirstore, component=f"masks/{k}/{subres}")
+                                    )
 
                 # retrieve boundaries metadata
                 store = zarr.open(dirstore)
@@ -83,7 +90,7 @@ def read_celldata(
 
     # add boundaries
     boundaries.add_boundaries(data=bound_data,
-                              pixel_size=meta[k]["pixel_size"]
+                              pixel_size=meta[list(meta.keys())[0]]["pixel_size"]
                               )
 
     # create CellData object

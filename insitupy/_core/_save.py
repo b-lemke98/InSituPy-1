@@ -3,10 +3,9 @@ from os.path import relpath
 from pathlib import Path
 
 import zarr
-from parse import *
-
 from insitupy import __version__
 from insitupy.utils.utils import _generate_time_based_uid
+from parse import *
 
 from ..image.io import write_ome_tiff
 from ..utils.geo import write_qupath_geojson
