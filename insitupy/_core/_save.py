@@ -3,11 +3,12 @@ from os.path import relpath
 from pathlib import Path
 
 import zarr
-from insitupy import __version__
-from insitupy.utils.utils import _generate_time_based_uid
 from parse import *
 
-from ..image.io import write_ome_tiff
+from insitupy import __version__
+from insitupy.utils.utils import _generate_time_based_uid
+
+from ..images.io import write_ome_tiff
 from ..utils.geo import write_qupath_geojson
 from ..utils.io import write_dict_to_json
 from ._checks import check_zip

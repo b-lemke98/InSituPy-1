@@ -1,7 +1,7 @@
 import anndata
 import numpy as np
 
-from ._checks import check_sanity
+from .._core._checks import check_sanity
 
 
 def split_batches(adata, batch, hvg=None, return_categories=False):
@@ -15,10 +15,10 @@ def split_batches(adata, batch, hvg=None, return_categories=False):
         return split, batch_categories
     return split
 
-def scanorama(adata, 
-              batch_key: str, 
-              hvg: bool = False, 
-              hvg_key: str = 'highly_variable', 
+def scanorama(adata,
+              batch_key: str,
+              hvg: bool = False,
+              hvg_key: str = 'highly_variable',
               **kwargs
               ):
     """
@@ -40,7 +40,7 @@ def scanorama(adata,
             Additional keyword arguments to be passed to scanorama.correct_scanpy function.
 
     Returns:
-        anndata.AnnData: 
+        anndata.AnnData:
             Annotated data matrix with batch-corrected values.
             The original data remains unchanged, and the batch-corrected values can be accessed using
             `adata.obsm['X_scanorama']`.

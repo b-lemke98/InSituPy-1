@@ -14,17 +14,18 @@ import pandas as pd
 import xmltodict
 import zarr
 from anndata import AnnData
-from insitupy import __version__
-from insitupy.utils.utils import (convert_int_to_xenium_hex,
-                                  convert_xenium_hex_to_int)
 from parse import *
 from shapely import Polygon, affinity
 from shapely.geometry.multipolygon import MultiPolygon
 from tifffile import TiffFile
 
+from insitupy import __version__
+from insitupy.utils.utils import (convert_int_to_xenium_hex,
+                                  convert_xenium_hex_to_int)
+
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
-from ..image.io import read_ome_tiff, write_ome_tiff
-from ..image.utils import create_img_pyramid, crop_dask_array_or_pyramid
+from ..images.io import read_ome_tiff, write_ome_tiff
+from ..images.utils import create_img_pyramid, crop_dask_array_or_pyramid
 from ..utils.geo import parse_geopandas, write_qupath_geojson
 from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
@@ -482,8 +483,10 @@ class CellData(DeepCopyMixin):
     def __init__(self,
                matrix: AnnData,
                boundaries: Optional[BoundariesData],
+               config: dict = {}
                ):
         self.matrix = matrix
+        self.config = config
 
         if boundaries is not None:
             self.boundaries = boundaries
@@ -556,6 +559,12 @@ class CellData(DeepCopyMixin):
 
         # add version to metadata
         celldata_metadata["version"] = __version__
+
+        # add configurations
+        try:
+            celldata_metadata["config"] = self.config
+        except AttributeError:
+            pass
 
         # save metadata
         write_dict_to_json(dictionary=celldata_metadata, file=path / ".celldata")
