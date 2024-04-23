@@ -597,6 +597,21 @@ class InSituData:
                 print(f"\tNormalizing {k}...")
                 normalize_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
 
+    def add_alt(self,
+                celldata_to_add: CellData,
+                key_to_add: str
+                ) -> None:
+        # check if the current self has already an alt object and add a empty one if not
+        alt_attr_name = "alt"
+        try:
+            alt_attr = getattr(self, alt_attr_name)
+        except AttributeError:
+            setattr(self, alt_attr_name, {})
+            alt_attr = getattr(self, alt_attr_name)
+
+        # add the celldata to the given key
+        alt_attr[key_to_add] = celldata_to_add
+
     def add_baysor(self,
                     baysor_output: Union[str, os.PathLike, Path],
                     read_transcripts: bool = False,
@@ -610,15 +625,8 @@ class InSituData:
         # read baysor data
         celldata = read_baysor_cells(baysor_output=baysor_output, pixel_size=pixel_size)
 
-        # add data to XeniumData
-        alt_attr_name = "alt"
-        try:
-            alt_attr = getattr(self, alt_attr_name)
-        except AttributeError:
-            setattr(self, alt_attr_name, {})
-            alt_attr = getattr(self, alt_attr_name)
-
-        alt_attr[key_to_add] = celldata
+        # add celldata to alt attribute
+        self.add_alt(celldata_to_add=celldata, key_to_add=key_to_add)
 
         if read_transcripts:
             trans_attr_name = "transcripts"
@@ -1479,12 +1487,6 @@ class InSituData:
 
         # create viewer
         self.viewer = napari.Viewer()
-
-        # # optionally add images
-        # if show_images:
-        #     # add images
-        #     if not hasattr(self, "images"):
-        #         raise XeniumDataMissingObject("images")
 
         try:
             image_keys = self.images.metadata.keys()
