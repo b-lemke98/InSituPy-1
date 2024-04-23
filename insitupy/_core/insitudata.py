@@ -840,6 +840,7 @@ class InSituData:
                         umap: bool = True,
                         tsne: bool = True,
                         batch_correction_key: Optional[str] = None,
+                        perform_clustering: bool = True,
                         verbose: bool = True,
                         tsne_lr: int = 1000,
                         tsne_jobs: int = 8,
@@ -879,6 +880,7 @@ class InSituData:
         reduce_dimensions_anndata(adata=cells.matrix,
                                   umap=umap, tsne=tsne,
                                   batch_correction_key=batch_correction_key,
+                                  perform_clustering=perform_clustering,
                                   verbose=verbose,
                                   tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
                                   )
@@ -894,6 +896,7 @@ class InSituData:
                 reduce_dimensions_anndata(adata=cells.matrix,
                                         umap=umap, tsne=tsne,
                                         batch_correction_key=batch_correction_key,
+                                        perform_clustering=perform_clustering,
                                         verbose=verbose,
                                         tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
                                         )

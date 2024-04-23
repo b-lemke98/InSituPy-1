@@ -41,6 +41,7 @@ def reduce_dimensions_anndata(adata,
                               umap: bool = True,
                               tsne: bool = False,
                               batch_correction_key: Optional[str] = None,
+                              perform_clustering: bool = True,
                               verbose: bool = True,
                               tsne_lr: int = 1000,
                               tsne_jobs: int = 8,
@@ -89,8 +90,9 @@ def reduce_dimensions_anndata(adata,
         neigh_uncorr_key = 'neighbors_uncorrected'
         sc.pp.neighbors(adata, key_added=neigh_uncorr_key)
 
-        # clustering
-        sc.tl.leiden(adata, neighbors_key=neigh_uncorr_key, key_added='leiden_uncorrected')
+        if perform_clustering:
+            # clustering
+            sc.tl.leiden(adata, neighbors_key=neigh_uncorr_key, key_added='leiden_uncorrected')
 
         # batch correction
         print(f"Batch correction using scanorama for {batch_correction_key}...") if verbose else None
@@ -102,6 +104,7 @@ def reduce_dimensions_anndata(adata,
         sc.tl.umap(adata)
         sc.tl.tsne(adata, use_rep="X_scanorama")
 
-    # clustering
-    print("Leiden clustering...") if verbose else None
-    sc.tl.leiden(adata)
+    if perform_clustering:
+        # clustering
+        print("Leiden clustering...") if verbose else None
+        sc.tl.leiden(adata)
