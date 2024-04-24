@@ -85,11 +85,14 @@ def read_xenium(
             # initialize the uid section
             metadata["uids"] = [str(uuid4())]
 
+        # add method to metadata
+        metadata["method"] = "Xenium"
+
         data = InSituData(path=path,
                           metadata=metadata,
                           slide_id=slide_id,
                           sample_id=sample_id,
-                          from_insitudata=from_insitudata
+                          from_insitudata=from_insitudata,
                           )
 
         return data

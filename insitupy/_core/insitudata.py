@@ -4,14 +4,12 @@ import json
 import os
 import shutil
 from datetime import datetime
-from math import ceil
 from numbers import Number
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 from warnings import warn
 
-import dask.array as da
 import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
@@ -19,12 +17,10 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
-from anndata import AnnData
 from dask_image.imread import imread
 from geopandas import GeoDataFrame
 from parse import *
-from rasterio.features import rasterize
-from scipy.sparse import csr_matrix, issparse
+from scipy.sparse import issparse
 from shapely import Polygon
 from shapely.geometry.polygon import Polygon
 from tqdm import tqdm
@@ -34,7 +30,8 @@ from insitupy._constants import ISPY_METADATA_FILE
 from insitupy._core._save import _save_images
 from insitupy._core._xenium import (_read_binned_expression,
                                     _read_boundaries_from_xenium,
-                                    _read_matrix_from_xenium)
+                                    _read_matrix_from_xenium,
+                                    _restructure_transcripts_dataframe)
 from insitupy.io.io import (read_annotationsdata, read_baysor_cells,
                             read_baysor_transcripts, read_celldata,
                             read_regionsdata)
@@ -50,16 +47,13 @@ from .._exceptions import (ModalityNotFoundError, NotOneElementError,
                            XeniumDataRepeatedCropError)
 from ..images import ImageRegistration, deconvolve_he, resize_image
 from ..images.utils import create_img_pyramid
-from ..utils._scanorama import scanorama
-from ..utils.io import (check_overwrite_and_remove_if_true,
-                        read_baysor_polygons, read_json, write_dict_to_json)
-from ..utils.utils import convert_to_list, decode_robust_series
+from ..utils.io import (check_overwrite_and_remove_if_true, read_json,
+                        write_dict_to_json)
+from ..utils.utils import convert_to_list
 from ..utils.utils import textformat as tf
-from ._checks import check_raw, check_zip
 from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
-from .dataclasses import (AnnotationsData, BoundariesData, CellData, ImageData,
-                          RegionsData)
+from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData
 
 # optional packages that are not always installed
 if WITH_NAPARI:
@@ -71,42 +65,6 @@ if WITH_NAPARI:
     from ._widgets import (_create_points_layer, _initialize_widgets,
                            add_new_annotations_widget)
 
-
-def _restructure_transcripts_dataframe(dataframe):
-
-    # decode columns
-    dataframe = dataframe.apply(lambda x: decode_robust_series(x), axis=0)
-    # set index and rename columns
-    dataframe = dataframe.set_index("transcript_id")
-    dataframe = dataframe.rename({
-        "cell_id": "xenium_cell_id",
-        "x_location": "x",
-        "y_location": "y",
-        "z_location": "z",
-        "feature_name": "gene"
-    }, axis=1)
-
-    # reorder dataframe
-    column_names_ordered = ["x", "y", "z", "gene", "qv", "overlaps_nucleus", "fov_name", "nucleus_distance", "xenium_cell_id"]
-    in_df = [elem in dataframe.columns for elem in column_names_ordered]
-    column_names_ordered = [elem for i, elem in zip(in_df, column_names_ordered) if i]
-    dataframe = dataframe.loc[:, column_names_ordered]
-
-    # group column names into MultiIndices
-    grouped_column_names = [
-        ("coordinates", "x"),
-        ("coordinates", "y"),
-        ("coordinates", "z"),
-        ("properties", "gene"),
-        ("properties", "qv"),
-        ("properties", "overlaps_nucleus"),
-        ("properties", "fov_name"),
-        ("properties", "nucleus_distance"),
-        ("cell_id", "xenium")
-    ]
-    grouped_column_names = [elem for i, elem in zip(in_df, grouped_column_names) if i]
-    dataframe.columns = pd.MultiIndex.from_tuples(grouped_column_names)
-    return dataframe
 
 class InSituData:
     #TODO: Docstring of InSituData
@@ -120,7 +78,7 @@ class InSituData:
                  metadata: dict,
                  slide_id: str,
                  sample_id: str,
-                 from_insitudata: bool
+                 from_insitudata: bool,
                  ):
         """_summary_
 
@@ -139,8 +97,14 @@ class InSituData:
         self.from_insitudata = from_insitudata
 
     def __repr__(self):
+        try:
+            method = self.metadata["method"]
+        except KeyError:
+            method = "unknown"
+
         repr = (
-            f"{tf.Bold+tf.Red}XeniumData{tf.ResetAll}\n"
+            f"{tf.Bold+tf.Red}InSituData{tf.ResetAll}\n"
+            f"{tf.Bold}Method:{tf.ResetAll}\t\t{method}\n"
             f"{tf.Bold}Slide ID:{tf.ResetAll}\t{self.slide_id}\n"
             f"{tf.Bold}Sample ID:{tf.ResetAll}\t{self.sample_id}\n"
             f"{tf.Bold}Data path:{tf.ResetAll}\t{self.path.parent}\n"

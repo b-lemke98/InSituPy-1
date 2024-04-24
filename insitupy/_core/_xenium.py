@@ -147,3 +147,40 @@ def _read_binned_expression(
     gene_mask = [elem in gene_names_to_select for elem in gene_names]
     arr = arr[gene_mask]
     return arr
+
+
+def _restructure_transcripts_dataframe(dataframe):
+
+    # decode columns
+    dataframe = dataframe.apply(lambda x: decode_robust_series(x), axis=0)
+    # set index and rename columns
+    dataframe = dataframe.set_index("transcript_id")
+    dataframe = dataframe.rename({
+        "cell_id": "xenium_cell_id",
+        "x_location": "x",
+        "y_location": "y",
+        "z_location": "z",
+        "feature_name": "gene"
+    }, axis=1)
+
+    # reorder dataframe
+    column_names_ordered = ["x", "y", "z", "gene", "qv", "overlaps_nucleus", "fov_name", "nucleus_distance", "xenium_cell_id"]
+    in_df = [elem in dataframe.columns for elem in column_names_ordered]
+    column_names_ordered = [elem for i, elem in zip(in_df, column_names_ordered) if i]
+    dataframe = dataframe.loc[:, column_names_ordered]
+
+    # group column names into MultiIndices
+    grouped_column_names = [
+        ("coordinates", "x"),
+        ("coordinates", "y"),
+        ("coordinates", "z"),
+        ("properties", "gene"),
+        ("properties", "qv"),
+        ("properties", "overlaps_nucleus"),
+        ("properties", "fov_name"),
+        ("properties", "nucleus_distance"),
+        ("cell_id", "xenium")
+    ]
+    grouped_column_names = [elem for i, elem in zip(in_df, grouped_column_names) if i]
+    dataframe.columns = pd.MultiIndex.from_tuples(grouped_column_names)
+    return dataframe
