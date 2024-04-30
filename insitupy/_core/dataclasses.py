@@ -30,10 +30,10 @@ from ..utils.geo import parse_geopandas, write_qupath_geojson
 from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
-from ._mixins import DeepCopyMixin
+from ._mixins import DeepCopyMixin, GetMixin
 
 
-class ShapesData(DeepCopyMixin):
+class ShapesData(DeepCopyMixin, GetMixin):
     '''
     Object to store annotations.
     '''
@@ -299,7 +299,7 @@ class RegionsData(ShapesData):
 
         ShapesData.__init__(self, files, keys, pixel_size)
 
-class BoundariesData(DeepCopyMixin):
+class BoundariesData(DeepCopyMixin, GetMixin):
     '''
     Object to read and load boundaries of cells and nuclei.
     '''
@@ -476,7 +476,7 @@ class BoundariesData(DeepCopyMixin):
         # # save metadata
         # write_dict_to_json(dictionary=metadata_to_save, file=path / ".boundariesdata")
 
-class CellData(DeepCopyMixin):
+class CellData(DeepCopyMixin, GetMixin):
     '''
     Data object containing an AnnData object and a boundary object which are kept in sync.
     '''
@@ -675,7 +675,7 @@ class CellData(DeepCopyMixin):
                     setattr(self.boundaries, n, df)
 
 
-class ImageData(DeepCopyMixin):
+class ImageData(DeepCopyMixin, GetMixin):
     '''
     Object to read and load images.
     '''
