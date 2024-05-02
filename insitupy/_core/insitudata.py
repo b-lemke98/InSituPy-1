@@ -577,17 +577,17 @@ class InSituData:
         alt_attr[key_to_add] = celldata_to_add
 
     def add_baysor(self,
-                    baysor_output: Union[str, os.PathLike, Path],
-                    read_transcripts: bool = False,
-                    key_to_add: str = "baysor",
-                    pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
-                    ):
+                   path: Union[str, os.PathLike, Path],
+                   read_transcripts: bool = False,
+                   key_to_add: str = "baysor",
+                   pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
+                   ):
 
         # # convert to pathlib path
-        baysor_output = Path(baysor_output)
+        path = Path(path)
 
         # read baysor data
-        celldata = read_baysor_cells(baysor_output=baysor_output, pixel_size=pixel_size)
+        celldata = read_baysor_cells(baysor_output=path, pixel_size=pixel_size)
 
         # add celldata to alt attribute
         self.add_alt(celldata_to_add=celldata, key_to_add=key_to_add)
@@ -601,7 +601,7 @@ class InSituData:
                 pass
             else:
                 # read baysor transcripts
-                baysor_results = read_baysor_transcripts(baysor_output=baysor_output)
+                baysor_results = read_baysor_transcripts(baysor_output=path)
                 baysor_results = baysor_results[["cell"]]
 
                 # merge transcripts with existing transcripts
