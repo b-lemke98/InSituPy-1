@@ -4,15 +4,12 @@ import json
 import os
 import shutil
 from datetime import datetime
-from math import ceil
 from numbers import Number
-from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 from warnings import warn
 
-import dask.array as da
 import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
@@ -20,41 +17,43 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
-from anndata import AnnData
 from dask_image.imread import imread
 from geopandas import GeoDataFrame
-from insitupy import WITH_NAPARI, __version__
-from insitupy._core._save import _save_images
-from insitupy._core.io import (_read_binned_expression,
-                               _read_boundaries_from_xenium,
-                               _read_matrix_from_xenium, read_annotationsdata,
-                               read_celldata, read_regionsdata)
-from insitupy.utils.io import read_json, save_and_show_figure
-from insitupy.utils.utils import get_nrows_maxcols
 from parse import *
-from rasterio.features import rasterize
-from scipy.sparse import csr_matrix, issparse
+from scipy.sparse import issparse
 from shapely import Polygon
 from shapely.geometry.polygon import Polygon
 from tqdm import tqdm
+
+from insitupy import WITH_NAPARI, __version__
+from insitupy._constants import ISPY_METADATA_FILE
+from insitupy._core._save import _save_images
+from insitupy._core._xenium import (_read_binned_expression,
+                                    _read_boundaries_from_xenium,
+                                    _read_matrix_from_xenium,
+                                    _restructure_transcripts_dataframe)
+from insitupy.io.io import (read_annotationsdata, read_baysor_cells,
+                            read_baysor_transcripts, read_celldata,
+                            read_regionsdata)
+from insitupy.utils.io import read_json, save_and_show_figure
+from insitupy.utils.preprocessing import (normalize_anndata,
+                                          reduce_dimensions_anndata)
+from insitupy.utils.utils import get_nrows_maxcols
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
 from .._exceptions import (ModalityNotFoundError, NotOneElementError,
                            UnknownOptionError, WrongNapariLayerTypeError,
                            XeniumDataMissingObject,
                            XeniumDataRepeatedCropError)
-from ..image import ImageRegistration, deconvolve_he, resize_image
-from ..image.utils import create_img_pyramid
-from ..utils.io import (check_overwrite_and_remove_if_true,
-                        read_baysor_polygons, read_json, write_dict_to_json)
-from ..utils.utils import convert_to_list, decode_robust_series
+from ..images import ImageRegistration, deconvolve_he, resize_image
+from ..images.utils import create_img_pyramid
+from ..utils.io import (check_overwrite_and_remove_if_true, read_json,
+                        write_dict_to_json)
+from ..utils.utils import convert_to_list
 from ..utils.utils import textformat as tf
-from ._checks import check_raw, check_zip
 from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
-from ._scanorama import scanorama
-from .dataclasses import (AnnotationsData, BoundariesData, CellData, ImageData,
-                          RegionsData)
+from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData
 
 # optional packages that are not always installed
 if WITH_NAPARI:
@@ -66,42 +65,6 @@ if WITH_NAPARI:
     from ._widgets import (_create_points_layer, _initialize_widgets,
                            add_new_annotations_widget)
 
-
-def _restructure_transcripts_dataframe(dataframe):
-
-    # decode columns
-    dataframe = dataframe.apply(lambda x: decode_robust_series(x), axis=0)
-    # set index and rename columns
-    dataframe = dataframe.set_index("transcript_id")
-    dataframe = dataframe.rename({
-        "cell_id": "xenium_cell_id",
-        "x_location": "x",
-        "y_location": "y",
-        "z_location": "z",
-        "feature_name": "gene"
-    }, axis=1)
-
-    # reorder dataframe
-    column_names_ordered = ["x", "y", "z", "gene", "qv", "overlaps_nucleus", "fov_name", "nucleus_distance", "xenium_cell_id"]
-    in_df = [elem in dataframe.columns for elem in column_names_ordered]
-    column_names_ordered = [elem for i, elem in zip(in_df, column_names_ordered) if i]
-    dataframe = dataframe.loc[:, column_names_ordered]
-
-    # group column names into MultiIndices
-    grouped_column_names = [
-        ("coordinates", "x"),
-        ("coordinates", "y"),
-        ("coordinates", "z"),
-        ("properties", "gene"),
-        ("properties", "qv"),
-        ("properties", "overlaps_nucleus"),
-        ("properties", "fov_name"),
-        ("properties", "nucleus_distance"),
-        ("cell_id", "xenium")
-    ]
-    grouped_column_names = [elem for i, elem in zip(in_df, grouped_column_names) if i]
-    dataframe.columns = pd.MultiIndex.from_tuples(grouped_column_names)
-    return dataframe
 
 class InSituData:
     #TODO: Docstring of InSituData
@@ -115,7 +78,7 @@ class InSituData:
                  metadata: dict,
                  slide_id: str,
                  sample_id: str,
-                 from_insitudata: bool
+                 from_insitudata: bool,
                  ):
         """_summary_
 
@@ -134,8 +97,14 @@ class InSituData:
         self.from_insitudata = from_insitudata
 
     def __repr__(self):
+        try:
+            method = self.metadata["method"]
+        except KeyError:
+            method = "unknown"
+
         repr = (
-            f"{tf.Bold+tf.Red}XeniumData{tf.ResetAll}\n"
+            f"{tf.Bold+tf.Red}InSituData{tf.ResetAll}\n"
+            f"{tf.Bold}Method:{tf.ResetAll}\t\t{method}\n"
             f"{tf.Bold}Slide ID:{tf.ResetAll}\t{self.slide_id}\n"
             f"{tf.Bold}Sample ID:{tf.ResetAll}\t{self.sample_id}\n"
             f"{tf.Bold}Data path:{tf.ResetAll}\t{self.path.parent}\n"
@@ -553,6 +522,7 @@ class InSituData:
 
     def normalize(self,
                 transformation_method: Literal["log1p", "sqrt"] = "log1p",
+                normalize_alt: bool = True,
                 verbose: bool = True
                 ) -> None:
         """
@@ -562,6 +532,8 @@ class InSituData:
             transformation_method (Literal["log1p", "sqrt"], optional):
                 The method used for data transformation. Choose between "log1p" for logarithmic transformation
                 and "sqrt" for square root transformation. Default is "log1p".
+            normalize_alt (bool, optional):
+                If True, `.alt` modalities are also normalized, if available.
             verbose (bool, optional):
                 If True, print progress messages during normalization. Default is True.
 
@@ -572,88 +544,28 @@ class InSituData:
             None: This method modifies the input matrix in place, normalizing the data based on the specified method.
                 It does not return any value.
         """
-        # check if the matrix consists of raw integer counts
-        check_raw(self.cells.matrix.X)
-
-        # store raw counts in layer
-        print("Store raw counts in anndata.layers['counts']...") if verbose else None
-        self.cells.matrix.layers['counts'] = self.cells.matrix.X.copy()
-
-        # preprocessing according to napari tutorial in squidpy
-        print(f"Normalization, {transformation_method}-transformation...") if verbose else None
-        sc.pp.normalize_total(self.cells.matrix)
-        self.cells.matrix.layers['norm_counts'] = self.cells.matrix.X.copy()
-
-        # transform either using log transformation or square root transformation
-        if transformation_method == "log1p":
-            sc.pp.log1p(self.cells.matrix)
-        elif transformation_method == "sqrt":
-            # Suggested in stlearn tutorial (https://stlearn.readthedocs.io/en/latest/tutorials/Xenium_PSTS.html)
-            X = self.cells.matrix.X.toarray()
-            self.cells.matrix.X = csr_matrix(np.sqrt(X) + np.sqrt(X + 1))
-        else:
-            raise ValueError(f'`transformation_method` is not one of ["log1p", "sqrt"]')
-
-    def add_baysor(self,
-                    baysor_output: Union[str, os.PathLike, Path],
-                    key_to_add: str = "baysor",
-                    pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
-                    ):
-
-        # convert to pathlib path
-        baysor_output = Path(baysor_output)
-
         try:
             cells = self.cells
         except AttributeError:
             raise ModalityNotFoundError(modality="cells")
 
-        # read matrix
-        print("Parsing count matrix...", flush=True)
-        loomfile = baysor_output / "segmentation_counts.loom"
-        matrix = sc.read_loom(loomfile)
+        normalize_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
 
-        # set indices for .obs and .var
-        matrix.obs = matrix.obs.reset_index().set_index("Name")
-        matrix.obs["CellID"] = matrix.obs["CellID"].astype(float).astype(int) # convert cell id to int
-        matrix.var.set_index("Name", inplace=True)
+        try:
+            alt = self.alt
+        except AttributeError:
+            pass
+        else:
+            print("Found `.alt` modality.")
+            for k, cells in alt.items():
+                print(f"\tNormalizing {k}...")
+                normalize_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
 
-        # remove unassigned codewords from genes and obs entries with an NaN in any column
-        varmask = ~matrix.var_names.str.startswith("UnassignedCodeword")
-        obsmask = ~matrix.obs.isna().any(axis=1)
-        matrix = matrix[obsmask, varmask].copy()
-
-        # set spatial coordinates
-        matrix.obsm["spatial"] = matrix.obs[["x", "y"]].values
-        matrix.obs.drop(["x", "y"], axis=1, inplace=True) # drop the coordinate columns
-
-        # read polygons
-        print("Reading segmentation masks", flush=True)
-        print("\tRead polygons", flush=True)
-        jsonfile = baysor_output / "segmentation_polygons.json"
-        df = read_baysor_polygons(jsonfile)
-
-        # remove polygons of cells that have been removed in the matrix
-        df = df[df.cell.astype(int).isin(matrix.obs["CellID"])]
-
-        # determine dimensions of dataset
-        xmax = ceil(cells.matrix.obsm['spatial'][:, 0].max() + 15)
-        ymax = ceil(cells.matrix.obsm['spatial'][:, 1].max() + 15)
-
-        # generate a segmentation mask
-        print("\tConvert polygons to segmentation mask", flush=True)
-        img = rasterize(list(zip(df["geometry"], df["cell"])), out_shape=(ymax,xmax))
-
-        # convert to dask array
-        img = da.from_array(img)
-
-        # create boundaries object
-        cell_ids = da.from_array(matrix.obs["CellID"].values) # extract cell ids from adata
-        seg_mask_value = da.from_array(sorted(df["cell"]))
-        boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
-        boundaries.add_boundaries(data={f"cellular": img}, pixel_size=pixel_size)
-
-        # add data to XeniumData
+    def add_alt(self,
+                celldata_to_add: CellData,
+                key_to_add: str
+                ) -> None:
+        # check if the current self has already an alt object and add a empty one if not
         alt_attr_name = "alt"
         try:
             alt_attr = getattr(self, alt_attr_name)
@@ -661,34 +573,47 @@ class InSituData:
             setattr(self, alt_attr_name, {})
             alt_attr = getattr(self, alt_attr_name)
 
-        alt_attr[key_to_add] = CellData(matrix=matrix, boundaries=boundaries)
+        # add the celldata to the given key
+        alt_attr[key_to_add] = celldata_to_add
 
-        trans_attr_name = "transcripts"
-        try:
-            trans_attr = getattr(self, trans_attr_name)
-        except AttributeError:
-            print("No transcript layer found. Addition of Baysor transcript data is skipped.", flush=True)
-            pass
-        else:
-            # read transcripts from Baysor results
-            print("Parsing transcripts data...", flush=True)
+    def add_baysor(self,
+                    baysor_output: Union[str, os.PathLike, Path],
+                    read_transcripts: bool = False,
+                    key_to_add: str = "baysor",
+                    pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
+                    ):
 
-            print("\tRead data", flush=True)
-            segcsv_file = baysor_output / "segmentation.csv"
-            baysor_transcript_dataframe = pd.read_csv(segcsv_file)
+        # # convert to pathlib path
+        baysor_output = Path(baysor_output)
 
-            print("\tMerge with existing data", flush=True)
-            transcript_id_col = [elem for elem in ["transcript_id", "molecule_id"] if elem in baysor_transcript_dataframe.columns][0]
-            baysor_results = baysor_transcript_dataframe.set_index(transcript_id_col)[["cell"]]
-            baysor_results.columns = pd.MultiIndex.from_tuples([("cell_id", key_to_add)])
-            trans_attr = pd.merge(left=trans_attr,
-                                  right=baysor_results,
-                                  left_index=True,
-                                  right_index=True
-                                  )
+        # read baysor data
+        celldata = read_baysor_cells(baysor_output=baysor_output, pixel_size=pixel_size)
 
-            # add resulting dataframe to XeniumData
-            setattr(self, trans_attr_name, trans_attr)
+        # add celldata to alt attribute
+        self.add_alt(celldata_to_add=celldata, key_to_add=key_to_add)
+
+        if read_transcripts:
+            trans_attr_name = "transcripts"
+            try:
+                trans_attr = getattr(self, trans_attr_name)
+            except AttributeError:
+                print("No transcript layer found. Addition of Baysor transcript data is skipped.", flush=True)
+                pass
+            else:
+                # read baysor transcripts
+                baysor_results = read_baysor_transcripts(baysor_output=baysor_output)
+                baysor_results = baysor_results[["cell"]]
+
+                # merge transcripts with existing transcripts
+                baysor_results.columns = pd.MultiIndex.from_tuples([("cell_id", key_to_add)])
+                trans_attr = pd.merge(left=trans_attr,
+                                    right=baysor_results,
+                                    left_index=True,
+                                    right_index=True
+                                    )
+
+                # add resulting dataframe to XeniumData
+                setattr(self, trans_attr_name, trans_attr)
 
 
     def plot_dimred(self, save: Optional[str] = None):
@@ -788,7 +713,7 @@ class InSituData:
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
             else:
-                self.cells = read_celldata(path=self.path / cells_path, pixel_size=pixel_size)
+                self.cells = read_celldata(path=self.path / cells_path)
 
             # check if alt data is there and read if yes
             try:
@@ -799,7 +724,7 @@ class InSituData:
                 print("\tFound alternative cells...")
                 alt_dict = {}
                 for k, p in alt_path_dict.items():
-                    alt_dict[k] = read_celldata(path=self.path / p, pixel_size=pixel_size)
+                    alt_dict[k] = read_celldata(path=self.path / p)
 
                 # add attribute
                 setattr(self, "alt", alt_dict)
@@ -879,6 +804,7 @@ class InSituData:
                         umap: bool = True,
                         tsne: bool = True,
                         batch_correction_key: Optional[str] = None,
+                        perform_clustering: bool = True,
                         verbose: bool = True,
                         tsne_lr: int = 1000,
                         tsne_jobs: int = 8,
@@ -910,41 +836,34 @@ class InSituData:
             None: This method modifies the input matrix in place, reducing its dimensionality using specified techniques and
                 batch correction if applicable. It does not return any value.
         """
+        try:
+            cells = self.cells
+        except AttributeError:
+            raise ModalityNotFoundError(modality="cells")
 
-        if batch_correction_key is None:
-            # dimensionality reduction
-            print("Dimensionality reduction...") if verbose else None
-            sc.pp.pca(self.cells.matrix)
-            if umap:
-                sc.pp.neighbors(self.cells.matrix)
-                sc.tl.umap(self.cells.matrix)
-            if tsne:
-                sc.tl.tsne(self.cells.matrix, n_jobs=tsne_jobs, learning_rate=tsne_lr)
+        reduce_dimensions_anndata(adata=cells.matrix,
+                                  umap=umap, tsne=tsne,
+                                  batch_correction_key=batch_correction_key,
+                                  perform_clustering=perform_clustering,
+                                  verbose=verbose,
+                                  tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
+                                  )
 
+        try:
+            alt = self.alt
+        except AttributeError:
+            pass
         else:
-            # PCA
-            sc.pp.pca(self.cells.matrix)
-
-            neigh_uncorr_key = 'neighbors_uncorrected'
-            sc.pp.neighbors(self.cells.matrix, key_added=neigh_uncorr_key)
-
-            # clustering
-            sc.tl.leiden(self.cells.matrix, neighbors_key=neigh_uncorr_key, key_added='leiden_uncorrected')
-
-            # batch correction
-            print(f"Batch correction using scanorama for {batch_correction_key}...") if verbose else None
-            hvgs = list(self.cells.matrix.var_names[self.cells.matrix.var['highly_variable']])
-            self.cells.matrix = scanorama(self.cells.matrix, batch_key=batch_correction_key, hvg=hvgs, verbose=False, **kwargs)
-
-            # find neighbors
-            sc.pp.neighbors(self.cells.matrix, use_rep="X_scanorama")
-            sc.tl.umap(self.cells.matrix)
-            sc.tl.tsne(self.cells.matrix, use_rep="X_scanorama")
-
-        # clustering
-        print("Leiden clustering...") if verbose else None
-        sc.tl.leiden(self.cells.matrix)
-
+            print("Found `.alt` modality.")
+            for k, cells in alt.items():
+                print(f"\tReducing dimensions in `.alt['{k}']...")
+                reduce_dimensions_anndata(adata=cells.matrix,
+                                        umap=umap, tsne=tsne,
+                                        batch_correction_key=batch_correction_key,
+                                        perform_clustering=perform_clustering,
+                                        verbose=verbose,
+                                        tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
+                                        )
 
     def register_images(self,
                         img_dir: Union[str, os.PathLike, Path],
@@ -1536,12 +1455,6 @@ class InSituData:
         # create viewer
         self.viewer = napari.Viewer()
 
-        # # optionally add images
-        # if show_images:
-        #     # add images
-        #     if not hasattr(self, "images"):
-        #         raise XeniumDataMissingObject("images")
-
         try:
             image_keys = self.images.metadata.keys()
         except AttributeError:
@@ -1906,89 +1819,3 @@ class InSituData:
                     print(f"Removed {len(dirs_to_remove)} entries from '.{cat}'.") if verbose else None
                 else:
                     print(f"No history found for '{cat}'.") if verbose else None
-
-
-
-def read_xenium(
-    path: Union[str, os.PathLike, Path],
-    metadata_filename: Optional[str] = None,
-) -> InSituData:
-        """_summary_
-
-        Args:
-            path (Union[str, os.PathLike, Path]): _description_
-            pattern_xenium_folder (str, optional): _description_. Defaults to "output-{ins_id}__{slide_id}__{sample_id}".
-            matrix (Optional[AnnData], optional): _description_. Defaults to None.
-
-        Raises:
-            FileNotFoundError: _description_
-        """
-        path = Path(path) # make sure the path is a pathlib path
-        path = Path(path)
-        dim = None # dimensions of the dataset
-        from_insitudata = False  # flag indicating from where the data is read
-        if (path / ISPY_METADATA_FILE).exists():
-            # read xeniumdata metadata
-            xd_metadata_file = path / ISPY_METADATA_FILE
-            metadata = read_json(xd_metadata_file)
-
-            # retrieve slide_id and sample_id
-            slide_id = metadata["slide_id"]
-            sample_id = metadata["sample_id"]
-
-            # save paths of this project in metadata
-            metadata["path"] = abspath(path).replace("\\", "/")
-            metadata["metadata_file"] = ISPY_METADATA_FILE
-
-            # set flag for xeniumdata
-            from_insitudata = True
-        else:
-            # initialize the metadata dict
-            metadata = {}
-            metadata["data"] = {}
-            metadata["history"] = {}
-            metadata["history"]["cells"] = []
-            metadata["history"]["annotations"] = []
-            metadata["history"]["regions"] = []
-
-            # check if path exists
-            if not path.is_dir():
-                raise FileNotFoundError(f"No such directory found: {str(path)}")
-
-            if metadata_filename is not None:
-                experiment_xenium_filename = metadata_filename
-
-            else:
-                # check for modified metadata_filename
-                metadata_files = [elem.name for elem in path.glob("*.xenium")]
-                if "experiment_modified.xenium" in metadata_files:
-                    experiment_xenium_filename = "experiment_modified.xenium"
-                else:
-                    experiment_xenium_filename = "experiment.xenium"
-
-            # # all changes are saved to the modified .xenium json
-            # metadata_save_path_after_registration = path / "experiment_modified.xenium"
-
-            # save paths of this project in metadata
-            metadata["path"] = abspath(path).replace("\\", "/")
-            metadata["metadata_file"] = experiment_xenium_filename
-
-            # read metadata
-            metadata["xenium"] = read_json(path / experiment_xenium_filename)
-
-            # get slide id and sample id from metadata
-            slide_id = metadata["xenium"]["slide_id"]
-            sample_id = metadata["xenium"]["region_name"]
-
-            # initialize the uid section
-            metadata["uids"] = [str(uuid4())]
-
-        data = InSituData(path=path,
-                          metadata=metadata,
-                          slide_id=slide_id,
-                          sample_id=sample_id,
-                          from_insitudata=from_insitudata
-                          )
-
-        return data
-

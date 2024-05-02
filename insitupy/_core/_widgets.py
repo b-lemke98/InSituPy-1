@@ -11,7 +11,7 @@ from shapely.geometry.multipolygon import MultiPolygon
 import insitupy._core.config as config
 from insitupy import WITH_NAPARI
 
-from ..image.utils import create_img_pyramid
+from ..images.utils import create_img_pyramid
 from ..utils.palettes import CustomPalettes
 
 if WITH_NAPARI:
