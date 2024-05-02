@@ -43,7 +43,7 @@ def md5sum_image_check(file_path : Path, expected_md5sum, overwrite):
     return download
 
 # function that checks data for md5sum and downloads data.
-def data_check(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir):
+def data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir):
     # check if the unzipped xenium data exists
     download_xeniumdata = False
     if xeniumdata_dir.exists():
