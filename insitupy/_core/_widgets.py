@@ -221,7 +221,7 @@ if WITH_NAPARI:
 
             @magicgui(
                 call_button='Show',
-                cell={'label': "Cells:"},
+                cell={'label': "Cell:"},
                 zoom={'label': 'Zoom:'},
                 highlight={'label': 'Highlight'}
                 )

@@ -1581,10 +1581,14 @@ class InSituData:
         try:
             cells = self.cells
         except AttributeError:
-            pass
+            # add annotation widget to napari
+            annot_widget = add_new_annotations_widget()
+            annot_widget.max_height = 100
+            annot_widget.max_width = widgets_max_width
+            self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
         else:
             # initialize the widgets
-            add_points_widget, locate_cells_widget, add_region_widget, show_annotations_widget, add_boundaries_widget, select_data = _initialize_widgets(xdata=self)
+            show_points_widget, locate_cells_widget, add_region_widget, show_annotations_widget, show_boundaries_widget, select_data = _initialize_widgets(xdata=self)
 
             # add widgets to napari window
             if select_data is not None:
@@ -1592,36 +1596,37 @@ class InSituData:
                 select_data.max_height = 50
                 select_data.max_width = widgets_max_width
 
-            if add_points_widget is not None:
-                self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
-                add_points_widget.max_height = 130
-                add_points_widget.max_width = widgets_max_width
+            if show_points_widget is not None:
+                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right")
+                show_points_widget.max_height = 130
+                show_points_widget.max_width = widgets_max_width
 
-            if add_boundaries_widget is not None:
-                self.viewer.window.add_dock_widget(add_boundaries_widget, name="Add boundaries", area="right")
-                add_boundaries_widget.max_height = 80
-                add_boundaries_widget.max_width = widgets_max_width
+            if show_boundaries_widget is not None:
+                self.viewer.window.add_dock_widget(show_boundaries_widget, name="Show boundaries", area="right")
+                show_boundaries_widget.max_height = 80
+                show_boundaries_widget.max_width = widgets_max_width
 
             if locate_cells_widget is not None:
-                self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate", area="right")
-                locate_cells_widget.max_height = 130
+                self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate to cell", area="right")
+                #locate_cells_widget.max_height = 130
                 locate_cells_widget.max_width = widgets_max_width
+
+            # add annotation widget to napari
+            annot_widget = add_new_annotations_widget()
+            annot_widget.max_height = 100
+            annot_widget.max_width = widgets_max_width
+            self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
 
             if add_region_widget is not None:
                 self.viewer.window.add_dock_widget(add_region_widget, name="Show regions", area="right")
-                add_region_widget.max_height = 150
+                add_region_widget.max_height = 100
                 add_region_widget.max_width = widgets_max_width
 
             if show_annotations_widget is not None:
-                self.viewer.window.add_dock_widget(show_annotations_widget, name="Show annotations", area="right")
-                show_annotations_widget.max_height = 150
+                self.viewer.window.add_dock_widget(show_annotations_widget, name="Show annotations", area="right", tabify=True)
+                show_annotations_widget.max_height = 100
                 show_annotations_widget.max_width = widgets_max_width
 
-        # add annotation widget to napari
-        annot_widget = add_new_annotations_widget()
-        annot_widget.max_height = 100
-        annot_widget.max_width = widgets_max_width
-        self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
 
         # EVENTS
         # Function assign to an layer addition event
