@@ -742,7 +742,8 @@ class InSituData:
 
     def load_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
-                    nuclei_type: Literal["focus", "mip", ""] = "mip"
+                    nuclei_type: Literal["focus", "mip", ""] = "mip",
+                    load_cell_segmentation_images: bool = True
                     ):
         # load image into ImageData object
         print("Loading images...", flush=True)
@@ -793,6 +794,21 @@ class InSituData:
 
             # get path of image files
             img_files = [self.metadata["xenium"]["images"][k] for k in img_keys]
+
+            if load_cell_segmentation_images:
+                # get cell segmentation images if available
+                if "morphology_focus/" in self.metadata["xenium"]["images"][nuclei_file_key]:
+                    seg_files = ["morphology_focus/morphology_focus_0001.ome.tif",
+                                 "morphology_focus/morphology_focus_0002.ome.tif",
+                                 "morphology_focus/morphology_focus_0003.ome.tif"
+                                 ]
+                    seg_names = ["cellseg1", "cellseg2", "cellseg3"]
+
+                    # check which segmentation files exist and append to image list
+                    seg_file_exists_list = [(self.path / f).is_file() for f in seg_files]
+                    print(seg_file_exists_list)
+                    img_files += [f for f, exists in zip(seg_files, seg_file_exists_list) if exists]
+                    img_names += [n for n, exists in zip(seg_names, seg_file_exists_list) if exists]
 
         # add images to InSituData
         self.images = ImageData(self.path, img_files, img_names, pixel_size=self.metadata["xenium"]['pixel_size'])
