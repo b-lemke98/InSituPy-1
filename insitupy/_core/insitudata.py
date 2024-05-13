@@ -898,11 +898,12 @@ class InSituData:
                                         )
 
     def register_images(self,
-                        img_file: Union[str, os.PathLike, Path],
+                        image_to_be_registered: Union[str, os.PathLike, Path],
                         image_type: Literal["histo", "IF"],
                         channel_names: Union[str, List[str]],
                         channel_name_for_registration: Optional[str],  # name used for the nuclei image. Only required for IF images.
                         template_image_name: str = "nuclei",
+                        save_results: bool = True,
                         #corr_img_files: Union[str, os.PathLike, Path],
                         #image_types: Union[Literal["histo", "IF"], List[Literal["histo", "IF"]]],
                         # img_dir: Union[str, os.PathLike, Path],
@@ -912,50 +913,12 @@ class InSituData:
                         #image_name_sep: str = "_",  # string separating the image names in the file name
 
                         physicalsize: str = 'µm',
-                        force: bool = False,
+                        #force: bool = False,
                         #dapi_channel: int = None
                         ):
         '''
         Register images stored in XeniumData object.
         '''
-
-        # # add arguments to object
-        # self.img_dir = Path(img_dir)
-        # self.pattern_img_file = pattern_img_file
-
-        # # check if image path exists
-        # if not self.img_dir.is_dir():
-        #     raise FileNotFoundError(f"No such directory found: {str(self.img_dir)}")
-
-        # print(f"Processing sample {tf.Bold}{self.sample_id}{tf.ResetAll} of slide {tf.Bold}{self.slide_id}{tf.ResetAll}", flush=True)
-
-        # # get a list of image files
-        # img_files = sorted(self.img_dir.glob("*{}".format(img_suffix)))
-
-        # # find the corresponding image
-        # corr_img_files = [elem for elem in img_files if self.slide_id in str(elem) and self.sample_id in str(elem)]
-
-        # # check if image path exists
-        # if not corr_img_files.is_file():
-        #     raise FileNotFoundError(f"No such file found: {str(corr_img_files)}")
-
-        # assert len(corr_img_files) == len(image_types), "Number of image files and length of corresponding types is not equal."
-
-        # print(f"Processing file {corr_img_files}", flush=True)
-
-        # # make sure images corresponding to the Xenium data were found
-        # if len(corr_img_files) == 0:
-        #     print(f'\tNo image corresponding to slide `{self.slide_id}` and sample `{self.sample_id}` were found.')
-        # else:
-        #     metafile = self.metadata["metadata_file"]
-        #     if metafile == "experiment_modified.xenium":
-        #         print(f"\tFound modified `{metafile}` file. Information will be added to this file.")
-        #     elif metafile == "experiment.xenium":
-        #         print(f"\tOnly unmodified metadata file (`{metafile}`) found. Information will be added to new file (`experiment_modified.xenium`).")
-        #     else:
-        #         raise FileNotFoundError("Metadata file not found.")
-
-        #     for image_type, img_file in zip(image_types, corr_img_files):
 
         # if image type is IF, the channel name for registration needs to be given
         if image_type == "IF" and channel_name_for_registration is None:
@@ -964,12 +927,12 @@ class InSituData:
         # define output directory
         output_dir = self.path.parent / "registered_images"
 
-        if output_dir.is_dir() and not force:
-            raise FileExistsError(f"Output directory {output_dir} exists already. If you still want to run the registration, set `force=True`.")
+        # if output_dir.is_dir() and not force:
+        #     raise FileExistsError(f"Output directory {output_dir} exists already. If you still want to run the registration, set `force=True`.")
 
         # check if image path exists
-        if not img_file.is_file():
-            raise FileNotFoundError(f"No such file found: {str(img_file)}")
+        if not image_to_be_registered.is_file():
+            raise FileNotFoundError(f"No such file found: {str(image_to_be_registered)}")
 
         # make sure the given image names are in a list
         channel_names = convert_to_list(channel_names)
@@ -990,7 +953,7 @@ class InSituData:
                 raise ValueError(f"More than one image name retrieved ({channel_names})")
 
             if len(channel_names) == 0:
-                raise ValueError(f"No image name found in file {img_file}")
+                raise ValueError(f"No image name found in file {image_to_be_registered}")
 
         elif image_type == "IF":
             axes_image = "CYX"
@@ -1001,7 +964,7 @@ class InSituData:
 
         # read images
         print("\t\tLoading images to be registered...", flush=True)
-        image = imread(img_file) # e.g. HE image
+        image = imread(image_to_be_registered) # e.g. HE image
 
         # sometimes images are read with an empty time dimension in the first axis.
         # If this is the case, it is removed here.
@@ -1101,24 +1064,27 @@ class InSituData:
                 **pixelsizes
             }
 
-            # save files
-            identifier = f"{self.slide_id}__{self.sample_id}__{channel_names[0]}"
-            #current_outfile = output_dir / f"{identifier}__registered.ome.tif"
-            imreg_selected.save(
-                output_dir=output_dir,
-                #outfile=current_outfile,
-                identifier = identifier,
-                #path=self.path,
-                #filename=f"{self.slide_id}__{self.sample_id}__{image_names[0]}",
-                axes=axes_image,
-                photometric='rgb',
-                ome_metadata=ome_metadata
-                )
+            if save_results:
+                # save files
+                identifier = f"{self.slide_id}__{self.sample_id}__{channel_names[0]}"
+                #current_outfile = output_dir / f"{identifier}__registered.ome.tif"
+                imreg_selected.save(
+                    output_dir=output_dir,
+                    #outfile=current_outfile,
+                    identifier = identifier,
+                    #path=self.path,
+                    #filename=f"{self.slide_id}__{self.sample_id}__{image_names[0]}",
+                    axes=axes_image,
+                    photometric='rgb',
+                    ome_metadata=ome_metadata
+                    )
 
-            # save metadata
-            self.metadata["xenium"]['images'][f'registered_{channel_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path).replace("\\", "/")
-            write_dict_to_json(self.metadata, self.path / "experiment_modified.xenium")
-            #self._save_metadata_after_registration()
+                # save metadata
+                self.metadata["xenium"]['images'][f'registered_{channel_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path).replace("\\", "/")
+                write_dict_to_json(self.metadata["xenium"], self.path / "experiment_modified.xenium")
+                #self._save_metadata_after_registration()
+            else:
+                self.images.add_image(imreg_selected.registered)
 
             del imreg_complete, imreg_selected, image, template, nuclei_img, eo, dab
         else:
@@ -1157,15 +1123,15 @@ class InSituData:
 
                 # save metadata
                 self.metadata["xenium"]['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path).replace("\\", "/")
-                write_dict_to_json(self.metadata, self.path / "experiment_modified.xenium")
+                write_dict_to_json(self.metadata["xenium"], self.path / "experiment_modified.xenium")
                 #self._save_metadata_after_registration()
 
             # free RAM
             del imreg_complete, imreg_selected, image, template, nuclei_img
         gc.collect()
 
-        # read images
-        self.load_images()
+        # # read images
+        # self.load_images()
 
     def saveas(self,
             path: Union[str, os.PathLike, Path],

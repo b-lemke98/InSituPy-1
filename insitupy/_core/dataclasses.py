@@ -699,7 +699,7 @@ class ImageData(DeepCopyMixin, GetMixin):
 
             for n, f in zip(img_names, img_files):
                 impath = path / f
-                self.add_image(impath, n, pixel_size)
+                self.add_image(image=impath, n=n, axes=None, pixel_size=pixel_size, ome_meta=None)
 
     def __repr__(self):
         if len(self.metadata) > 0:
@@ -710,60 +710,74 @@ class ImageData(DeepCopyMixin, GetMixin):
         repr = f"{tf.Blue+tf.Bold}images{tf.ResetAll}\n{s}"
         return repr
 
-    def add_image(self, impath, n, pixel_size):
-        # # generate full path for image
-        # print(path)
-        # print(f)
-        # impath = path / f
-        impath = impath.resolve() # resolve relative path
-        suffix = impath.name.split(".", maxsplit=1)[-1]
+    def add_image(
+        self,
+        image: Union[da.core.Array, str, os.PathLike, Path],
+        n: str,
+        axes: str, # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
+        pixel_size: Number,
+        ome_meta: dict
+        ):
+        if Path(str(image)).exists():
+            # read path
+            image = Path(image)
+            image = image.resolve() # resolve relative path
+            suffix = image.name.split(".", maxsplit=1)[-1]
 
-        if "zarr" in suffix:
-        # load image from .zarr.zip
-            zipped = True if suffix == "zarr.zip" else False
-            with zarr.ZipStore(impath, mode="r") if zipped else zarr.DirectoryStore(impath) as dirstore:
-                # get components of zip store
-                components = dirstore.listdir()
+            if "zarr" in suffix:
+            # load image from .zarr.zip
+                zipped = True if suffix == "zarr.zip" else False
+                with zarr.ZipStore(image, mode="r") if zipped else zarr.DirectoryStore(image) as dirstore:
+                    # get components of zip store
+                    components = dirstore.listdir()
 
-                if ".zarray" in components:
-                    # the store is an array which can be opened
-                    if zipped:
-                        img = da.from_zarr(dirstore).persist()
-                    else:
-                        img = da.from_zarr(dirstore)
-                else:
-                    subres = [elem for elem in components if not elem.startswith(".")]
-                    img = []
-                    for s in subres:
+                    if ".zarray" in components:
+                        # the store is an array which can be opened
                         if zipped:
-                            img.append(
-                                da.from_zarr(dirstore, component=s).persist()
-                                        )
+                            img = da.from_zarr(dirstore).persist()
                         else:
-                            img.append(
-                                da.from_zarr(dirstore, component=s)
-                                        )
+                            img = da.from_zarr(dirstore)
+                    else:
+                        subres = [elem for elem in components if not elem.startswith(".")]
+                        img = []
+                        for s in subres:
+                            if zipped:
+                                img.append(
+                                    da.from_zarr(dirstore, component=s).persist()
+                                            )
+                            else:
+                                img.append(
+                                    da.from_zarr(dirstore, component=s)
+                                            )
 
-                # retrieve OME metadata
-                store = zarr.open(dirstore)
-                meta = store.attrs.asdict()
-                ome_meta = meta["OME"]
-                axes = meta["axes"]
+                    # retrieve OME metadata
+                    store = zarr.open(dirstore)
+                    meta = store.attrs.asdict()
+                    ome_meta = meta["OME"]
+                    axes = meta["axes"]
 
-        elif suffix in ["ome.tif", "ome.tiff"]:
-            # load image from .ome.tiff
-            img = read_ome_tiff(path=impath, levels=None)
-            # read ome metadata
-            with TiffFile(impath) as tif:
-                axes = tif.series[0].axes # get axes
-                ome_meta = tif.ome_metadata # read OME metadata
-                ome_meta = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
+            elif suffix in ["ome.tif", "ome.tiff"]:
+                # load image from .ome.tiff
+                img = read_ome_tiff(path=image, levels=None)
+                # read ome metadata
+                with TiffFile(image) as tif:
+                    axes = tif.series[0].axes # get axes
+                    ome_meta = tif.ome_metadata # read OME metadata
+                    ome_meta = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
 
+            else:
+                raise InvalidFileTypeError(
+                    allowed_types=["zarr", "zarr.zip", "ome.tif", "ome.tiff"],
+                    received_type=suffix
+                    )
+            filename = image.name
+
+        elif isinstance(image, da.core.Array):
+            assert axes is not None, "If `image` is dask array, `axes` needs to be set."
+            img = image
+            filename = None
         else:
-            raise InvalidFileTypeError(
-                allowed_types=["zarr", "zarr.zip", "ome.tif", "ome.tiff"],
-                received_type=suffix
-                )
+            raise ValueError(f"`image` is neither a dask array nor an existing path.")
 
         # set attribute and add names to object
         setattr(self, n, img)
@@ -776,7 +790,7 @@ class ImageData(DeepCopyMixin, GetMixin):
 
         # save metadata
         self.metadata[n] = {}
-        self.metadata[n]["filename"] = impath.name
+        self.metadata[n]["filename"] = filename
         #self.metadata[n]["file"] = Path(relpath(impath, self.path)).as_posix() # store file information
         #self.metadata[n]["file"] = f # store file information
         self.metadata[n]["shape"] = img_shape  # store shape
@@ -882,9 +896,11 @@ class ImageData(DeepCopyMixin, GetMixin):
                 if as_zarr:
                     # generate filename
                     if zipped:
-                        filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
+                        #filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
+                        filename = n + ".zarr.zip"
                     else:
-                        filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr"
+                        # filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr"
+                        filename = n + ".zarr"
 
                     # decide whether to save as pyramid or not
                     if isinstance(img, list):
@@ -913,7 +929,8 @@ class ImageData(DeepCopyMixin, GetMixin):
 
                 else:
                     # get file name for saving
-                    filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
+                    #filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
+                    filename = n + ".ome.tif"
                     # retrieve image metadata for saving
                     photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
                     axes = img_metadata['axes']
