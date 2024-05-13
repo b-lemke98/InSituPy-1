@@ -305,7 +305,7 @@ class ImageRegistration:
         self.calculate_transformation_matrix()
 
         # perform registration
-        self.register_images()
+        self.perform_registration()
 
     def save(self,
              path: Union[str, os.PathLike, Path],
