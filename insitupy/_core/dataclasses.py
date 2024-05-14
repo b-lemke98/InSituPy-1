@@ -680,13 +680,13 @@ class ImageData(DeepCopyMixin, GetMixin):
     Object to read and load images.
     '''
     def __init__(self,
-                 path: Union[str, os.PathLike, Path] = None,
+                 #path: Union[str, os.PathLike, Path] = None,
                  img_files: List[str] = None,
                  img_names: List[str] = None,
                  pixel_size: float = None,
                  ):
-        # add path to object
-        self.path = path
+        # # add path to object
+        # self.path = path
 
         # iterate through files and load them
         self.names = []
@@ -698,8 +698,14 @@ class ImageData(DeepCopyMixin, GetMixin):
             img_names = convert_to_list(img_names)
 
             for n, f in zip(img_names, img_files):
-                impath = path / f
-                self.add_image(image=impath, n=n, axes=None, pixel_size=pixel_size, ome_meta=None)
+                #impath = path / f
+                self.add_image(
+                    image=f,
+                    name=n,
+                    axes=None,
+                    pixel_size=pixel_size,
+                    ome_meta=None
+                    )
 
     def __repr__(self):
         if len(self.metadata) > 0:
@@ -713,7 +719,7 @@ class ImageData(DeepCopyMixin, GetMixin):
     def add_image(
         self,
         image: Union[da.core.Array, str, os.PathLike, Path],
-        n: str,
+        name: str,
         axes: str, # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
         pixel_size: Number,
         ome_meta: dict
@@ -772,7 +778,7 @@ class ImageData(DeepCopyMixin, GetMixin):
                     )
             filename = image.name
 
-        elif isinstance(image, da.core.Array):
+        elif isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
             assert axes is not None, "If `image` is dask array, `axes` needs to be set."
             img = image
             filename = None
@@ -780,8 +786,8 @@ class ImageData(DeepCopyMixin, GetMixin):
             raise ValueError(f"`image` is neither a dask array nor an existing path.")
 
         # set attribute and add names to object
-        setattr(self, n, img)
-        self.names.append(n)
+        setattr(self, name, img)
+        self.names.append(name)
 
         # retrieve metadata
         img_shape = img[0].shape if isinstance(img, list) else img.shape
@@ -789,31 +795,31 @@ class ImageData(DeepCopyMixin, GetMixin):
         img_max = int(img_max)
 
         # save metadata
-        self.metadata[n] = {}
-        self.metadata[n]["filename"] = filename
+        self.metadata[name] = {}
+        self.metadata[name]["filename"] = filename
         #self.metadata[n]["file"] = Path(relpath(impath, self.path)).as_posix() # store file information
         #self.metadata[n]["file"] = f # store file information
-        self.metadata[n]["shape"] = img_shape  # store shape
+        self.metadata[name]["shape"] = img_shape  # store shape
         #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
-        self.metadata[n]["axes"] = axes
-        self.metadata[n]["OME"] = ome_meta
+        self.metadata[name]["axes"] = axes
+        self.metadata[name]["OME"] = ome_meta
 
         # check whether the image is RGB or not
         if len(img_shape) == 3:
-            self.metadata[n]["rgb"] = True
+            self.metadata[name]["rgb"] = True
         elif len(img_shape) == 2:
-            self.metadata[n]["rgb"] = False
+            self.metadata[name]["rgb"] = False
         else:
             raise ValueError(f"Unknown image shape: {img_shape}")
 
         # get image contrast limits
-        if self.metadata[n]["rgb"]:
-            self.metadata[n]["contrast_limits"] = (0, 255)
+        if self.metadata[name]["rgb"]:
+            self.metadata[name]["contrast_limits"] = (0, 255)
         else:
-            self.metadata[n]["contrast_limits"] = (0, img_max)
+            self.metadata[name]["contrast_limits"] = (0, img_max)
 
         # add universal pixel size to metadata
-        self.metadata[n]['pixel_size'] = pixel_size
+        self.metadata[name]['pixel_size'] = pixel_size
 
 
     def load(self,

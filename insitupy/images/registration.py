@@ -308,8 +308,6 @@ class ImageRegistration:
         self.perform_registration()
 
     def save(self,
-             #path: Union[str, os.PathLike, Path],
-             #outfile: Union[str, os.PathLike, Path],
              output_dir: Union[str, os.PathLike, Path],
              identifier: str,
              axes: str,  # string describing the channel axes, e.g. YXS or CYX
@@ -337,8 +335,6 @@ class ImageRegistration:
             matchedVis = self.matchedVis
 
         # save registered image as OME-TIFF
-        #output_dir = path.parent / "registered_images"
-        #output_dir = outfile.parent
         output_dir.mkdir(parents=True, exist_ok=True) # create folder for registered images
         self.outfile = output_dir / f"{identifier}__registered.ome.tif"
         print(f"\t\tSave OME-TIFF to {self.outfile}", flush=True)

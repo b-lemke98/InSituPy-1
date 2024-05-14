@@ -806,12 +806,13 @@ class InSituData:
 
                     # check which segmentation files exist and append to image list
                     seg_file_exists_list = [(self.path / f).is_file() for f in seg_files]
-                    print(seg_file_exists_list)
+                    #print(seg_file_exists_list)
                     img_files += [f for f, exists in zip(seg_files, seg_file_exists_list) if exists]
                     img_names += [n for n, exists in zip(seg_names, seg_file_exists_list) if exists]
 
         # create imageData object
-        self.images = ImageData(self.path, img_files, img_names, pixel_size=self.metadata["xenium"]['pixel_size'])
+        img_paths = [self.path / elem for elem in img_files]
+        self.images = ImageData(img_paths, img_names, pixel_size=self.metadata["xenium"]['pixel_size'])
 
     def load_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
@@ -904,17 +905,8 @@ class InSituData:
                         channel_name_for_registration: Optional[str],  # name used for the nuclei image. Only required for IF images.
                         template_image_name: str = "nuclei",
                         save_results: bool = True,
-                        #corr_img_files: Union[str, os.PathLike, Path],
-                        #image_types: Union[Literal["histo", "IF"], List[Literal["histo", "IF"]]],
-                        # img_dir: Union[str, os.PathLike, Path],
-                        # img_suffix: str = ".ome.tif",
-                        # pattern_img_file: str = "{slide_id}__{sample_id}__{image_names}__{image_type}",
                         decon_scale_factor: float = 0.2,
-                        #image_name_sep: str = "_",  # string separating the image names in the file name
-
                         physicalsize: str = 'µm',
-                        #force: bool = False,
-                        #dapi_channel: int = None
                         ):
         '''
         Register images stored in XeniumData object.
@@ -936,12 +928,6 @@ class InSituData:
 
         # make sure the given image names are in a list
         channel_names = convert_to_list(channel_names)
-
-        # parse name of current image
-        #img_stem = img_file.stem.split(".")[0] # make sure to remove also suffices like .ome.tif
-        #img_file_parsed = parse(pattern_img_file, img_stem)
-        #self.image_names = img_file_parsed.named["image_names"].split(image_name_sep)
-        #image_type = img_file_parsed.named["image_type"] # check which image type it has (`histo` or `IF`)
 
         # determine the structure of the image axes and check other things
         axes_template = "YX"
@@ -977,8 +963,21 @@ class InSituData:
 
         # extract OME metadata
         ome_metadata_template = self.images.metadata["nuclei"]["OME"]
+
         # extract pixel size for x and y from metadata
         pixelsizes = {key: ome_metadata_template['Image']['Pixels'][key] for key in ['PhysicalSizeX', 'PhysicalSizeY']}
+
+        # generate OME metadata for saving
+        ome_metadata = {
+            **{'SignificantBits': 8,
+            'PhysicalSizeXUnit': physicalsize,
+            'PhysicalSizeYUnit': physicalsize
+            },
+            **pixelsizes
+        }
+
+        # determine one pixel direction as universal pixel size
+        pixel_size = pixelsizes['PhysicalSizeX']
 
         # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
         axes_selected = "YX"
@@ -1055,25 +1054,13 @@ class InSituData:
             # perform registration
             imreg_selected.perform_registration()
 
-            # generate OME metadata for saving
-            ome_metadata = {
-                **{'SignificantBits': 8,
-                'PhysicalSizeXUnit': physicalsize,
-                'PhysicalSizeYUnit': physicalsize
-                },
-                **pixelsizes
-            }
-
             if save_results:
                 # save files
                 identifier = f"{self.slide_id}__{self.sample_id}__{channel_names[0]}"
                 #current_outfile = output_dir / f"{identifier}__registered.ome.tif"
                 imreg_selected.save(
                     output_dir=output_dir,
-                    #outfile=current_outfile,
                     identifier = identifier,
-                    #path=self.path,
-                    #filename=f"{self.slide_id}__{self.sample_id}__{image_names[0]}",
                     axes=axes_image,
                     photometric='rgb',
                     ome_metadata=ome_metadata
@@ -1084,7 +1071,13 @@ class InSituData:
                 write_dict_to_json(self.metadata["xenium"], self.path / "experiment_modified.xenium")
                 #self._save_metadata_after_registration()
             else:
-                self.images.add_image(imreg_selected.registered)
+                self.images.add_image(
+                    image=imreg_selected.registered,
+                    name=channel_names[0],
+                    axes=axes_image,
+                    pixel_size=pixel_size,
+                    ome_meta=ome_metadata
+                    )
 
             del imreg_complete, imreg_selected, image, template, nuclei_img, eo, dab
         else:
@@ -1108,23 +1101,33 @@ class InSituData:
                 # perform registration
                 imreg_selected.perform_registration()
 
-                # save files
-                identifier = f"{self.slide_id}__{self.sample_id}__{n}"
-                #current_outfile = output_dir / f"{filename}__registered.ome.tif",
-                imreg_selected.save(
-                    #outfile = current_outfile,
-                    output_dir=output_dir,
-                    identifier=identifier,
-                    #output_dir=self.path.parent / "registered_images",
-                    #filename=f"{self.slide_id}__{self.sample_id}__{n}",
-                    axes='YX',
-                    photometric='minisblack'
-                    )
+                if save_results:
+                    # save files
+                    identifier = f"{self.slide_id}__{self.sample_id}__{n}"
+                    #current_outfile = output_dir / f"{filename}__registered.ome.tif",
+                    imreg_selected.save(
+                        #outfile = current_outfile,
+                        output_dir=output_dir,
+                        identifier=identifier,
+                        #output_dir=self.path.parent / "registered_images",
+                        #filename=f"{self.slide_id}__{self.sample_id}__{n}",
+                        axes='YX',
+                        photometric='minisblack',
+                        ome_metadata=ome_metadata
+                        )
 
-                # save metadata
-                self.metadata["xenium"]['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path).replace("\\", "/")
-                write_dict_to_json(self.metadata["xenium"], self.path / "experiment_modified.xenium")
-                #self._save_metadata_after_registration()
+                    # save metadata
+                    self.metadata["xenium"]['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path).replace("\\", "/")
+                    write_dict_to_json(self.metadata["xenium"], self.path / "experiment_modified.xenium")
+                    #self._save_metadata_after_registration()
+                else:
+                    self.images.add_image(
+                        image=imreg_selected.registered,
+                        name=n,
+                        axes=axes_image,
+                        pixel_size=pixel_size,
+                        ome_meta=ome_metadata
+                        )
 
             # free RAM
             del imreg_complete, imreg_selected, image, template, nuclei_img
