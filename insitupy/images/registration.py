@@ -7,8 +7,11 @@ import cv2
 import dask.array as da
 import matplotlib.pyplot as plt
 import numpy as np
+from parse import *
 
-from .._constants import SHRT_MAX, SHRT_MIN
+from insitupy import __version__
+
+from .._constants import SHRT_MAX
 from .._exceptions import NotEnoughFeatureMatchesError
 from ..utils.utils import remove_last_line_from_csv
 from .io import write_ome_tiff
