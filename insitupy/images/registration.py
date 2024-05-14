@@ -7,8 +7,11 @@ import cv2
 import dask.array as da
 import matplotlib.pyplot as plt
 import numpy as np
+from parse import *
 
-from .._constants import SHRT_MAX, SHRT_MIN
+from insitupy import __version__
+
+from .._constants import SHRT_MAX
 from .._exceptions import NotEnoughFeatureMatchesError
 from ..utils.utils import remove_last_line_from_csv
 from .io import write_ome_tiff
@@ -308,8 +311,8 @@ class ImageRegistration:
         self.perform_registration()
 
     def save(self,
-             path: Union[str, os.PathLike, Path],
-             filename: str,
+             output_dir: Union[str, os.PathLike, Path],
+             identifier: str,
              axes: str,  # string describing the channel axes, e.g. YXS or CYX
              photometric: Literal['rgb', 'minisblack', 'maxisblack'] = 'rgb', # before I had rgb here. Xenium doc says minisblack
              ome_metadata: dict = {},
@@ -335,9 +338,8 @@ class ImageRegistration:
             matchedVis = self.matchedVis
 
         # save registered image as OME-TIFF
-        regimg_dir = path.parent / "registered_images"
-        regimg_dir.mkdir(parents=True, exist_ok=True) # create folder for registered images
-        self.outfile = regimg_dir / f"{filename}__registered.ome.tif"
+        output_dir.mkdir(parents=True, exist_ok=True) # create folder for registered images
+        self.outfile = output_dir / f"{identifier}__registered.ome.tif"
         print(f"\t\tSave OME-TIFF to {self.outfile}", flush=True)
         write_ome_tiff(
             file=self.outfile,
@@ -349,20 +351,20 @@ class ImageRegistration:
             )
 
         # save registration QC files
-        reg_dir = path.parent / "registration_qc"
+        reg_dir = output_dir / "registration_qc"
         reg_dir.mkdir(parents=True, exist_ok=True) # create folder for QC outputs
         print(f"\t\tSave QC files to {reg_dir}", flush=True)
 
         # save transformation matrix
         T_to_save = np.vstack([T_to_save, [0,0,1]]) # add last line of affine transformation matrix
-        T_csv = reg_dir / f"{filename}__T.csv"
+        T_csv = reg_dir / f"{identifier}__T.csv"
         np.savetxt(T_csv, T_to_save, delimiter=",") # save as .csv file
 
         # remove last line break from csv since this gives error when importing to Xenium Explorer
         remove_last_line_from_csv(T_csv)
 
         # save image showing the number of key points found in both images during registration
-        matchedVis_file = reg_dir / f"{filename}__common_features.pdf"
+        matchedVis_file = reg_dir / f"{identifier}__common_features.pdf"
         plt.imshow(matchedVis)
         plt.savefig(matchedVis_file, dpi=400)
         plt.close()

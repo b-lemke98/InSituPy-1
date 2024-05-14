@@ -680,29 +680,60 @@ class ImageData(DeepCopyMixin, GetMixin):
     Object to read and load images.
     '''
     def __init__(self,
-                 path: Union[str, os.PathLike, Path],
-                 img_files: List[str],
-                 img_names: List[str],
-                 pixel_size: float,
+                 #path: Union[str, os.PathLike, Path] = None,
+                 img_files: List[str] = None,
+                 img_names: List[str] = None,
+                 pixel_size: float = None,
                  ):
-        # convert arguments to lists
-        img_files = convert_to_list(img_files)
-        img_names = convert_to_list(img_names)
+        # # add path to object
+        # self.path = path
 
         # iterate through files and load them
         self.names = []
         self.metadata = {}
-        for n, f in zip(img_names, img_files):
 
-            # generate full path for image
-            impath = path / f
-            impath = impath.resolve() # resolve relative path
-            suffix = impath.name.split(".", maxsplit=1)[-1]
+        if img_files is not None:
+            # convert arguments to lists
+            img_files = convert_to_list(img_files)
+            img_names = convert_to_list(img_names)
+
+            for n, f in zip(img_names, img_files):
+                #impath = path / f
+                self.add_image(
+                    image=f,
+                    name=n,
+                    axes=None,
+                    pixel_size=pixel_size,
+                    ome_meta=None
+                    )
+
+    def __repr__(self):
+        if len(self.metadata) > 0:
+            repr_strings = [f"{tf.Bold}{n}:{tf.ResetAll}\t{metadata['shape']}" for n,metadata in self.metadata.items()]
+            s = "\n".join(repr_strings)
+        else:
+            s = "empty"
+        repr = f"{tf.Blue+tf.Bold}images{tf.ResetAll}\n{s}"
+        return repr
+
+    def add_image(
+        self,
+        image: Union[da.core.Array, str, os.PathLike, Path],
+        name: str,
+        axes: Optional[str] = None, # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
+        pixel_size: Optional[Number] = None,
+        ome_meta: Optional[dict] = None
+        ):
+        if Path(str(image)).exists():
+            # read path
+            image = Path(image)
+            image = image.resolve() # resolve relative path
+            suffix = image.name.split(".", maxsplit=1)[-1]
 
             if "zarr" in suffix:
             # load image from .zarr.zip
                 zipped = True if suffix == "zarr.zip" else False
-                with zarr.ZipStore(impath, mode="r") if zipped else zarr.DirectoryStore(impath) as dirstore:
+                with zarr.ZipStore(image, mode="r") if zipped else zarr.DirectoryStore(image) as dirstore:
                     # get components of zip store
                     components = dirstore.listdir()
 
@@ -733,9 +764,9 @@ class ImageData(DeepCopyMixin, GetMixin):
 
             elif suffix in ["ome.tif", "ome.tiff"]:
                 # load image from .ome.tiff
-                img = read_ome_tiff(path=impath, levels=None)
+                img = read_ome_tiff(path=image, levels=None)
                 # read ome metadata
-                with TiffFile(path / f) as tif:
+                with TiffFile(image) as tif:
                     axes = tif.series[0].axes # get axes
                     ome_meta = tif.ome_metadata # read OME metadata
                     ome_meta = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
@@ -745,47 +776,55 @@ class ImageData(DeepCopyMixin, GetMixin):
                     allowed_types=["zarr", "zarr.zip", "ome.tif", "ome.tiff"],
                     received_type=suffix
                     )
+            filename = image.name
 
-            # set attribute and add names to object
-            setattr(self, n, img)
-            self.names.append(n)
+        elif isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
+            assert axes is not None, "If `image` is dask array, `axes` needs to be set."
+            assert pixel_size is not None, "If `image` is dask array, `pixel_size` needs to be set."
 
-            # retrieve metadata
-            img_shape = img[0].shape if isinstance(img, list) else img.shape
-            img_max = img[0].max() if isinstance(img, list) else img.max()
-            img_max = int(img_max)
+            # convert to dask array before addition
+            img = da.from_array(image)
+            filename = None
 
-            # save metadata
-            self.metadata[n] = {}
-            self.metadata[n]["file"] = f # store file information
-            self.metadata[n]["shape"] = img_shape  # store shape
-            #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
-            self.metadata[n]["axes"] = axes
-            self.metadata[n]["OME"] = ome_meta
+        else:
+            raise ValueError(f"`image` is neither a dask array nor an existing path.")
 
-            # check whether the image is RGB or not
-            if len(img_shape) == 3:
-                self.metadata[n]["rgb"] = True
-            elif len(img_shape) == 2:
-                self.metadata[n]["rgb"] = False
-            else:
-                raise ValueError(f"Unknown image shape: {img_shape}")
+        # set attribute and add names to object
+        setattr(self, name, img)
+        self.names.append(name)
 
-            # get image contrast limits
-            if self.metadata[n]["rgb"]:
-                self.metadata[n]["contrast_limits"] = (0, 255)
-            else:
-                self.metadata[n]["contrast_limits"] = (0, img_max)
+        # retrieve metadata
+        img_shape = img[0].shape if isinstance(img, list) else img.shape
+        img_max = img[0].max() if isinstance(img, list) else img.max()
+        img_max = int(img_max)
 
-            # add universal pixel size to metadata
-            self.metadata[n]['pixel_size'] = pixel_size
+        # save metadata
+        self.metadata[name] = {}
+        self.metadata[name]["filename"] = filename
+        #self.metadata[n]["file"] = Path(relpath(impath, self.path)).as_posix() # store file information
+        #self.metadata[n]["file"] = f # store file information
+        self.metadata[name]["shape"] = img_shape  # store shape
+        #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
+        self.metadata[name]["axes"] = axes
+        self.metadata[name]["OME"] = ome_meta
 
+        # check whether the image is RGB or not
+        if len(img_shape) == 3:
+            self.metadata[name]["rgb"] = True
+        elif len(img_shape) == 2:
+            self.metadata[name]["rgb"] = False
+        else:
+            raise ValueError(f"Unknown image shape: {img_shape}")
 
-    def __repr__(self):
-        repr_strings = [f"{tf.Bold}{n}:{tf.ResetAll}\t{metadata['shape']}" for n,metadata in self.metadata.items()]
-        s = "\n".join(repr_strings)
-        repr = f"{tf.Blue+tf.Bold}images{tf.ResetAll}\n{s}"
-        return repr
+        # get image contrast limits
+        if self.metadata[name]["rgb"]:
+            self.metadata[name]["contrast_limits"] = (0, 255)
+        else:
+            self.metadata[name]["contrast_limits"] = (0, img_max)
+
+        # add universal pixel size to metadata
+        self.metadata[name]['pixel_size'] = pixel_size
+
 
     def load(self,
              which: Union[List[str], str] = "all"
@@ -867,9 +906,11 @@ class ImageData(DeepCopyMixin, GetMixin):
                 if as_zarr:
                     # generate filename
                     if zipped:
-                        filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
+                        #filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
+                        filename = n + ".zarr.zip"
                     else:
-                        filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr"
+                        # filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr"
+                        filename = n + ".zarr"
 
                     # decide whether to save as pyramid or not
                     if isinstance(img, list):
@@ -898,7 +939,8 @@ class ImageData(DeepCopyMixin, GetMixin):
 
                 else:
                     # get file name for saving
-                    filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
+                    #filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
+                    filename = n + ".ome.tif"
                     # retrieve image metadata for saving
                     photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
                     axes = img_metadata['axes']
