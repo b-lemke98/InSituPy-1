@@ -237,3 +237,32 @@ def human_brain_cancer(
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hbraincancer__HE__histo.ome.tif", expected_he_md5sum, overwrite):
         download_url(he_url, out_dir = image_dir, file_name="slide_id__hbraincancer__HE__histo", overwrite = True)
+
+# xenium onboard analysis 2.0.0
+# data from https://www.10xgenomics.com/datasets/preview-data-ffpe-human-lung-cancer-with-xenium-multimodal-cell-segmentation-1-standard
+def human_lung_cancer(
+        overwrite: bool = False
+        
+) -> None:
+    
+    # URLs for download
+    xeniumdata_url = "https://cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_humanLung_Cancer_FFPE/Xenium_V1_humanLung_Cancer_FFPE_outs.zip"
+    he_url = "https://cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_humanLung_Cancer_FFPE/Xenium_V1_humanLung_Cancer_FFPE_he_image.ome.tif"
+
+    # set up paths
+    named_data_dir = DEMODIR / "hlungcancer"
+    xeniumdata_dir = named_data_dir / "output-XETG00000__slide_id__hlungcancer"
+    image_dir = named_data_dir / "unregistered_images"
+    zip_file = named_data_dir / Path(xeniumdata_url).name
+
+    # check if file exists and has correct md5sum
+    expected_md5sum = "194e24c1efe7e64d2487adfe313bb9dd"
+    expected_he_md5sum = "47147933d73e008a0dd3695895832dd4"
+
+    # check if data exists (zipped or unzipped), if yes check md5sum
+    # if necessary download data
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
+
+    # download image data
+    if md5sum_image_check(image_dir/"slide_id__hlungcancer__HE__histo.ome.tif", expected_he_md5sum, overwrite):
+        download_url(he_url, out_dir = image_dir, file_name="slide_id__hlungcancer__HE__histo", overwrite = True)
