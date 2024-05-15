@@ -9,12 +9,12 @@ try:
 except ImportError:
     WITH_NAPARI = False
 
+from . import images as im
+from . import io, utils
 from ._core._deprecated import XeniumData
-from . import image as im
-from . import utils
 from ._core.dataclasses import AnnotationsData, BoundariesData, ImageData
-from ._core.insitudata import InSituData, read_xenium
-from ._core.io import read_celldata
+from ._core.insitudata import InSituData, register_images
+from ._core.xenium import read_xenium
 
 __all__ = [
     "InSituData",
