@@ -8,6 +8,8 @@ import glob
 
 from insitupy.datasets.download import download_url
 from insitupy._constants import CACHE
+from insitupy._core.insitudata import InSituData
+from insitupy._core.xenium import read_xenium
 
 # parameters for download functions
 DEMODIR = CACHE / 'demo_datasets'
@@ -92,7 +94,7 @@ def data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite
 # data from https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast
 def human_breast_cancer(
         overwrite: bool = False
-) -> None:
+) -> InSituData:
     
     # URLs for download
     xeniumdata_url = "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_outs.zip"
@@ -110,22 +112,35 @@ def human_breast_cancer(
     expected_he_md5sum = 'fc0d0d38b7c039cc0682e51099f8d841'
     expected_if_md5sum = '929839c64ef8331cfd048a614f5f6829'
 
+    # image file names
+    he_file_name = "slide_id__hbreastcancer__HE__histo"
+    if_file_name = "slide_id__hbreastcancer__CD20_HER2_DAPI__IF"
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
     data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
+
+    # load data into InSituData object
+    data = read_xenium(xeniumdata_dir)
     
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hbreastcancer__HE__histo.ome.tif", expected_he_md5sum, overwrite):
-        download_url(he_url, out_dir=image_dir, file_name="slide_id__hbreastcancer__HE__histo", overwrite = True)
+        download_url(he_url, out_dir = image_dir, file_name = he_file_name, overwrite = True)
 
     if md5sum_image_check(image_dir/"slide_id__hbreastcancer__CD20_HER2_DAPI__IF.ome.tif", expected_if_md5sum, overwrite):
-        download_url(if_url, out_dir=image_dir, file_name="slide_id__hbreastcancer__CD20_HER2_DAPI__IF", overwrite = True)
+        download_url(if_url, out_dir = image_dir, file_name = if_file_name, overwrite = True)
+
+    print(f"Corresponding image data can be found in {image_dir}.")
+    print("For this dataset following images are available:")
+    print(f"{he_file_name}.ome.tiff")
+    print(f"{if_file_name}.ome.tiff")
+
+    return data
 
 # xenium onboard analysis version 1.5.0
 # data from https://www.10xgenomics.com/resources/datasets/human-kidney-preview-data-xenium-human-multi-tissue-and-cancer-panel-1-standard
 def nondiseased_kidney(
         overwrite: bool = False
-) -> None:
+) -> InSituData:
     
     # URLs for download
     xeniumdata_url = "https://cf.10xgenomics.com/samples/xenium/1.5.0/Xenium_V1_hKidney_nondiseased_section/Xenium_V1_hKidney_nondiseased_section_outs.zip"
@@ -141,20 +156,32 @@ def nondiseased_kidney(
     expected_md5sum = '194d5e21b40b27fa8c009d4cbdc3272d'
     expected_he_md5sum = 'e457889aea78bef43834e675f0c58d95'
 
+    # image file name
+    he_file_name = "slide_id__hkidney__HE__histo"
+
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
     data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
+
+     # load data into InSituData object
+    data = read_xenium(xeniumdata_dir)
     
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hkidney__HE__histo.ome.tif", expected_he_md5sum, overwrite):
-        download_url(he_url, out_dir = image_dir, file_name="slide_id__hkidney__HE__histo", overwrite = True)
+        download_url(he_url, out_dir = image_dir, file_name = he_file_name, overwrite = True)
+    
+    print(f"Corresponding image data can be found in {image_dir}.")
+    print("For this dataset following image is available:")
+    print(f"{he_file_name}.ome.tiff")
+    
+    return data
 
 # xenium onboard analysis version 1.6.0
 # data from https://www.10xgenomics.com/datasets/pancreatic-cancer-with-xenium-human-multi-tissue-and-cancer-panel-1-standard 
 def pancreatic_cancer(
         overwrite: bool = False
 
-) -> None:
+) -> InSituData:
     
     # URLs for download
     xeniumdata_url = "https://cf.10xgenomics.com/samples/xenium/1.6.0/Xenium_V1_hPancreas_Cancer_Add_on_FFPE/Xenium_V1_hPancreas_Cancer_Add_on_FFPE_outs.zip"
@@ -171,25 +198,38 @@ def pancreatic_cancer(
     expected_md5sum = '7acca4c2a40f09968b72275403c29f93'
     expected_he_md5sum = '4e96596ea13a3d0f6139638b2b90aef4'
     expected_if_md5sum = 'c859a7ab5d29807b4daf1f66cb6f5060'
-    
 
+    # image file names
+    he_file_name = "slide_id__hPancreas__HE__histo"
+    if_file_name = "slide_id__hPancreas__CD20_TROP2_PPY_DAPI__IF"
+    
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data)
     data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
+
+    # load data into InSituData object
+    data = read_xenium(xeniumdata_dir)
     
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hPancreas__HE__histo.ome.tif", expected_he_md5sum, overwrite):
-        download_url(he_url, out_dir = image_dir, file_name = "slide_id__hPancreas__HE__histo", overwrite = True)
+        download_url(he_url, out_dir = image_dir, file_name = he_file_name, overwrite = True)
 
     if md5sum_image_check(image_dir/"slide_id__hPancreas__CD20_TROP2_PPY_DAPI__IF.ome.tif", expected_if_md5sum, overwrite):
-        download_url(if_url, out_dir = image_dir, file_name = "slide_id__hPancreas__CD20_TROP2_PPY_DAPI__IF", overwrite = True )
+        download_url(if_url, out_dir = image_dir, file_name = if_file_name, overwrite = True )
+
+    print(f"Corresponding image data can be found in {image_dir}.")
+    print("For this dataset following images are available:")
+    print(f"{he_file_name}.ome.tiff")
+    print(f"{if_file_name}IF_image_name.ome.tiff")
+
+    return data
         
 # xenium onboard analysis version 1.7.0    
 # data from https://www.10xgenomics.com/resources/datasets/human-skin-preview-data-xenium-human-skin-gene-expression-panel-add-on-1-standard
 def hskin_melanoma(
         overwrite: bool = False
 
-) -> None:
+) -> InSituData:
     
     # URLs for download
     xeniumdata_url = "https://cf.10xgenomics.com/samples/xenium/1.7.0/Xeniumranger_V1_hSkin_Melanoma_Add_on_FFPE/Xeniumranger_V1_hSkin_Melanoma_Add_on_FFPE_outs.zip"
@@ -205,20 +245,32 @@ def hskin_melanoma(
     expected_md5sum = '29102799a3f1858c7318b705eb1a8584'
     expected_he_md5sum = '169af7630e0124eef61d252183243a06'
 
+    # image file name
+    he_file_name = "slide_id__hskin__HE__histo"
+
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
     data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
 
+    # load data into InSituData object
+    data = read_xenium(xeniumdata_dir)
+
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hskin__HE__histo.ome.tif", expected_he_md5sum, overwrite):
-        download_url(he_url, out_dir = image_dir, file_name="slide_id__hskin__HE__histo", overwrite = True)
+        download_url(he_url, out_dir = image_dir, file_name = he_file_name, overwrite = True)
 
+    print(f"Corresponding image data can be found in {image_dir}.")
+    print("For this dataset following image is available:")
+    print(f"{he_file_name}.ome.tiff")
+    
+    return data
+    
 # xenium onboard analysis version 2.0.0
 # data from https://www.10xgenomics.com/datasets/ffpe-human-brain-cancer-data-with-human-immuno-oncology-profiling-panel-and-custom-add-on-1-standard
 def human_brain_cancer(
         overwrite: bool = False
 
-) -> None:
+) -> InSituData:
     
     # URLs for download
     xeniumdata_url = "https://s3-us-west-2.amazonaws.com/10x.files/samples/xenium/2.0.0/Xenium_V1_Human_Brain_GBM_FFPE/Xenium_V1_Human_Brain_GBM_FFPE_outs.zip"
@@ -234,20 +286,32 @@ def human_brain_cancer(
     expected_md5sum = "c116017ad9884cf6944c6c4815bffb3c"
     expected_he_md5sum = "22b66c6e7669933e50a9665d467e639f"
 
+    # image file name
+    he_file_name = "slide_id__hbraincancer__HE__histo"
+
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
     data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
+    
+    # load data into InSituData object
+    data = read_xenium(xeniumdata_dir)
 
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hbraincancer__HE__histo.ome.tif", expected_he_md5sum, overwrite):
-        download_url(he_url, out_dir = image_dir, file_name="slide_id__hbraincancer__HE__histo", overwrite = True)
+        download_url(he_url, out_dir = image_dir, file_name = he_file_name, overwrite = True)
+
+    print(f"Corresponding image data can be found in {image_dir}.")
+    print("For this dataset following image is available:")
+    print(f"{he_file_name}.ome.tiff")
+    
+    return data
 
 # xenium onboard analysis 2.0.0
 # data from https://www.10xgenomics.com/datasets/preview-data-ffpe-human-lung-cancer-with-xenium-multimodal-cell-segmentation-1-standard
 def human_lung_cancer(
         overwrite: bool = False
         
-) -> None:
+) -> InSituData:
     
     # URLs for download
     xeniumdata_url = "https://cf.10xgenomics.com/samples/xenium/2.0.0/Xenium_V1_humanLung_Cancer_FFPE/Xenium_V1_humanLung_Cancer_FFPE_outs.zip"
@@ -263,10 +327,22 @@ def human_lung_cancer(
     expected_md5sum = "194e24c1efe7e64d2487adfe313bb9dd"
     expected_he_md5sum = "47147933d73e008a0dd3695895832dd4"
 
+    # image file names
+    he_file_name = "slide_id__hlungcancer__HE__histo"
+
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
     data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
 
+    # load data into InSituData object
+    data = read_xenium(xeniumdata_dir)
+
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hlungcancer__HE__histo.ome.tif", expected_he_md5sum, overwrite):
-        download_url(he_url, out_dir = image_dir, file_name="slide_id__hlungcancer__HE__histo", overwrite = True)
+        download_url(he_url, out_dir = image_dir, file_name = he_file_name, overwrite = True)
+
+    print(f"Corresponding image data can be found in {image_dir}.")
+    print("For this dataset following image is available:")
+    print(f"{he_file_name}.ome.tiff")
+    
+    return data
