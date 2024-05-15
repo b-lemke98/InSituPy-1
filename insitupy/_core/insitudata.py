@@ -4,15 +4,12 @@ import json
 import os
 import shutil
 from datetime import datetime
-from math import ceil
 from numbers import Number
-from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 from warnings import warn
 
-import dask.array as da
 import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
@@ -20,42 +17,43 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
-from anndata import AnnData
 from dask_image.imread import imread
 from geopandas import GeoDataFrame
 from parse import *
-from rasterio.features import rasterize
-from scipy.sparse import csr_matrix, issparse
+from scipy.sparse import issparse
 from shapely import Polygon
 from shapely.geometry.polygon import Polygon
 from tqdm import tqdm
 
 from insitupy import WITH_NAPARI, __version__
+from insitupy._constants import ISPY_METADATA_FILE
 from insitupy._core._save import _save_images
-from insitupy._core.io import (_read_binned_expression,
-                               _read_boundaries_from_xenium,
-                               _read_matrix_from_xenium, read_annotationsdata,
-                               read_celldata, read_regionsdata)
+from insitupy._core._xenium import (_read_binned_expression,
+                                    _read_boundaries_from_xenium,
+                                    _read_matrix_from_xenium,
+                                    _restructure_transcripts_dataframe)
+from insitupy._exceptions import UnknownOptionError
+from insitupy.images import ImageRegistration, deconvolve_he, resize_image
+from insitupy.io.io import (read_annotationsdata, read_baysor_cells,
+                            read_baysor_transcripts, read_celldata,
+                            read_regionsdata)
 from insitupy.utils.io import read_json, save_and_show_figure
+from insitupy.utils.preprocessing import (normalize_anndata,
+                                          reduce_dimensions_anndata)
 from insitupy.utils.utils import get_nrows_maxcols
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
 from .._exceptions import (ModalityNotFoundError, NotOneElementError,
-                           UnknownOptionError, WrongNapariLayerTypeError,
-                           XeniumDataMissingObject,
+                           WrongNapariLayerTypeError, XeniumDataMissingObject,
                            XeniumDataRepeatedCropError)
-from ..image import ImageRegistration, deconvolve_he, resize_image
-from ..image.utils import create_img_pyramid
-from ..utils.io import (check_overwrite_and_remove_if_true,
-                        read_baysor_polygons, read_json, write_dict_to_json)
-from ..utils.utils import convert_to_list, decode_robust_series
+from ..images.utils import create_img_pyramid
+from ..utils.io import (check_overwrite_and_remove_if_true, read_json,
+                        write_dict_to_json)
+from ..utils.utils import convert_to_list
 from ..utils.utils import textformat as tf
-from ._checks import check_raw, check_zip
 from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
-from ._scanorama import scanorama
-from .dataclasses import (AnnotationsData, BoundariesData, CellData, ImageData,
-                          RegionsData)
+from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData
 
 # optional packages that are not always installed
 if WITH_NAPARI:
@@ -67,42 +65,6 @@ if WITH_NAPARI:
     from ._widgets import (_create_points_layer, _initialize_widgets,
                            add_new_annotations_widget)
 
-
-def _restructure_transcripts_dataframe(dataframe):
-
-    # decode columns
-    dataframe = dataframe.apply(lambda x: decode_robust_series(x), axis=0)
-    # set index and rename columns
-    dataframe = dataframe.set_index("transcript_id")
-    dataframe = dataframe.rename({
-        "cell_id": "xenium_cell_id",
-        "x_location": "x",
-        "y_location": "y",
-        "z_location": "z",
-        "feature_name": "gene"
-    }, axis=1)
-
-    # reorder dataframe
-    column_names_ordered = ["x", "y", "z", "gene", "qv", "overlaps_nucleus", "fov_name", "nucleus_distance", "xenium_cell_id"]
-    in_df = [elem in dataframe.columns for elem in column_names_ordered]
-    column_names_ordered = [elem for i, elem in zip(in_df, column_names_ordered) if i]
-    dataframe = dataframe.loc[:, column_names_ordered]
-
-    # group column names into MultiIndices
-    grouped_column_names = [
-        ("coordinates", "x"),
-        ("coordinates", "y"),
-        ("coordinates", "z"),
-        ("properties", "gene"),
-        ("properties", "qv"),
-        ("properties", "overlaps_nucleus"),
-        ("properties", "fov_name"),
-        ("properties", "nucleus_distance"),
-        ("cell_id", "xenium")
-    ]
-    grouped_column_names = [elem for i, elem in zip(in_df, grouped_column_names) if i]
-    dataframe.columns = pd.MultiIndex.from_tuples(grouped_column_names)
-    return dataframe
 
 class InSituData:
     #TODO: Docstring of InSituData
@@ -116,7 +78,7 @@ class InSituData:
                  metadata: dict,
                  slide_id: str,
                  sample_id: str,
-                 from_insitudata: bool
+                 from_insitudata: bool,
                  ):
         """_summary_
 
@@ -135,8 +97,14 @@ class InSituData:
         self.from_insitudata = from_insitudata
 
     def __repr__(self):
+        try:
+            method = self.metadata["method"]
+        except KeyError:
+            method = "unknown"
+
         repr = (
-            f"{tf.Bold+tf.Red}XeniumData{tf.ResetAll}\n"
+            f"{tf.Bold+tf.Red}InSituData{tf.ResetAll}\n"
+            f"{tf.Bold}Method:{tf.ResetAll}\t\t{method}\n"
             f"{tf.Bold}Slide ID:{tf.ResetAll}\t{self.slide_id}\n"
             f"{tf.Bold}Sample ID:{tf.ResetAll}\t{self.sample_id}\n"
             f"{tf.Bold}Data path:{tf.ResetAll}\t{self.path.parent}\n"
@@ -554,6 +522,7 @@ class InSituData:
 
     def normalize(self,
                 transformation_method: Literal["log1p", "sqrt"] = "log1p",
+                normalize_alt: bool = True,
                 verbose: bool = True
                 ) -> None:
         """
@@ -563,6 +532,8 @@ class InSituData:
             transformation_method (Literal["log1p", "sqrt"], optional):
                 The method used for data transformation. Choose between "log1p" for logarithmic transformation
                 and "sqrt" for square root transformation. Default is "log1p".
+            normalize_alt (bool, optional):
+                If True, `.alt` modalities are also normalized, if available.
             verbose (bool, optional):
                 If True, print progress messages during normalization. Default is True.
 
@@ -573,83 +544,28 @@ class InSituData:
             None: This method modifies the input matrix in place, normalizing the data based on the specified method.
                 It does not return any value.
         """
-        # check if the matrix consists of raw integer counts
-        check_raw(self.cells.matrix.X)
-
-        # store raw counts in layer
-        print("Store raw counts in anndata.layers['counts']...") if verbose else None
-        self.cells.matrix.layers['counts'] = self.cells.matrix.X.copy()
-
-        # preprocessing according to napari tutorial in squidpy
-        print(f"Normalization, {transformation_method}-transformation...") if verbose else None
-        sc.pp.normalize_total(self.cells.matrix)
-        self.cells.matrix.layers['norm_counts'] = self.cells.matrix.X.copy()
-
-        # transform either using log transformation or square root transformation
-        if transformation_method == "log1p":
-            sc.pp.log1p(self.cells.matrix)
-        elif transformation_method == "sqrt":
-            # Suggested in stlearn tutorial (https://stlearn.readthedocs.io/en/latest/tutorials/Xenium_PSTS.html)
-            X = self.cells.matrix.X.toarray()
-            self.cells.matrix.X = csr_matrix(np.sqrt(X) + np.sqrt(X + 1))
-        else:
-            raise ValueError(f'`transformation_method` is not one of ["log1p", "sqrt"]')
-
-    def parse_baysor(self,
-                    baysor_output: Union[str, os.PathLike, Path],
-                    key_to_add: str = "baysor",
-                    pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
-                    ):
-
         try:
             cells = self.cells
         except AttributeError:
             raise ModalityNotFoundError(modality="cells")
 
-        # read matrix
-        print("Parsing count matrix...", flush=True)
-        loomfile = baysor_output / "segmentation_counts.loom"
-        matrix = sc.read_loom(loomfile)
+        normalize_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
 
-        # set indices for .obs and .var
-        matrix.obs = matrix.obs.reset_index().set_index("Name")
-        matrix.obs["CellID"] = matrix.obs["CellID"].astype(float).astype(int) # convert cell id to int
-        matrix.var.set_index("Name", inplace=True)
+        try:
+            alt = self.alt
+        except AttributeError:
+            pass
+        else:
+            print("Found `.alt` modality.")
+            for k, cells in alt.items():
+                print(f"\tNormalizing {k}...")
+                normalize_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
 
-        # remove unassigned codewords from genes and obs entries with an NaN in any column
-        varmask = ~matrix.var_names.str.startswith("UnassignedCodeword")
-        obsmask = ~matrix.obs.isna().any(axis=1)
-        matrix = matrix[obsmask, varmask].copy()
-
-        # set spatial coordinates
-        matrix.obsm["spatial"] = matrix.obs[["x", "y"]].values
-        matrix.obs.drop(["x", "y"], axis=1, inplace=True) # drop the coordinate columns
-
-        # read polygons
-        print("Reading segmentation masks", flush=True)
-        print("\tRead polygons", flush=True)
-        jsonfile = baysor_output / "segmentation_polygons.json"
-        df = read_baysor_polygons(jsonfile)
-
-        # remove polygons of cells that have been removed in the matrix
-        df = df[df.cell.astype(int).isin(matrix.obs["CellID"])]
-
-        # determine dimensions of dataset
-        xmax = ceil(cells.matrix.obsm['spatial'][:, 0].max() + 15)
-        ymax = ceil(cells.matrix.obsm['spatial'][:, 1].max() + 15)
-
-        # generate a segmentation mask
-        print("\tConvert polygons to segmentation mask", flush=True)
-        img = rasterize(list(zip(df["geometry"], df["cell"])), out_shape=(ymax,xmax))
-
-        # convert to dask array
-        img = da.from_array(img)
-
-        # create boundaries object
-        boundaries = BoundariesData()
-        boundaries.add_boundaries(data={f"cellular": img}, pixel_size=pixel_size)
-
-        # add data to XeniumData
+    def add_alt(self,
+                celldata_to_add: CellData,
+                key_to_add: str
+                ) -> None:
+        # check if the current self has already an alt object and add a empty one if not
         alt_attr_name = "alt"
         try:
             alt_attr = getattr(self, alt_attr_name)
@@ -657,33 +573,47 @@ class InSituData:
             setattr(self, alt_attr_name, {})
             alt_attr = getattr(self, alt_attr_name)
 
-        alt_attr[key_to_add] = CellData(matrix=matrix, boundaries=boundaries)
+        # add the celldata to the given key
+        alt_attr[key_to_add] = celldata_to_add
 
-        trans_attr_name = "transcripts"
-        try:
-            trans_attr = getattr(self, trans_attr_name)
-        except AttributeError:
-            print("No transcript layer found. Addition of Baysor transcript data is skipped.", flush=True)
-            pass
-        else:
-            # read transcripts from Baysor results
-            print("Parsing transcripts data...", flush=True)
+    def add_baysor(self,
+                   path: Union[str, os.PathLike, Path],
+                   read_transcripts: bool = False,
+                   key_to_add: str = "baysor",
+                   pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
+                   ):
 
-            print("\tRead data", flush=True)
-            segcsv_file = baysor_output / "segmentation.csv"
-            baysor_transcript_dataframe = pd.read_csv(segcsv_file)
+        # # convert to pathlib path
+        path = Path(path)
 
-            print("\tMerge with existing data", flush=True)
-            baysor_results = baysor_transcript_dataframe.set_index("transcript_id")[["cell"]]
-            baysor_results.columns = pd.MultiIndex.from_tuples([("cell_id", key_to_add)])
-            trans_attr = pd.merge(left=trans_attr,
-                                  right=baysor_results,
-                                  left_index=True,
-                                  right_index=True
-                                  )
+        # read baysor data
+        celldata = read_baysor_cells(baysor_output=path, pixel_size=pixel_size)
 
-            # add resulting dataframe to XeniumData
-            setattr(self, trans_attr_name, trans_attr)
+        # add celldata to alt attribute
+        self.add_alt(celldata_to_add=celldata, key_to_add=key_to_add)
+
+        if read_transcripts:
+            trans_attr_name = "transcripts"
+            try:
+                trans_attr = getattr(self, trans_attr_name)
+            except AttributeError:
+                print("No transcript layer found. Addition of Baysor transcript data is skipped.", flush=True)
+                pass
+            else:
+                # read baysor transcripts
+                baysor_results = read_baysor_transcripts(baysor_output=path)
+                baysor_results = baysor_results[["cell"]]
+
+                # merge transcripts with existing transcripts
+                baysor_results.columns = pd.MultiIndex.from_tuples([("cell_id", key_to_add)])
+                trans_attr = pd.merge(left=trans_attr,
+                                    right=baysor_results,
+                                    left_index=True,
+                                    right_index=True
+                                    )
+
+                # add resulting dataframe to XeniumData
+                setattr(self, trans_attr_name, trans_attr)
 
 
     def plot_dimred(self, save: Optional[str] = None):
@@ -783,7 +713,7 @@ class InSituData:
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
             else:
-                self.cells = read_celldata(path=self.path / cells_path, pixel_size=pixel_size)
+                self.cells = read_celldata(path=self.path / cells_path)
 
             # check if alt data is there and read if yes
             try:
@@ -794,7 +724,7 @@ class InSituData:
                 print("\tFound alternative cells...")
                 alt_dict = {}
                 for k, p in alt_path_dict.items():
-                    alt_dict[k] = read_celldata(path=self.path / p, pixel_size=pixel_size)
+                    alt_dict[k] = read_celldata(path=self.path / p)
 
                 # add attribute
                 setattr(self, "alt", alt_dict)
@@ -812,8 +742,12 @@ class InSituData:
 
     def load_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
-                    nuclei_type: Literal["focus", "mip", ""] = "mip"
+                    nuclei_type: Literal["focus", "mip", ""] = "mip",
+                    load_cell_segmentation_images: bool = True
                     ):
+        # load image into ImageData object
+        print("Loading images...", flush=True)
+
         if self.from_insitudata:
             # check if matrix data is stored in this XeniumData
             if "images" not in self.metadata["data"]:
@@ -823,8 +757,22 @@ class InSituData:
             img_files = list(self.metadata["data"]["images"].values())
             img_names = list(self.metadata["data"]["images"].keys())
         else:
+            nuclei_file_key = f"morphology_{nuclei_type}_filepath"
+
+            # In v2.0 the "mip" image was removed due to better focusing of the machine.
+            # For <v2.0 the function still tries to retrieve the "mip" image but in case this is not found
+            # it will retrieve the "focus" image
+            if nuclei_type == "mip" and nuclei_file_key not in self.metadata["xenium"]["images"].keys():
+                warn(
+                    f"Nuclei image type '{nuclei_type}' not found. Used 'focus' instead. This is the normal behavior for data analyzed with Xenium Ranger >=v2.0",
+                    UserWarning, stacklevel=2
+                     )
+
+                nuclei_type = "focus"
+                nuclei_file_key = f"morphology_{nuclei_type}_filepath"
+
             if names == "nuclei":
-                img_keys = [f"morphology_{nuclei_type}_filepath"]
+                img_keys = [nuclei_file_key]
                 img_names = ["nuclei"]
             else:
                 # get available keys for registered images in metadata
@@ -834,7 +782,7 @@ class InSituData:
                 img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
 
                 # add dapi image key
-                img_keys = [f"morphology_{nuclei_type}_filepath"] + img_keys
+                img_keys = [nuclei_file_key] + img_keys
 
                 if names != "all":
                     # make sure keys is a list
@@ -847,9 +795,24 @@ class InSituData:
             # get path of image files
             img_files = [self.metadata["xenium"]["images"][k] for k in img_keys]
 
-        # load image into ImageData object
-        print("Loading images...", flush=True)
-        self.images = ImageData(self.path, img_files, img_names, pixel_size=self.metadata["xenium"]['pixel_size'])
+            if load_cell_segmentation_images:
+                # get cell segmentation images if available
+                if "morphology_focus/" in self.metadata["xenium"]["images"][nuclei_file_key]:
+                    seg_files = ["morphology_focus/morphology_focus_0001.ome.tif",
+                                 "morphology_focus/morphology_focus_0002.ome.tif",
+                                 "morphology_focus/morphology_focus_0003.ome.tif"
+                                 ]
+                    seg_names = ["cellseg1", "cellseg2", "cellseg3"]
+
+                    # check which segmentation files exist and append to image list
+                    seg_file_exists_list = [(self.path / f).is_file() for f in seg_files]
+                    #print(seg_file_exists_list)
+                    img_files += [f for f, exists in zip(seg_files, seg_file_exists_list) if exists]
+                    img_names += [n for n, exists in zip(seg_names, seg_file_exists_list) if exists]
+
+        # create imageData object
+        img_paths = [self.path / elem for elem in img_files]
+        self.images = ImageData(img_paths, img_names, pixel_size=self.metadata["xenium"]['pixel_size'])
 
     def load_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
@@ -874,6 +837,7 @@ class InSituData:
                         umap: bool = True,
                         tsne: bool = True,
                         batch_correction_key: Optional[str] = None,
+                        perform_clustering: bool = True,
                         verbose: bool = True,
                         tsne_lr: int = 1000,
                         tsne_jobs: int = 8,
@@ -905,270 +869,41 @@ class InSituData:
             None: This method modifies the input matrix in place, reducing its dimensionality using specified techniques and
                 batch correction if applicable. It does not return any value.
         """
+        try:
+            cells = self.cells
+        except AttributeError:
+            raise ModalityNotFoundError(modality="cells")
 
-        if batch_correction_key is None:
-            # dimensionality reduction
-            print("Dimensionality reduction...") if verbose else None
-            sc.pp.pca(self.cells.matrix)
-            if umap:
-                sc.pp.neighbors(self.cells.matrix)
-                sc.tl.umap(self.cells.matrix)
-            if tsne:
-                sc.tl.tsne(self.cells.matrix, n_jobs=tsne_jobs, learning_rate=tsne_lr)
+        reduce_dimensions_anndata(adata=cells.matrix,
+                                  umap=umap, tsne=tsne,
+                                  batch_correction_key=batch_correction_key,
+                                  perform_clustering=perform_clustering,
+                                  verbose=verbose,
+                                  tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
+                                  )
 
+        try:
+            alt = self.alt
+        except AttributeError:
+            pass
         else:
-            # PCA
-            sc.pp.pca(self.cells.matrix)
-
-            neigh_uncorr_key = 'neighbors_uncorrected'
-            sc.pp.neighbors(self.cells.matrix, key_added=neigh_uncorr_key)
-
-            # clustering
-            sc.tl.leiden(self.cells.matrix, neighbors_key=neigh_uncorr_key, key_added='leiden_uncorrected')
-
-            # batch correction
-            print(f"Batch correction using scanorama for {batch_correction_key}...") if verbose else None
-            hvgs = list(self.cells.matrix.var_names[self.cells.matrix.var['highly_variable']])
-            self.cells.matrix = scanorama(self.cells.matrix, batch_key=batch_correction_key, hvg=hvgs, verbose=False, **kwargs)
-
-            # find neighbors
-            sc.pp.neighbors(self.cells.matrix, use_rep="X_scanorama")
-            sc.tl.umap(self.cells.matrix)
-            sc.tl.tsne(self.cells.matrix, use_rep="X_scanorama")
-
-        # clustering
-        print("Leiden clustering...") if verbose else None
-        sc.tl.leiden(self.cells.matrix)
-
-
-    def register_images(self,
-                        img_dir: Union[str, os.PathLike, Path],
-                        img_suffix: str = ".ome.tif",
-                        pattern_img_file: str = "{slide_id}__{sample_id}__{image_names}__{image_type}",
-                        decon_scale_factor: float = 0.2,
-                        image_name_sep: str = "_",  # string separating the image names in the file name
-                        nuclei_name: str = "DAPI",  # name used for the nuclei image
-                        physicalsize: str = 'µm',
-                        #dapi_channel: int = None
-                        ):
-        '''
-        Register images stored in XeniumData object.
-        '''
-
-        # add arguments to object
-        self.img_dir = Path(img_dir)
-        self.pattern_img_file = pattern_img_file
-
-        # check if image path exists
-        if not self.img_dir.is_dir():
-            raise FileNotFoundError(f"No such directory found: {str(self.img_dir)}")
-
-        print(f"Processing sample {tf.Bold}{self.sample_id}{tf.ResetAll} of slide {tf.Bold}{self.slide_id}{tf.ResetAll}", flush=True)
-
-        # get a list of image files
-        img_files = sorted(self.img_dir.glob("*{}".format(img_suffix)))
-
-        # find the corresponding image
-        corr_img_files = [elem for elem in img_files if self.slide_id in str(elem) and self.sample_id in str(elem)]
-
-        # make sure images corresponding to the Xenium data were found
-        if len(corr_img_files) == 0:
-            print(f'\tNo image corresponding to slide `{self.slide_id}` and sample `{self.sample_id}` were found.')
-        else:
-            metafile = self.metadata["metadata_file"]
-            if metafile == "experiment_modified.xenium":
-                print(f"\tFound modified `{metafile}` file. Information will be added to this file.")
-            elif metafile == "experiment.xenium":
-                print(f"\tOnly unmodified metadata file (`{metafile}`) found. Information will be added to new file (`experiment_modified.xenium`).")
-            else:
-                raise FileNotFoundError("Metadata file not found.")
-
-            for img_file in corr_img_files:
-                # parse name of current image
-                img_stem = img_file.stem.split(".")[0] # make sure to remove also suffices like .ome.tif
-                img_file_parsed = parse(pattern_img_file, img_stem)
-                self.image_names = img_file_parsed.named["image_names"].split(image_name_sep)
-                image_type = img_file_parsed.named["image_type"] # check which image type it has (`histo` or `IF`)
-
-                # determine the structure of the image axes and check other things
-                axes_template = "YX"
-                if image_type == "histo":
-                    axes_image = "YXS"
-
-                    # make sure that there is only one image name given
-                    if len(self.image_names) > 1:
-                        raise ValueError(f"More than one image name retrieved ({self.image_names})")
-
-                    if len(self.image_names) == 0:
-                        raise ValueError(f"No image name found in file {img_file}")
-
-                elif image_type == "IF":
-                    axes_image = "CYX"
-                else:
-                    raise UnknownOptionError(image_type, available=["histo", "IF"])
-
-                print(f'\tProcessing following {image_type} images: {tf.Bold}{", ".join(self.image_names)}{tf.ResetAll}', flush=True)
-
-                # read images
-                print("\t\tLoading images to be registered...", flush=True)
-                image = imread(img_file) # e.g. HE image
-
-                # sometimes images are read with an empty time dimension in the first axis.
-                # If this is the case, it is removed here.
-                if len(image.shape) == 4:
-                    image = image[0]
-
-                # read images in XeniumData object
-                self.load_images(names="nuclei")
-                template = self.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
-
-                # extract OME metadata
-                ome_metadata_template = self.images.metadata["nuclei"]["OME"]
-                # extract pixel size for x and y from metadata
-                pixelsizes = {key: ome_metadata_template['Image']['Pixels'][key] for key in ['PhysicalSizeX', 'PhysicalSizeY']}
-
-                # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
-                axes_selected = "YX"
-                if image_type == "histo":
-                    print("\t\tRun color deconvolution", flush=True)
-                    # deconvolve HE - performed on resized image to save memory
-                    # TODO: Scale to max width instead of using a fixed scale factor before deconvolution (`scale_to_max_width`)
-                    nuclei_img, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor, axes=axes_selected),
-                                                return_type="grayscale", convert=True)
-
-                    # bring back to original size
-                    nuclei_img = resize_image(nuclei_img, scale_factor=1/decon_scale_factor, axes=axes_selected)
-
-                    # set nuclei_channel and nuclei_axis to None
-                    nuclei_channel = channel_axis = None
-                else:
-                    # image_type is "IF" then
-                    # get index of nuclei channel
-                    nuclei_channel = self.image_names.index(nuclei_name)
-                    channel_axis = axes_image.find("C")
-
-                    if channel_axis == -1:
-                        raise ValueError(f"No channel indicator `C` found in image axes ({axes_image})")
-
-                    print(f"\t\tSelect image with nuclei from IF image (channel: {nuclei_channel})", flush=True)
-                    # select nuclei channel from IF image
-                    if nuclei_channel is None:
-                        raise TypeError("Argument `nuclei_channel` should be an integer and not NoneType.")
-
-                    # select dapi channel for registration
-                    nuclei_img = np.take(image, nuclei_channel, channel_axis)
-                    #selected = image[nuclei_channel]
-
-                # Setup image registration objects - is important to load and scale the images.
-                # The reason for this are limits in C++, not allowing to perform certain OpenCV functions on big images.
-
-                # First: Setup the ImageRegistration object for the whole image (before deconvolution in histo images and multi-channel in IF)
-                imreg_complete = ImageRegistration(
-                    image=image,
-                    template=template,
-                    axes_image=axes_image,
-                    axes_template=axes_template,
-                    verbose=False
-                    )
-                # load and scale the whole image
-                imreg_complete.load_and_scale_images()
-
-                # setup ImageRegistration object with the nucleus image (either from deconvolution or just selected from IF image)
-                imreg_selected = ImageRegistration(
-                    image=nuclei_img,
-                    template=imreg_complete.template,
-                    axes_image=axes_selected,
-                    axes_template=axes_template,
-                    max_width=4000,
-                    convert_to_grayscale=False,
-                    perspective_transform=False
-                )
-
-                # run all steps to extract features and get transformation matrix
-                imreg_selected.load_and_scale_images()
-
-                print("\t\tExtract common features from image and template", flush=True)
-                # perform registration to extract the common features ptsA and ptsB
-                imreg_selected.extract_features()
-                imreg_selected.calculate_transformation_matrix()
-
-                if image_type == "histo":
-                    # in case of histo RGB images, the channels are in the third axis and OpenCV can transform them
-                    if imreg_complete.image_resized is None:
-                        imreg_selected.image = imreg_complete.image  # use original image
-                    else:
-                        imreg_selected.image_resized = imreg_complete.image_resized  # use resized original image
-
-                    # perform registration
-                    imreg_selected.perform_registration()
-
-                    # generate OME metadata for saving
-                    metadata = {
-                        **{'SignificantBits': 8,
-                        'PhysicalSizeXUnit': 'µm',
-                        'PhysicalSizeYUnit': 'µm'
-                        },
-                        **pixelsizes
-                    }
-
-                    # save files
-                    imreg_selected.save(path=self.path,
-                                        filename=f"{self.slide_id}__{self.sample_id}__{self.image_names[0]}",
-                                        axes=axes_image,
-                                        photometric='rgb',
-                                        ome_metadata=metadata
+            print("Found `.alt` modality.")
+            for k, cells in alt.items():
+                print(f"\tReducing dimensions in `.alt['{k}']...")
+                reduce_dimensions_anndata(adata=cells.matrix,
+                                        umap=umap, tsne=tsne,
+                                        batch_correction_key=batch_correction_key,
+                                        perform_clustering=perform_clustering,
+                                        verbose=verbose,
+                                        tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
                                         )
 
-                    # save metadata
-                    self.metadata["xenium"]['images'][f'registered_{self.image_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path).replace("\\", "/")
-                    self._save_metadata_after_registration()
-
-                    del imreg_complete, imreg_selected, image, template, nuclei_img, eo, dab
-                else:
-                    # image_type is IF
-                    # In case of IF images the channels are normally in the first axis and each channel is registered separately
-                    # Further, each channel is then saved separately as grayscale image.
-
-                    # iterate over channels
-                    for i, n in enumerate(self.image_names):
-                        # skip the DAPI image
-                        if n == nuclei_name:
-                            break
-
-                        if imreg_complete.image_resized is None:
-                            # select one channel from non-resized original image
-                            imreg_selected.image = np.take(imreg_complete.image, i, channel_axis)
-                        else:
-                            # select one channel from resized original image
-                            imreg_selected.image_resized = np.take(imreg_complete.image_resized, i, channel_axis)
-
-                        # perform registration
-                        imreg_selected.perform_registration()
-
-                        # save files
-                        imreg_selected.save(path=self.path,
-                                        filename=f"{self.slide_id}__{self.sample_id}__{n}",
-                                        axes='YX',
-                                        photometric='minisblack'
-                                        )
-
-                        # save metadata
-                        self.metadata["xenium"]['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, self.path)
-                        self._save_metadata_after_registration()
-
-                    # free RAM
-                    del imreg_complete, imreg_selected, image, template, nuclei_img
-                gc.collect()
-
-            # read images
-            self.load_images()
 
     def saveas(self,
             path: Union[str, os.PathLike, Path],
             overwrite: bool = False,
             zip_output: bool = False,
             images_as_zarr: bool = True,
-            boundaries_as_zarr: bool = True,
             zarr_zipped: bool = False
             ):
         '''
@@ -1532,12 +1267,6 @@ class InSituData:
         # create viewer
         self.viewer = napari.Viewer()
 
-        # # optionally add images
-        # if show_images:
-        #     # add images
-        #     if not hasattr(self, "images"):
-        #         raise XeniumDataMissingObject("images")
-
         try:
             image_keys = self.images.metadata.keys()
         except AttributeError:
@@ -1664,10 +1393,14 @@ class InSituData:
         try:
             cells = self.cells
         except AttributeError:
-            pass
+            # add annotation widget to napari
+            annot_widget = add_new_annotations_widget()
+            annot_widget.max_height = 100
+            annot_widget.max_width = widgets_max_width
+            self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
         else:
             # initialize the widgets
-            add_points_widget, locate_cells_widget, add_region_widget, show_annotations_widget, add_boundaries_widget, select_data = _initialize_widgets(xdata=self)
+            show_points_widget, locate_cells_widget, add_region_widget, show_annotations_widget, show_boundaries_widget, select_data = _initialize_widgets(xdata=self)
 
             # add widgets to napari window
             if select_data is not None:
@@ -1675,36 +1408,37 @@ class InSituData:
                 select_data.max_height = 50
                 select_data.max_width = widgets_max_width
 
-            if add_points_widget is not None:
-                self.viewer.window.add_dock_widget(add_points_widget, name="Add cells", area="right")
-                add_points_widget.max_height = 130
-                add_points_widget.max_width = widgets_max_width
+            if show_points_widget is not None:
+                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right")
+                show_points_widget.max_height = 130
+                show_points_widget.max_width = widgets_max_width
 
-            if add_boundaries_widget is not None:
-                self.viewer.window.add_dock_widget(add_boundaries_widget, name="Add boundaries", area="right")
-                add_boundaries_widget.max_height = 80
-                add_boundaries_widget.max_width = widgets_max_width
+            if show_boundaries_widget is not None:
+                self.viewer.window.add_dock_widget(show_boundaries_widget, name="Show boundaries", area="right")
+                show_boundaries_widget.max_height = 80
+                show_boundaries_widget.max_width = widgets_max_width
 
             if locate_cells_widget is not None:
-                self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate", area="right")
-                locate_cells_widget.max_height = 130
+                self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate to cell", area="right")
+                #locate_cells_widget.max_height = 130
                 locate_cells_widget.max_width = widgets_max_width
+
+            # add annotation widget to napari
+            annot_widget = add_new_annotations_widget()
+            annot_widget.max_height = 100
+            annot_widget.max_width = widgets_max_width
+            self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
 
             if add_region_widget is not None:
                 self.viewer.window.add_dock_widget(add_region_widget, name="Show regions", area="right")
-                add_region_widget.max_height = 150
+                add_region_widget.max_height = 100
                 add_region_widget.max_width = widgets_max_width
 
             if show_annotations_widget is not None:
-                self.viewer.window.add_dock_widget(show_annotations_widget, name="Show annotations", area="right")
-                show_annotations_widget.max_height = 150
+                self.viewer.window.add_dock_widget(show_annotations_widget, name="Show annotations", area="right", tabify=True)
+                show_annotations_widget.max_height = 100
                 show_annotations_widget.max_width = widgets_max_width
 
-        # add annotation widget to napari
-        annot_widget = add_new_annotations_widget()
-        annot_widget.max_height = 100
-        annot_widget.max_width = widgets_max_width
-        self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
 
         # EVENTS
         # Function assign to an layer addition event
@@ -1904,87 +1638,240 @@ class InSituData:
                     print(f"No history found for '{cat}'.") if verbose else None
 
 
+def register_images(
+    data: InSituData,
+    image_to_be_registered: Union[str, os.PathLike, Path],
+    image_type: Literal["histo", "IF"],
+    channel_names: Union[str, List[str]],
+    channel_name_for_registration: Optional[str] = None,  # name used for the nuclei image. Only required for IF images.
+    template_image_name: str = "nuclei",
+    save_results: bool = True,
+    add_registered_image: bool = True,
+    decon_scale_factor: float = 0.2,
+    physicalsize: str = 'µm',
+    ):
+    '''
+    Register images stored in XeniumData object.
+    '''
 
-def read_xenium(
-    path: Union[str, os.PathLike, Path],
-    metadata_filename: Optional[str] = None,
-) -> InSituData:
-        """_summary_
+    # if image type is IF, the channel name for registration needs to be given
+    if image_type == "IF" and channel_name_for_registration is None:
+        raise ValueError(f'If `image_type" is "IF", `channel_name_for_registration is not allowed to be `None`.')
 
-        Args:
-            path (Union[str, os.PathLike, Path]): _description_
-            pattern_xenium_folder (str, optional): _description_. Defaults to "output-{ins_id}__{slide_id}__{sample_id}".
-            matrix (Optional[AnnData], optional): _description_. Defaults to None.
+    # define output directory
+    output_dir = data.path.parent / "registered_images"
 
-        Raises:
-            FileNotFoundError: _description_
-        """
-        path = Path(path) # make sure the path is a pathlib path
-        path = Path(path)
-        dim = None # dimensions of the dataset
-        from_insitudata = False  # flag indicating from where the data is read
-        if (path / ISPY_METADATA_FILE).exists():
-            # read xeniumdata metadata
-            xd_metadata_file = path / ISPY_METADATA_FILE
-            metadata = read_json(xd_metadata_file)
+    # if output_dir.is_dir() and not force:
+    #     raise FileExistsError(f"Output directory {output_dir} exists already. If you still want to run the registration, set `force=True`.")
 
-            # retrieve slide_id and sample_id
-            slide_id = metadata["slide_id"]
-            sample_id = metadata["sample_id"]
+    # check if image path exists
+    image_to_be_registered = Path(image_to_be_registered)
+    if not image_to_be_registered.is_file():
+        raise FileNotFoundError(f"No such file found: {str(image_to_be_registered)}")
 
-            # save paths of this project in metadata
-            metadata["path"] = abspath(path).replace("\\", "/")
-            metadata["metadata_file"] = ISPY_METADATA_FILE
+    # make sure the given image names are in a list
+    channel_names = convert_to_list(channel_names)
 
-            # set flag for xeniumdata
-            from_insitudata = True
+    # determine the structure of the image axes and check other things
+    axes_template = "YX"
+    if image_type == "histo":
+        axes_image = "YXS"
+
+        # make sure that there is only one image name given
+        if len(channel_names) > 1:
+            raise ValueError(f"More than one image name retrieved ({channel_names})")
+
+        if len(channel_names) == 0:
+            raise ValueError(f"No image name found in file {image_to_be_registered}")
+
+    elif image_type == "IF":
+        axes_image = "CYX"
+    else:
+        raise UnknownOptionError(image_type, available=["histo", "IF"])
+
+    print(f'\tProcessing following {image_type} images: {tf.Bold}{", ".join(channel_names)}{tf.ResetAll}', flush=True)
+
+    # read images
+    print("\t\tLoading images to be registered...", flush=True)
+    image = imread(image_to_be_registered) # e.g. HE image
+
+    # sometimes images are read with an empty time dimension in the first axis.
+    # If this is the case, it is removed here.
+    if len(image.shape) == 4:
+        image = image[0]
+
+    # read images in XeniumData object
+    data.load_images(names=template_image_name)
+    template = data.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
+
+    # extract OME metadata
+    ome_metadata_template = data.images.metadata["nuclei"]["OME"]
+
+    # extract pixel size for x and y from metadata
+    pixelsizes = {key: ome_metadata_template['Image']['Pixels'][key] for key in ['PhysicalSizeX', 'PhysicalSizeY']}
+
+    # generate OME metadata for saving
+    ome_metadata = {
+        **{'SignificantBits': 8,
+        'PhysicalSizeXUnit': physicalsize,
+        'PhysicalSizeYUnit': physicalsize
+        },
+        **pixelsizes
+    }
+
+    # determine one pixel direction as universal pixel size
+    pixel_size = pixelsizes['PhysicalSizeX']
+
+    # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
+    axes_selected = "YX"
+    if image_type == "histo":
+        print("\t\tRun color deconvolution", flush=True)
+        # deconvolve HE - performed on resized image to save memory
+        # TODO: Scale to max width instead of using a fixed scale factor before deconvolution (`scale_to_max_width`)
+        nuclei_img, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor, axes=axes_selected),
+                                    return_type="grayscale", convert=True)
+
+        # bring back to original size
+        nuclei_img = resize_image(nuclei_img, scale_factor=1/decon_scale_factor, axes=axes_selected)
+
+        # set nuclei_channel and nuclei_axis to None
+        channel_name_for_registration = channel_axis = None
+    else:
+        # image_type is "IF" then
+        # get index of nuclei channel
+        channel_name_for_registration = channel_names.index(channel_name_for_registration)
+        channel_axis = axes_image.find("C")
+
+        if channel_axis == -1:
+            raise ValueError(f"No channel indicator `C` found in image axes ({axes_image})")
+
+        print(f"\t\tSelect image with nuclei from IF image (channel: {channel_name_for_registration})", flush=True)
+        # select nuclei channel from IF image
+        if channel_name_for_registration is None:
+            raise TypeError("Argument `nuclei_channel` should be an integer and not NoneType.")
+
+        # select dapi channel for registration
+        nuclei_img = np.take(image, channel_name_for_registration, channel_axis)
+        #selected = image[nuclei_channel]
+
+    # Setup image registration objects - is important to load and scale the images.
+    # The reason for this are limits in C++, not allowing to perform certain OpenCV functions on big images.
+
+    # First: Setup the ImageRegistration object for the whole image (before deconvolution in histo images and multi-channel in IF)
+    imreg_complete = ImageRegistration(
+        image=image,
+        template=template,
+        axes_image=axes_image,
+        axes_template=axes_template,
+        verbose=False
+        )
+    # load and scale the whole image
+    imreg_complete.load_and_scale_images()
+
+    # setup ImageRegistration object with the nucleus image (either from deconvolution or just selected from IF image)
+    imreg_selected = ImageRegistration(
+        image=nuclei_img,
+        template=imreg_complete.template,
+        axes_image=axes_selected,
+        axes_template=axes_template,
+        max_width=4000,
+        convert_to_grayscale=False,
+        perspective_transform=False
+    )
+
+    # run all steps to extract features and get transformation matrix
+    imreg_selected.load_and_scale_images()
+
+    print("\t\tExtract common features from image and template", flush=True)
+    # perform registration to extract the common features ptsA and ptsB
+    imreg_selected.extract_features()
+    imreg_selected.calculate_transformation_matrix()
+
+    if image_type == "histo":
+        # in case of histo RGB images, the channels are in the third axis and OpenCV can transform them
+        if imreg_complete.image_resized is None:
+            imreg_selected.image = imreg_complete.image  # use original image
         else:
-            # initialize the metadata dict
-            metadata = {}
-            metadata["data"] = {}
-            metadata["history"] = {}
-            metadata["history"]["cells"] = []
-            metadata["history"]["annotations"] = []
-            metadata["history"]["regions"] = []
+            imreg_selected.image_resized = imreg_complete.image_resized  # use resized original image
 
-            # check if path exists
-            if not path.is_dir():
-                raise FileNotFoundError(f"No such directory found: {str(path)}")
+        # perform registration
+        imreg_selected.perform_registration()
 
-            if metadata_filename is not None:
-                experiment_xenium_filename = metadata_filename
+        if save_results:
+            # save files
+            identifier = f"{data.slide_id}__{data.sample_id}__{channel_names[0]}"
+            #current_outfile = output_dir / f"{identifier}__registered.ome.tif"
+            imreg_selected.save(
+                output_dir=output_dir,
+                identifier = identifier,
+                axes=axes_image,
+                photometric='rgb',
+                ome_metadata=ome_metadata
+                )
 
+            # save metadata
+            data.metadata["xenium"]['images'][f'registered_{channel_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, data.path).replace("\\", "/")
+            write_dict_to_json(data.metadata["xenium"], data.path / "experiment_modified.xenium")
+            #self._save_metadata_after_registration()
+        if add_registered_image:
+            data.images.add_image(
+                image=imreg_selected.registered,
+                name=channel_names[0],
+                axes=axes_image,
+                pixel_size=pixel_size,
+                ome_meta=ome_metadata
+                )
+
+        del imreg_complete, imreg_selected, image, template, nuclei_img, eo, dab
+    else:
+        # image_type is IF
+        # In case of IF images the channels are normally in the first axis and each channel is registered separately
+        # Further, each channel is then saved separately as grayscale image.
+
+        # iterate over channels
+        for i, n in enumerate(channel_names):
+            # skip the DAPI image
+            if n == channel_name_for_registration:
+                break
+
+            if imreg_complete.image_resized is None:
+                # select one channel from non-resized original image
+                imreg_selected.image = np.take(imreg_complete.image, i, channel_axis)
             else:
-                # check for modified metadata_filename
-                metadata_files = [elem.name for elem in path.glob("*.xenium")]
-                if "experiment_modified.xenium" in metadata_files:
-                    experiment_xenium_filename = "experiment_modified.xenium"
-                else:
-                    experiment_xenium_filename = "experiment.xenium"
+                # select one channel from resized original image
+                imreg_selected.image_resized = np.take(imreg_complete.image_resized, i, channel_axis)
 
-            # # all changes are saved to the modified .xenium json
-            # metadata_save_path_after_registration = path / "experiment_modified.xenium"
+            # perform registration
+            imreg_selected.perform_registration()
 
-            # save paths of this project in metadata
-            metadata["path"] = abspath(path).replace("\\", "/")
-            metadata["metadata_file"] = experiment_xenium_filename
+            if save_results:
+                # save files
+                identifier = f"{data.slide_id}__{data.sample_id}__{n}"
+                #current_outfile = output_dir / f"{filename}__registered.ome.tif",
+                imreg_selected.save(
+                    #outfile = current_outfile,
+                    output_dir=output_dir,
+                    identifier=identifier,
+                    #output_dir=self.path.parent / "registered_images",
+                    #filename=f"{self.slide_id}__{self.sample_id}__{n}",
+                    axes='YX',
+                    photometric='minisblack',
+                    ome_metadata=ome_metadata
+                    )
 
-            # read metadata
-            metadata["xenium"] = read_json(path / experiment_xenium_filename)
+                # save metadata
+                data.metadata["xenium"]['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, data.path).replace("\\", "/")
+                write_dict_to_json(data.metadata["xenium"], data.path / "experiment_modified.xenium")
+                #self._save_metadata_after_registration()
+            if add_registered_image:
+                data.images.add_image(
+                    image=imreg_selected.registered,
+                    name=n,
+                    axes=axes_image,
+                    pixel_size=pixel_size,
+                    ome_meta=ome_metadata
+                    )
 
-            # get slide id and sample id from metadata
-            slide_id = metadata["xenium"]["slide_id"]
-            sample_id = metadata["xenium"]["region_name"]
-
-            # initialize the uid section
-            metadata["uids"] = [str(uuid4())]
-
-        data = InSituData(path=path,
-                          metadata=metadata,
-                          slide_id=slide_id,
-                          sample_id=sample_id,
-                          from_insitudata=from_insitudata
-                          )
-
-        return data
-
+        # free RAM
+        del imreg_complete, imreg_selected, image, template, nuclei_img
+    gc.collect()
