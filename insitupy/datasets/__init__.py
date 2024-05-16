@@ -1,1 +1,2 @@
 from .download import download_url
+from ._datasets import human_breast_cancer,human_brain_cancer,hskin_melanoma,nondiseased_kidney,human_lung_cancer,pancreatic_cancer
