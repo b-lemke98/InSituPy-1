@@ -6,12 +6,73 @@ from typing import List, Literal, Optional, Union
 import dask.array as da
 import numpy as np
 import tifffile as tf
+import xmltodict
 import zarr
-from tifffile import imread
+from parse import *
+from tifffile import TiffFile, imread
 
+from insitupy import __version__
+
+from .._exceptions import InvalidFileTypeError
 from ..utils.utils import convert_to_list
+from ..utils.utils import textformat as tf
 from .utils import resize_image
 
+
+def read_image(
+    image
+    ):
+    image = Path(image)
+    suffix = image.name.split(".", maxsplit=1)[-1]
+
+    if "zarr" in suffix:
+    # load image from .zarr.zip
+        zipped = True if suffix == "zarr.zip" else False
+        with zarr.ZipStore(image, mode="r") if zipped else zarr.DirectoryStore(image) as dirstore:
+            # get components of zip store
+            components = dirstore.listdir()
+
+            if ".zarray" in components:
+                # the store is an array which can be opened
+                if zipped:
+                    img = da.from_zarr(dirstore).persist()
+                else:
+                    img = da.from_zarr(dirstore)
+            else:
+                subres = [elem for elem in components if not elem.startswith(".")]
+                img = []
+                for s in subres:
+                    if zipped:
+                        img.append(
+                            da.from_zarr(dirstore, component=s).persist()
+                                    )
+                    else:
+                        img.append(
+                            da.from_zarr(dirstore, component=s)
+                                    )
+
+            # retrieve OME metadata
+            store = zarr.open(dirstore)
+            meta = store.attrs.asdict()
+            ome_meta = meta["OME"]
+            axes = meta["axes"]
+
+    elif suffix in ["ome.tif", "ome.tiff"]:
+        # load image from .ome.tiff
+        img = read_ome_tiff(path=image, levels=None)
+        # read ome metadata
+        with TiffFile(image) as tif:
+            axes = tif.series[0].axes # get axes
+            ome_meta = tif.ome_metadata # read OME metadata
+            ome_meta = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
+
+    else:
+        raise InvalidFileTypeError(
+            allowed_types=["zarr", "zarr.zip", "ome.tif", "ome.tiff"],
+            received_type=suffix
+            )
+
+    return img
 
 def write_ome_tiff(
     file: Union[str, os.PathLike, Path],

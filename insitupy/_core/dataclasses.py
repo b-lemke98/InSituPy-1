@@ -6,25 +6,21 @@ from os.path import relpath
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
-import dask
 import dask.array as da
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-import xmltodict
 import zarr
 from anndata import AnnData
 from parse import *
 from shapely import Polygon, affinity
 from shapely.geometry.multipolygon import MultiPolygon
-from tifffile import TiffFile
 
 from insitupy import __version__
-from insitupy.utils.utils import (convert_int_to_xenium_hex,
-                                  convert_xenium_hex_to_int)
+from insitupy.utils.utils import convert_int_to_xenium_hex
 
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
-from ..images.io import read_ome_tiff, write_ome_tiff
+from ..images.io import read_image, write_ome_tiff
 from ..images.utils import create_img_pyramid, crop_dask_array_or_pyramid
 from ..utils.geo import parse_geopandas, write_qupath_geojson
 from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
@@ -724,59 +720,14 @@ class ImageData(DeepCopyMixin, GetMixin):
         pixel_size: Optional[Number] = None,
         ome_meta: Optional[dict] = None
         ):
+
+        # check if image is a path or a data array
         if Path(str(image)).exists():
             # read path
             image = Path(image)
             image = image.resolve() # resolve relative path
-            suffix = image.name.split(".", maxsplit=1)[-1]
-
-            if "zarr" in suffix:
-            # load image from .zarr.zip
-                zipped = True if suffix == "zarr.zip" else False
-                with zarr.ZipStore(image, mode="r") if zipped else zarr.DirectoryStore(image) as dirstore:
-                    # get components of zip store
-                    components = dirstore.listdir()
-
-                    if ".zarray" in components:
-                        # the store is an array which can be opened
-                        if zipped:
-                            img = da.from_zarr(dirstore).persist()
-                        else:
-                            img = da.from_zarr(dirstore)
-                    else:
-                        subres = [elem for elem in components if not elem.startswith(".")]
-                        img = []
-                        for s in subres:
-                            if zipped:
-                                img.append(
-                                    da.from_zarr(dirstore, component=s).persist()
-                                            )
-                            else:
-                                img.append(
-                                    da.from_zarr(dirstore, component=s)
-                                            )
-
-                    # retrieve OME metadata
-                    store = zarr.open(dirstore)
-                    meta = store.attrs.asdict()
-                    ome_meta = meta["OME"]
-                    axes = meta["axes"]
-
-            elif suffix in ["ome.tif", "ome.tiff"]:
-                # load image from .ome.tiff
-                img = read_ome_tiff(path=image, levels=None)
-                # read ome metadata
-                with TiffFile(image) as tif:
-                    axes = tif.series[0].axes # get axes
-                    ome_meta = tif.ome_metadata # read OME metadata
-                    ome_meta = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
-
-            else:
-                raise InvalidFileTypeError(
-                    allowed_types=["zarr", "zarr.zip", "ome.tif", "ome.tiff"],
-                    received_type=suffix
-                    )
             filename = image.name
+            img = read_image(image)
 
         elif isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
             assert axes is not None, "If `image` is dask array, `axes` needs to be set."
