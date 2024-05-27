@@ -4,7 +4,7 @@ from copy import deepcopy
 from numbers import Number
 from os.path import relpath
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 import dask.array as da
 import geopandas as gpd
@@ -20,7 +20,7 @@ from insitupy import __version__
 from insitupy.utils.utils import convert_int_to_xenium_hex
 
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
-from ..images.io import read_image, write_ome_tiff
+from ..images.io import read_image, write_ome_tiff, write_zarr
 from ..images.utils import create_img_pyramid, crop_dask_array_or_pyramid
 from ..utils.geo import parse_geopandas, write_qupath_geojson
 from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
@@ -727,7 +727,7 @@ class ImageData(DeepCopyMixin, GetMixin):
             image = Path(image)
             image = image.resolve() # resolve relative path
             filename = image.name
-            img = read_image(image)
+            img, ome_meta, axes = read_image(image)
 
         elif isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
             assert axes is not None, "If `image` is dask array, `axes` needs to be set."
@@ -830,6 +830,7 @@ class ImageData(DeepCopyMixin, GetMixin):
              as_zarr: bool = True,
              zipped: bool = False,
              save_pyramid: bool = True,
+             compression: Literal['jpeg', 'LZW', 'jpeg2000', 'ZLIB', None] = 'ZLIB', # jpeg2000 or ZLIB are recommended in the Xenium documentation - ZLIB is faster
              return_savepaths: bool = False,
              overwrite: bool = False
              ):
@@ -863,30 +864,11 @@ class ImageData(DeepCopyMixin, GetMixin):
                         # filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr"
                         filename = n + ".zarr"
 
-                    # decide whether to save as pyramid or not
-                    if isinstance(img, list):
-                        if not save_pyramid:
-                            img = img[0]
-                    else:
-                        if save_pyramid:
-                            # create img pyramid
-                            img = create_img_pyramid(img=img, nsubres=6)
-
+                    # write to zarr
                     img_path = path / filename
-                    with zarr.ZipStore(img_path, mode="w") if zipped else zarr.DirectoryStore(img_path) as dirstore:
-                        # check whether to save the image as pyramid or not
-                        if save_pyramid:
-                            for i, im in enumerate(img):
-                                im.to_zarr(dirstore, component=str(i))
-                        else:
-                            # save image data in zipstore without pyramid
-                            img.to_zarr(dirstore)
-
-                        # open zarr store save metadata in zarr store
-                        store = zarr.open(dirstore, mode="a")
-                        store.attrs.put(img_metadata)
-                        # for k,v in img_metadata.items():
-                        #     store.attrs[k] = v
+                    write_zarr(image=img, file=img_path,
+                               img_metadata=img_metadata,
+                               save_pyramid=save_pyramid)
 
                 else:
                     # get file name for saving
@@ -902,8 +884,9 @@ class ImageData(DeepCopyMixin, GetMixin):
                     selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
 
                     # write images as OME-TIFF
-                    write_ome_tiff(path / filename, img,
+                    write_ome_tiff(image=img, file=path / filename,
                                 photometric=photometric, axes=axes,
+                                compression=compression,
                                 metadata=selected_metadata, overwrite=False)
 
                 if return_savepaths:
