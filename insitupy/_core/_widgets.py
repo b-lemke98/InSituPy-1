@@ -31,7 +31,8 @@ if WITH_NAPARI:
                             opacity: float = 1,
                             visible: bool = True,
                             edge_width: float = 0,
-                            edge_color: str = 'red'
+                            edge_color: str = 'red',
+                            upper_climit_pct: int = 99
                             ) -> LayerDataTuple:
 
         # remove entries with NaN
@@ -57,7 +58,15 @@ if WITH_NAPARI:
             color_mode = "colormap"
             color_map = "viridis"
             color_cycle = None
-            climits = [0, np.percentile(color_values, 95)]
+
+            color_values_above_zero = color_values[color_values > 0]
+            try:
+                upper_climit = np.percentile(color_values_above_zero, upper_climit_pct)
+            except IndexError:
+                # if there were not color_values_above_zero, a IndexError appears
+                upper_climit = 0
+
+            climits = [0, upper_climit]
 
         # generate point layer
         layer = (
@@ -194,7 +203,8 @@ if WITH_NAPARI:
                             color_values=color_value_gene,
                             name=f"{config.current_data_name}-{gene}",
                             point_names=cell_names,
-                            point_size=size
+                            point_size=size,
+                            upper_climit_pct=99
                         )
                         layers.append(gene_layer)
                     else:
