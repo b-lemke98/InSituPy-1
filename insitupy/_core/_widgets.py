@@ -12,7 +12,7 @@ import insitupy._core.config as config
 from insitupy import WITH_NAPARI
 
 from ..images.utils import create_img_pyramid
-from ..utils.palettes import CustomPalettes
+from ..utils.palettes import CustomPalettes, MplColorHelper
 
 if WITH_NAPARI:
     import napari
@@ -22,6 +22,21 @@ if WITH_NAPARI:
 
     from ._layers import _add_annotations_as_layer
 
+    def _determine_climits(
+        color_values,
+        upper_climit_pct,
+        lower_climit = 0
+        ) -> list:
+        color_values_above_zero = color_values[color_values > 0]
+        try:
+            upper_climit = np.percentile(color_values_above_zero, upper_climit_pct)
+        except IndexError:
+            # if there were not color_values_above_zero, a IndexError appears
+            upper_climit = 0
+
+        climits = [lower_climit, upper_climit]
+
+        return climits
 
     def _create_points_layer(points,
                             color_values: List[Number],
@@ -32,7 +47,8 @@ if WITH_NAPARI:
                             visible: bool = True,
                             edge_width: float = 0,
                             edge_color: str = 'red',
-                            upper_climit_pct: int = 99
+                            upper_climit_pct: int = 99,
+                            cmap: str = "viridis"
                             ) -> LayerDataTuple:
 
         # remove entries with NaN
@@ -56,17 +72,13 @@ if WITH_NAPARI:
             climits = None
         else:
             color_mode = "colormap"
-            color_map = "viridis"
+            color_map = cmap
             color_cycle = None
 
-            color_values_above_zero = color_values[color_values > 0]
-            try:
-                upper_climit = np.percentile(color_values_above_zero, upper_climit_pct)
-            except IndexError:
-                # if there were not color_values_above_zero, a IndexError appears
-                upper_climit = 0
-
-            climits = [0, upper_climit]
+            climits = _determine_climits(
+                color_values=color_values,
+                upper_climit_pct=upper_climit_pct
+            )
 
         # generate point layer
         layer = (
@@ -94,6 +106,29 @@ if WITH_NAPARI:
             'points'
             )
         return layer
+
+    def _update_points_layer(
+        layer: napari.layers.Layer,
+        new_color_values: List[Number],
+        new_name: Optional[str] = None,
+        upper_climit_pct: int = 99,
+        cmap: str = "viridis"
+    ) -> None:
+        # determine the color limits for the values
+        climits = _determine_climits(
+            color_values=new_color_values,
+            upper_climit_pct=upper_climit_pct
+            )
+
+        # get the RGBA colors for the new values
+        chelper = MplColorHelper(cmap_name=cmap, start_val=climits[0], stop_val=climits[1])
+        new_colors = chelper.get_rgb(new_color_values)
+
+        # change the colors of the layer
+        layer.face_color = new_colors
+
+        if new_name is not None:
+            layer.name = new_name
 
 
     def _initialize_widgets(
@@ -190,7 +225,7 @@ if WITH_NAPARI:
                 # get names of cells
                 cell_names = config.adata.obs_names.values
 
-                layers = []
+                layers_to_add = []
                 if gene is not None:
                     if gene not in viewer.layers:
                         # get expression values
@@ -206,7 +241,7 @@ if WITH_NAPARI:
                             point_size=size,
                             upper_climit_pct=99
                         )
-                        layers.append(gene_layer)
+                        layers_to_add.append(gene_layer)
                     else:
                         print(f"Key '{gene}' already in layer list.", flush=True)
 
@@ -223,11 +258,11 @@ if WITH_NAPARI:
                             point_names=cell_names,
                             point_size=size,
                         )
-                        layers.append(obs_layer)
+                        layers_to_add.append(obs_layer)
                     else:
                         print(f"Key '{observation}' already in layer list.", flush=True)
 
-                return layers
+                return layers_to_add
 
             @magicgui(
                 call_button='Show',
