@@ -26,9 +26,13 @@ def update_viewer_config(
         boundaries = xdata.alt[current_data_name].boundaries
 
     # get genes and observations
-    global genes, observations
+    global genes, observations, value_dict
     genes = adata.var_names.tolist()
     observations = adata.obs.columns.tolist()
+    value_dict = {
+        "genes": genes,
+        "obs": observations
+    }
 
     # get point coordinates
     global points
