@@ -77,14 +77,10 @@ if WITH_NAPARI:
         set_viewer_config(xdata)
 
         # set choices
-        # points_widget.gene.choices = genes
-        # points_widget.observation.choices = observations
         boundaries_widget.key.choices = masks
 
         # reset the currently selected key to None
         points_widget.value.value = None
-        #points_widget.gene.value = None
-        #points_widget.observation.value = None
 
         # add last addition to recent
         points_widget.recent.choices = sorted(recent_selections)

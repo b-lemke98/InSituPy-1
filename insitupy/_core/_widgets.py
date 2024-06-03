@@ -36,7 +36,6 @@ if WITH_NAPARI:
             # initialize data_name of viewer
             config.init_data_name()
             # initialize viewer configuration
-            #config_mod.get_data_name(data_widget=select_data)
             config.set_viewer_config(xdata=xdata,
                                         #data_name=config.current_data_name
                                         )
@@ -58,7 +57,6 @@ if WITH_NAPARI:
             def select_data(
                 data_name="main"
             ):
-                #print(data_name)
                 pass
 
             # connect key change with update function
@@ -108,14 +106,12 @@ if WITH_NAPARI:
                 call_button='Add',
                 key={'choices': ["genes", "obs", "obsm"], 'label': 'Key:'},
                 value={'choices': config.genes, 'label': "Value:"},
-                #observation={'choices': config.observations, 'label': "Observation:"},
                 size={'label': 'Size [µm]'},
                 recent={'choices': [""], 'label': "Recent:"},
                 )
             def add_points_widget(
                 key="genes",
                 value=None,
-                #observation=None,
                 size=6,
                 recent=None,
                 viewer=viewer
@@ -187,32 +183,9 @@ if WITH_NAPARI:
                             new_name=new_layer_name,
                         )
 
-
-
-
-
             @add_points_widget.key.changed.connect
             def update_values_on_key_change(event=None):
                 _update_values_on_key_change(add_points_widget)
-
-                # if observation is not None:
-                #     if observation not in viewer.layers:
-                #         # get observation values
-                #         color_value_obs = config.adata.obs[observation].values
-
-                #         # create points layer for observations
-                #         obs_layer = _create_points_layer(
-                #             points=config.points,
-                #             color_values=color_value_obs,
-                #             name=f"{config.current_data_name}-{observation}",
-                #             point_names=cell_names,
-                #             point_size=size,
-                #         )
-                #         layers_to_add.append(obs_layer)
-                #     else:
-                #         print(f"Key '{observation}' already in layer list.", flush=True)
-
-                #return layers_to_add
 
             @magicgui(
                 call_button='Show',
@@ -224,8 +197,7 @@ if WITH_NAPARI:
                 cell="",
                 zoom=5,
                 highlight=True,
-                #viewer=viewer
-            ) -> Optional[napari.types.LayerDataTuple]:
+                ) -> Optional[napari.types.LayerDataTuple]:
                 if cell in config.adata.obs_names.astype(str):
                     # get location of selected cell
                     cell_loc = config.adata.obs_names.get_loc(cell)
@@ -346,10 +318,6 @@ if WITH_NAPARI:
                         )
                 else:
                     print(f"Key '{key}' already in layer list.")
-
-                    # restore original configuration of dropdown lists
-                    #add_region_widget.key.value = first_region_key
-                    #add_region_widget.region.choices = first_regions
 
             @show_regions_widget.key.changed.connect
             def update_region_on_key_change(event=None):
