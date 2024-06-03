@@ -1,5 +1,6 @@
 import dask
 import numpy as np
+import pandas as pd
 from scipy.sparse import issparse
 
 from insitupy import WITH_NAPARI
@@ -29,13 +30,28 @@ if WITH_NAPARI:
             adata = xdata.alt[current_data_name].matrix
             boundaries = xdata.alt[current_data_name].boundaries
 
-        # get genes and observations
+        # get keys from var_names, obs and obsm
         global genes, observations, value_dict
         genes = adata.var_names.tolist()
         observations = adata.obs.columns.tolist()
+
+        obsm_keys = list(adata.obsm.keys())
+        obsm_cats = []
+        for k in sorted(obsm_keys):
+            data = adata.obsm[k]
+            if isinstance(data, pd.DataFrame):
+                for col in data.columns:
+                    obsm_cats.append(f"{k}-{col}")
+            elif isinstance(data, np.ndarray):
+                for i in range(data.shape[1]):
+                    obsm_cats.append(f"{k}-{i+1}")
+            else:
+                pass
+
         value_dict = {
             "genes": genes,
-            "obs": observations
+            "obs": observations,
+            "obsm": obsm_cats
         }
 
 
@@ -72,6 +88,7 @@ if WITH_NAPARI:
 
         # add last addition to recent
         points_widget.recent.choices = sorted(recent_selections)
+        points_widget.recent.value = None
 
         # set only the last layer visible
         point_layers = [elem for elem in xdata.viewer.layers if isinstance(elem, napari.layers.points.points.Points)]

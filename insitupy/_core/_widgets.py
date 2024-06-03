@@ -1,8 +1,10 @@
 from numbers import Number
 from typing import List, Optional
+from warnings import warn
 
 import matplotlib
 import numpy as np
+import pandas as pd
 from matplotlib.colors import rgb2hex
 from shapely.geometry.multipolygon import MultiPolygon
 
@@ -125,8 +127,8 @@ if WITH_NAPARI:
                 #layers_to_add = []
                 if value is not None or recent is not None:
                     if value is None:
-                        key = recent.split(":")[0]
-                        value = recent.split(":")[1]
+                        key = recent.split(":", maxsplit=1)[0]
+                        value = recent.split(":", maxsplit=1)[1]
                     #if gene not in viewer.layers:
                     # get expression values
                     if key == "genes":
@@ -136,6 +138,16 @@ if WITH_NAPARI:
                         color_value = config.adata.obs[value].values
                     elif key == "obsm":
                         #TODO: Implement it for obsm
+                        obsm_key = value.split("-", maxsplit=1)[0]
+                        obsm_col = value.split("-", maxsplit=1)[1]
+                        data = config.adata.obsm[obsm_key]
+
+                        if isinstance(data, pd.DataFrame):
+                            color_value = data[obsm_col].values
+                        elif isinstance(data, np.ndarray):
+                            color_value = data[:, int(obsm_col)]
+                        else:
+                            warn("Data in `obsm` needs to be either pandas DataFrame or numpy array to be parsed.")
                         pass
                     else:
                         print("Unknown key selected.", flush=True)
