@@ -35,9 +35,10 @@ if WITH_NAPARI:
             config.init_data_name()
             # initialize viewer configuration
             #config_mod.get_data_name(data_widget=select_data)
-            config.update_viewer_config(xdata=xdata,
+            config.set_viewer_config(xdata=xdata,
                                         #data_name=config.current_data_name
                                         )
+            config.init_recent_selections()
 
             data_names = ["main"]
             try:
@@ -106,13 +107,15 @@ if WITH_NAPARI:
                 key={'choices': ["genes", "obs", "obsm"], 'label': 'Key:'},
                 value={'choices': config.genes, 'label': "Value:"},
                 #observation={'choices': config.observations, 'label': "Observation:"},
-                size={'label': 'Size [µm]'}
+                size={'label': 'Size [µm]'},
+                recent={'choices': [""], 'label': "Recent:"},
                 )
             def add_points_widget(
                 key="genes",
                 value=None,
                 #observation=None,
                 size=6,
+                recent=None,
                 viewer=viewer
                 ) -> napari.types.LayerDataTuple:
 
@@ -120,7 +123,10 @@ if WITH_NAPARI:
                 cell_names = config.adata.obs_names.values
 
                 #layers_to_add = []
-                if value is not None:
+                if value is not None or recent is not None:
+                    if value is None:
+                        key = recent.split(":")[0]
+                        value = recent.split(":")[1]
                     #if gene not in viewer.layers:
                     # get expression values
                     if key == "genes":
@@ -136,7 +142,15 @@ if WITH_NAPARI:
 
                     new_layer_name = f"{config.current_data_name}-{value}"
 
+                    # get layer names from the current data
                     layer_names_for_current_data = [elem.name for elem in viewer.layers if elem.name.startswith(config.current_data_name)]
+
+                    # select only point layers
+                    layer_names_for_current_data = [elem for elem in layer_names_for_current_data if isinstance(viewer.layers[elem], napari.layers.points.points.Points)]
+
+                    # save last addition to add it to recent in the callback
+                    config.recent_selections.append(f"{key}:{value}")
+
                     if len(layer_names_for_current_data) == 0:
 
                         # create points layer for genes
@@ -160,6 +174,10 @@ if WITH_NAPARI:
                             new_color_values=color_value,
                             new_name=new_layer_name,
                         )
+
+
+
+
 
             @add_points_widget.key.changed.connect
             def update_values_on_key_change(event=None):

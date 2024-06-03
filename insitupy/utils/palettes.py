@@ -177,7 +177,11 @@ def categorical_data_to_rgba(data, cmap: Union[str, ListedColormap]):
 
     len_colormap = cmap.N
     category_to_rgba = {category: cmap(i % len_colormap) for i, category in enumerate(unique_categories)}
-    return [category_to_rgba[category] for category in data]
+
+    # add key for nan
+    category_to_rgba[np.nan] = (0,0,0,1)
+
+    return np.array([category_to_rgba[category] for category in data])
 
 def data_to_rgba(
     data,
