@@ -154,9 +154,12 @@ def continuous_data_to_rgba(
 def categorical_data_to_rgba(data, cmap: Union[str, ListedColormap]):
     # Handle categorical data
     try:
-        unique_categories = data.cat.categories
+        try:
+            unique_categories = data.cat.categories # in case of pandas series
+        except AttributeError:
+            unique_categories = data.categories # in case of numpy categories
     except AttributeError:
-        unique_categories = np.sort(np.unique(data))
+        unique_categories = np.sort(np.unique(data[~np.isnan(data)]))
 
     # get colormap if necessary
     if not isinstance(cmap, ListedColormap):
@@ -166,7 +169,7 @@ def categorical_data_to_rgba(data, cmap: Union[str, ListedColormap]):
     category_to_rgba = {category: cmap(i % len_colormap) for i, category in enumerate(unique_categories)}
 
     # add key for nan
-    category_to_rgba[np.nan] = (0,0,0,1)
+    category_to_rgba[np.nan] = (1,1,1,0)
 
     return np.array([category_to_rgba[category] for category in data])
 

@@ -131,7 +131,7 @@ if WITH_NAPARI:
                         gene_loc = config.adata.var_names.get_loc(value)
                         color_value = config.X[:, gene_loc]
                     elif key == "obs":
-                        color_value = config.adata.obs[value].values
+                        color_value = config.adata.obs[value]
                     elif key == "obsm":
                         #TODO: Implement it for obsm
                         obsm_key = value.split("-", maxsplit=1)[0]
@@ -139,9 +139,9 @@ if WITH_NAPARI:
                         data = config.adata.obsm[obsm_key]
 
                         if isinstance(data, pd.DataFrame):
-                            color_value = data[obsm_col].values
+                            color_value = data[obsm_col]
                         elif isinstance(data, np.ndarray):
-                            color_value = data[:, int(obsm_col)]
+                            color_value = data[:, int(obsm_col)-1]
                         else:
                             warn("Data in `obsm` needs to be either pandas DataFrame or numpy array to be parsed.")
                         pass

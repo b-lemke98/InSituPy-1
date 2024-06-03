@@ -92,10 +92,10 @@ if WITH_NAPARI:
                             ) -> LayerDataTuple:
 
         # remove entries with NaN
-        mask = pd.notnull(color_values)
-        color_values = color_values[mask]
-        points = points[mask]
-        point_names = point_names[mask]
+        # mask = pd.notnull(color_values)
+        # color_values = color_values[mask]
+        # points = points[mask]
+        # point_names = point_names[mask]
 
         # get colors
         colors = data_to_rgba(data=color_values)
