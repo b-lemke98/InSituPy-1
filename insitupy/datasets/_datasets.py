@@ -124,6 +124,7 @@ def human_breast_cancer(
     
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hbreastcancer__HE__histo.ome.tif", expected_he_md5sum, overwrite):
+        print('Hello')
         download_url(he_url, out_dir = image_dir, file_name = he_file_name, overwrite = True)
 
     if md5sum_image_check(image_dir/"slide_id__hbreastcancer__CD20_HER2_DAPI__IF.ome.tif", expected_if_md5sum, overwrite):
@@ -344,5 +345,76 @@ def human_lung_cancer(
     print(f"Corresponding image data can be found in {image_dir}.")
     print("For this dataset following image is available:")
     print(f"{he_file_name}.ome.tiff")
+    
+    return data
+
+# xenium onboard analysis 3.0.0
+# data from https://www.10xgenomics.com/datasets/preview-data-xenium-prime-gene-expression
+def human_lymph_node_5k(
+        overwrite: bool = False
+        
+) -> InSituData:
+    
+    # URLs for download
+    xeniumdata_url = "https://s3-us-west-2.amazonaws.com/10x.files/samples/xenium/3.0.0/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE_outs.zip"
+    he_url = "https://cf.10xgenomics.com/samples/xenium/3.0.0/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE/Xenium_Prime_Human_Lymph_Node_Reactive_FFPE_he_image.ome.tif"
+
+    # set up paths
+    named_data_dir = DEMODIR / "hlymphnode5k"
+    xeniumdata_dir = named_data_dir / "output-XETG00000__slide_id__hlymphnode5k"
+    image_dir = named_data_dir / "unregistered_images"
+    zip_file = named_data_dir / Path(xeniumdata_url).name
+
+    # check if file exists and has correct md5sum
+    expected_md5sum = "1ddb7d10e2bca93a61830d5dc57cb3a8"
+    expected_he_md5sum = "eae078b0b3ddcaf6a11ca4eefabcaf0c"
+
+    # image file names
+    he_file_name = "slide_id__hlymphnode__HE__histo"
+
+    # check if data exists (zipped or unzipped), if yes check md5sum
+    # if necessary download data
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
+
+    # load data into InSituData object
+    data = read_xenium(xeniumdata_dir)
+
+    # download image data
+    if md5sum_image_check(image_dir/"slide_id__hlymphnode5k__HE__histo.ome.tif", expected_he_md5sum, overwrite):
+        download_url(he_url, out_dir = image_dir, file_name = he_file_name, overwrite = True)
+
+    print(f"Corresponding image data can be found in {image_dir}.")
+    print("For this dataset following image is available:")
+    print(f"{he_file_name}.ome.tiff")
+    
+    return data
+
+# xenium onboard analysis 1.5.0
+# data from https://www.10xgenomics.com/datasets/human-lymph-node-preview-data-xenium-human-multi-tissue-and-cancer-panel-1-standard
+def human_lymph_node(
+        overwrite: bool = False
+        
+) -> InSituData:
+    
+    # URLs for download
+    xeniumdata_url = "https://cf.10xgenomics.com/samples/xenium/1.5.0/Xenium_V1_hLymphNode_nondiseased_section/Xenium_V1_hLymphNode_nondiseased_section_outs.zip"
+
+    # set up paths
+    named_data_dir = DEMODIR / "hlymphnode"
+    xeniumdata_dir = named_data_dir / "output-XETG00000__slide_id__hlymphnode"
+    image_dir = named_data_dir / "unregistered_images"
+    zip_file = named_data_dir / Path(xeniumdata_url).name
+
+    # check if file exists and has correct md5sum
+    expected_md5sum = "4e9ef0a40b0fc00e619cf310f349f1bd"
+
+    # check if data exists (zipped or unzipped), if yes check md5sum
+    # if necessary download data
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
+
+    # load data into InSituData object
+    data = read_xenium(xeniumdata_dir)
+
+    print('For this dataset no image is available')
     
     return data
