@@ -735,9 +735,13 @@ class InSituData:
             boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=pixel_size)
             self.cells = CellData(matrix=matrix, boundaries=boundaries)
 
-            # read binned expression
-            arr = _read_binned_expression(path=self.path, gene_names_to_select=self.cells.matrix.var_names)
-            self.cells.matrix.varm["binned_expression"] = arr
+            try:
+                # read binned expression
+                arr = _read_binned_expression(path=self.path, gene_names_to_select=self.cells.matrix.var_names)
+                self.cells.matrix.varm["binned_expression"] = arr
+            except ValueError:
+                warn("Loading of binned expression did not work. Skipped it.")
+                pass
 
 
     def load_images(self,
