@@ -98,8 +98,8 @@ def human_breast_cancer(
     
     # URLs for download
     xeniumdata_url = "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_outs.zip"
-    he_url = "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_he_image.tif"
-    if_url = "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_if_image.tif"
+    he_url = "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_he_image.ome.tif"
+    if_url = "https://cf.10xgenomics.com/samples/xenium/1.0.1/Xenium_FFPE_Human_Breast_Cancer_Rep1/Xenium_FFPE_Human_Breast_Cancer_Rep1_if_image.ome.tif"
     
     # set up paths
     named_data_dir = DEMODIR / "hbreastcancer"
@@ -109,8 +109,8 @@ def human_breast_cancer(
     
     # check if file exists and has correct md5sum
     expected_md5sum = '7d42a0b232f92a2e51de1f513b1a44fd'
-    expected_he_md5sum = 'fc0d0d38b7c039cc0682e51099f8d841'
-    expected_if_md5sum = '929839c64ef8331cfd048a614f5f6829'
+    expected_he_md5sum = 'fc0d0d38b7c039cc0682e51099f8d841'      
+    expected_if_md5sum = '929839c64ef8331cfd048a614f5f6829'       
 
     # image file names
     he_file_name = "slide_id__hbreastcancer__HE__histo"
@@ -124,7 +124,6 @@ def human_breast_cancer(
     
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hbreastcancer__HE__histo.ome.tif", expected_he_md5sum, overwrite):
-        print('Hello')
         download_url(he_url, out_dir = image_dir, file_name = he_file_name, overwrite = True)
 
     if md5sum_image_check(image_dir/"slide_id__hbreastcancer__CD20_HER2_DAPI__IF.ome.tif", expected_if_md5sum, overwrite):
@@ -370,7 +369,7 @@ def human_lymph_node_5k(
     expected_he_md5sum = "eae078b0b3ddcaf6a11ca4eefabcaf0c"
 
     # image file names
-    he_file_name = "slide_id__hlymphnode__HE__histo"
+    he_file_name = "slide_id__hlymphnode5k__HE__histo"
 
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
