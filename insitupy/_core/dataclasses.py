@@ -730,11 +730,15 @@ class ImageData(DeepCopyMixin, GetMixin):
             img, ome_meta, axes = read_image(image)
 
         elif isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
-            assert axes is not None, "If `image` is dask array, `axes` needs to be set."
-            assert pixel_size is not None, "If `image` is dask array, `pixel_size` needs to be set."
+            assert axes is not None, "If `image` is numpy or dask array, `axes` needs to be set."
+            assert pixel_size is not None, "If `image` is numpy or dask array, `pixel_size` needs to be set."
 
-            # convert to dask array before addition
-            img = da.from_array(image)
+            try:
+                # convert to dask array before addition
+                img = da.from_array(image)
+            except ValueError:
+                # in this case the array was already a dask array
+                img = image
             filename = None
 
         else:
