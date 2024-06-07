@@ -1,12 +1,15 @@
+from numbers import Number
 from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 from matplotlib.colors import rgb2hex
+from napari.types import LayerDataTuple
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.polygon import LinearRing, Polygon
 
 from insitupy import WITH_NAPARI
+from insitupy.utils.palettes import data_to_rgba
 
 if WITH_NAPARI:
     import napari
@@ -73,3 +76,75 @@ if WITH_NAPARI:
                         edge_color=color_list,
                         face_color='transparent'
                         )
+
+
+    def _create_points_layer(points,
+                            color_values: List[Number],
+                            name: str,
+                            point_names: List[str],
+                            point_size: int = 6, # is in scale unit (so mostly µm)
+                            opacity: float = 1,
+                            visible: bool = True,
+                            edge_width: float = 0,
+                            edge_color: str = 'red',
+                            upper_climit_pct: int = 99,
+                            cmap: str = "viridis"
+                            ) -> LayerDataTuple:
+
+        # remove entries with NaN
+        # mask = pd.notnull(color_values)
+        # color_values = color_values[mask]
+        # points = points[mask]
+        # point_names = point_names[mask]
+
+        # get colors
+        colors = data_to_rgba(data=color_values)
+
+        # generate point layer
+        layer = (
+            points,
+            {
+                'name': name,
+                'properties': {
+                    "value": color_values,
+                    "cell_name": point_names
+                    },
+                'symbol': 'o',
+                'size': point_size,
+                'face_color': colors,
+                #     {
+                #     "color_mode": color_mode, # workaround (see https://github.com/napari/napari/issues/6433)
+                #     "colors": "value"
+                #     },
+                # 'face_color_cycle': color_cycle,
+                # 'face_colormap': color_map,
+                # 'face_contrast_limits': climits,
+                'opacity': opacity,
+                'visible': visible,
+                'edge_width': edge_width,
+                'edge_color': edge_color
+                },
+            'points'
+            )
+        return layer
+
+    def _update_points_layer(
+        layer: napari.layers.Layer,
+        new_color_values: List[Number],
+        new_name: Optional[str] = None,
+        upper_climit_pct: int = 99,
+        # cmap: str = "viridis"
+        ) -> None:
+        # get the RGBA colors for the new values
+        new_colors = data_to_rgba(data=new_color_values, upper_climit_pct=upper_climit_pct)
+
+        # change the colors of the layer
+        layer.face_color = new_colors
+
+        # change properties of layer
+        new_props = layer.properties.copy()
+        new_props['value'] = new_color_values
+        layer.properties = new_props
+
+        if new_name is not None:
+            layer.name = new_name

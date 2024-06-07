@@ -51,6 +51,7 @@ from ..utils.io import (check_overwrite_and_remove_if_true, read_json,
                         write_dict_to_json)
 from ..utils.utils import convert_to_list
 from ..utils.utils import textformat as tf
+from ._layers import _create_points_layer
 from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
 from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData
@@ -62,8 +63,7 @@ if WITH_NAPARI:
     from napari.layers.shapes.shapes import Shapes
 
     from ._layers import _add_annotations_as_layer
-    from ._widgets import (_create_points_layer, _initialize_widgets,
-                           add_new_annotations_widget)
+    from ._widgets import _initialize_widgets, add_new_annotations_widget
 
 
 class InSituData:
@@ -735,9 +735,13 @@ class InSituData:
             boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=pixel_size)
             self.cells = CellData(matrix=matrix, boundaries=boundaries)
 
-            # read binned expression
-            arr = _read_binned_expression(path=self.path, gene_names_to_select=self.cells.matrix.var_names)
-            self.cells.matrix.varm["binned_expression"] = arr
+            try:
+                # read binned expression
+                arr = _read_binned_expression(path=self.path, gene_names_to_select=self.cells.matrix.var_names)
+                self.cells.matrix.varm["binned_expression"] = arr
+            except ValueError:
+                warn("Loading of binned expression did not work. Skipped it.")
+                pass
 
 
     def load_images(self,
