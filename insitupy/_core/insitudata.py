@@ -463,7 +463,11 @@ class InSituData:
         # empty current data and data history entry in metadata
         _self.metadata["data"] = {}
         for k in _self.metadata["history"].keys():
-            _self.metadata["history"][k] = []
+            if k != "alt":
+                _self.metadata["history"][k] = []
+            else:
+                empty_alt_hist_dict = {k: [] for k in _self.metadata["history"]["alt"].keys()}
+                _self.metadata["history"]["alt"] = empty_alt_hist_dict
 
         if inplace:
             if hasattr(self, "viewer"):
@@ -1653,6 +1657,7 @@ def register_images(
     add_registered_image: bool = True,
     decon_scale_factor: float = 0.2,
     physicalsize: str = 'µm',
+    prefix: str = ""
     ):
     '''
     Register images stored in XeniumData object.
@@ -1803,7 +1808,7 @@ def register_images(
 
         if save_results:
             # save files
-            identifier = f"{data.slide_id}__{data.sample_id}__{channel_names[0]}"
+            identifier = f"{prefix}__{data.slide_id}__{data.sample_id}__{channel_names[0]}"
             #current_outfile = output_dir / f"{identifier}__registered.ome.tif"
             imreg_selected.save(
                 output_dir=output_dir,
