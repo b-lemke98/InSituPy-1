@@ -107,8 +107,7 @@ class InSituData:
             f"{tf.Bold}Method:{tf.ResetAll}\t\t{method}\n"
             f"{tf.Bold}Slide ID:{tf.ResetAll}\t{self.slide_id}\n"
             f"{tf.Bold}Sample ID:{tf.ResetAll}\t{self.sample_id}\n"
-            f"{tf.Bold}Data path:{tf.ResetAll}\t{self.path.parent}\n"
-            f"{tf.Bold}Data folder:{tf.ResetAll}\t{self.path.name}\n"
+            f"{tf.Bold}Path:{tf.ResetAll}\t\t{self.path.resolve()}\n"
         )
 
         mfile = self.metadata["metadata_file"]
