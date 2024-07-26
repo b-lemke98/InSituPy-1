@@ -1644,6 +1644,20 @@ class InSituData:
                 else:
                     print(f"No history found for '{cat}'.") if verbose else None
 
+    def remove_modality(self,
+                        modality: str
+                        ):
+        if hasattr(self, modality):
+            # delete attribute from InSituData object
+            delattr(self, modality)
+
+            # delete metadata
+            self.metadata["data"].pop(modality, None) # returns None if key does not exist
+
+        else:
+            print(f"No modality '{modality}' found. Nothing removed.")
+
+
 
 def register_images(
     data: InSituData,
