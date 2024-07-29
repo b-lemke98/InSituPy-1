@@ -113,21 +113,28 @@ class ShapesData(DeepCopyMixin, GetMixin):
             return True
 
     def _update_metadata(self,
-                         key: str,
-                         analyzed: bool
+                         keys: Union[str, Literal["all"]] = "all",
+                         analyzed: bool = False
                          ):
-        # retrieve dataframe
-        annot_df = getattr(self, key)
 
-        # record metadata information
-        self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
+        if keys == "all":
+            keys = list(self.metadata.keys())
 
-        try:
-            self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
-        except KeyError:
-            self.metadata[key]["classes"] = ["unnamed"]
+        keys = convert_to_list(keys)
 
-        self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
+        for key in keys:
+            # retrieve dataframe
+            annot_df = getattr(self, key)
+
+            # record metadata information
+            self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
+
+            try:
+                self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+            except KeyError:
+                self.metadata[key]["classes"] = ["unnamed"]
+
+            self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
 
 
     def add_shapes(self,
@@ -200,7 +207,7 @@ class ShapesData(DeepCopyMixin, GetMixin):
                 self.metadata[key] = {}
 
                 # update metadata
-                self._update_metadata(key=key, analyzed=False)
+                self._update_metadata(keys=key, analyzed=False)
 
                 if verbose:
                     # report
@@ -797,8 +804,8 @@ class ImageData(DeepCopyMixin, GetMixin):
             setattr(self, n, img_loaded)
 
     def crop(self,
-             xlim: Tuple[int, int],
-             ylim: Tuple[int, int]
+             xlim: Optional[Tuple[int, int]],
+             ylim: Optional[Tuple[int, int]]
              ):
         # extract names from metadata
         names = list(self.metadata.keys())
@@ -829,7 +836,7 @@ class ImageData(DeepCopyMixin, GetMixin):
             setattr(self, n, cropped_img_data)
 
     def save(self,
-             path: Union[str, os.PathLike, Path],
+             output_folder: Union[str, os.PathLike, Path],
              keys_to_save: Optional[str] = None,
              as_zarr: bool = True,
              zipped: bool = False,
@@ -838,7 +845,7 @@ class ImageData(DeepCopyMixin, GetMixin):
              return_savepaths: bool = False,
              overwrite: bool = False
              ):
-        path = Path(path)
+        output_folder = Path(output_folder)
 
         if keys_to_save is None:
             keys_to_save = list(self.metadata.keys())
@@ -846,10 +853,10 @@ class ImageData(DeepCopyMixin, GetMixin):
             keys_to_save = convert_to_list(keys_to_save)
 
         # check overwrite
-        check_overwrite_and_remove_if_true(path=path, overwrite=overwrite)
+        check_overwrite_and_remove_if_true(path=output_folder, overwrite=overwrite)
 
         # create output directory
-        path.mkdir(parents=True, exist_ok=True)
+        output_folder.mkdir(parents=True, exist_ok=True)
 
         if return_savepaths:
             savepaths = {}
@@ -869,7 +876,7 @@ class ImageData(DeepCopyMixin, GetMixin):
                         filename = n + ".zarr"
 
                     # write to zarr
-                    img_path = path / filename
+                    img_path = output_folder / filename
                     write_zarr(image=img, file=img_path,
                                img_metadata=img_metadata,
                                save_pyramid=save_pyramid)
@@ -884,18 +891,23 @@ class ImageData(DeepCopyMixin, GetMixin):
 
                     # retrieve OME metadata
                     ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY", "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
-                    pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
+
+                    try:
+                        pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
+                    except KeyError:
+                        pixel_meta = img_metadata["OME"]
+
                     selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
 
                     # write images as OME-TIFF
-                    write_ome_tiff(image=img, file=path / filename,
+                    write_ome_tiff(image=img, file=output_folder / filename,
                                 photometric=photometric, axes=axes,
                                 compression=compression,
                                 metadata=selected_metadata, overwrite=False)
 
                 if return_savepaths:
                     # collect savepaths
-                    savepaths[n] = path / filename
+                    savepaths[n] = output_folder / filename
 
         if return_savepaths:
             return savepaths

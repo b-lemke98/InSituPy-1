@@ -453,8 +453,8 @@ class InSituData:
             _self.metadata["cropping_history"] = {}
             _self.metadata["cropping_history"]["xlim"] = []
             _self.metadata["cropping_history"]["ylim"] = []
-        _self.metadata["cropping_history"]["xlim"].append(xlim)
-        _self.metadata["cropping_history"]["ylim"].append(ylim)
+        _self.metadata["cropping_history"]["xlim"].append(tuple([int(elem) for elem in xlim]))
+        _self.metadata["cropping_history"]["ylim"].append(tuple([int(elem) for elem in ylim]))
 
         # add new uid to uid history
         _self.metadata["uids"].append(str(uuid4()))
@@ -760,9 +760,14 @@ class InSituData:
             if "images" not in self.metadata["data"]:
                 raise ModalityNotFoundError(modality="images")
 
+            if names == "all":
+                img_names = list(self.metadata["data"]["images"].keys())
+            else:
+                img_names = convert_to_list(names)
+
             # get file paths and names
-            img_files = list(self.metadata["data"]["images"].values())
-            img_names = list(self.metadata["data"]["images"].keys())
+            img_files = [v for k,v in self.metadata["data"]["images"].items() if k in img_names]
+            img_names = [k for k,v in self.metadata["data"]["images"].items() if k in img_names]
         else:
             nuclei_file_key = f"morphology_{nuclei_type}_filepath"
 
