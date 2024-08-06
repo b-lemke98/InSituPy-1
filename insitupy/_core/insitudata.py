@@ -51,6 +51,7 @@ from ..utils.io import (check_overwrite_and_remove_if_true, read_json,
                         write_dict_to_json)
 from ..utils.utils import convert_to_list
 from ..utils.utils import textformat as tf
+from ._layers import _create_points_layer
 from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
 from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData
@@ -62,8 +63,7 @@ if WITH_NAPARI:
     from napari.layers.shapes.shapes import Shapes
 
     from ._layers import _add_annotations_as_layer
-    from ._widgets import (_create_points_layer, _initialize_widgets,
-                           add_new_annotations_widget)
+    from ._widgets import _initialize_widgets, add_new_annotations_widget
 
 
 class InSituData:
@@ -107,8 +107,7 @@ class InSituData:
             f"{tf.Bold}Method:{tf.ResetAll}\t\t{method}\n"
             f"{tf.Bold}Slide ID:{tf.ResetAll}\t{self.slide_id}\n"
             f"{tf.Bold}Sample ID:{tf.ResetAll}\t{self.sample_id}\n"
-            f"{tf.Bold}Data path:{tf.ResetAll}\t{self.path.parent}\n"
-            f"{tf.Bold}Data folder:{tf.ResetAll}\t{self.path.name}\n"
+            f"{tf.Bold}Path:{tf.ResetAll}\t\t{self.path.resolve()}\n"
         )
 
         mfile = self.metadata["metadata_file"]
@@ -454,8 +453,8 @@ class InSituData:
             _self.metadata["cropping_history"] = {}
             _self.metadata["cropping_history"]["xlim"] = []
             _self.metadata["cropping_history"]["ylim"] = []
-        _self.metadata["cropping_history"]["xlim"].append(xlim)
-        _self.metadata["cropping_history"]["ylim"].append(ylim)
+        _self.metadata["cropping_history"]["xlim"].append(tuple([int(elem) for elem in xlim]))
+        _self.metadata["cropping_history"]["ylim"].append(tuple([int(elem) for elem in ylim]))
 
         # add new uid to uid history
         _self.metadata["uids"].append(str(uuid4()))
@@ -463,7 +462,11 @@ class InSituData:
         # empty current data and data history entry in metadata
         _self.metadata["data"] = {}
         for k in _self.metadata["history"].keys():
-            _self.metadata["history"][k] = []
+            if k != "alt":
+                _self.metadata["history"][k] = []
+            else:
+                empty_alt_hist_dict = {k: [] for k in _self.metadata["history"]["alt"].keys()}
+                _self.metadata["history"]["alt"] = empty_alt_hist_dict
 
         if inplace:
             if hasattr(self, "viewer"):
@@ -735,9 +738,13 @@ class InSituData:
             boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=pixel_size)
             self.cells = CellData(matrix=matrix, boundaries=boundaries)
 
-            # read binned expression
-            arr = _read_binned_expression(path=self.path, gene_names_to_select=self.cells.matrix.var_names)
-            self.cells.matrix.varm["binned_expression"] = arr
+            try:
+                # read binned expression
+                arr = _read_binned_expression(path=self.path, gene_names_to_select=self.cells.matrix.var_names)
+                self.cells.matrix.varm["binned_expression"] = arr
+            except ValueError:
+                warn("Loading of binned expression did not work. Skipped it.")
+                pass
 
 
     def load_images(self,
@@ -753,9 +760,14 @@ class InSituData:
             if "images" not in self.metadata["data"]:
                 raise ModalityNotFoundError(modality="images")
 
+            if names == "all":
+                img_names = list(self.metadata["data"]["images"].keys())
+            else:
+                img_names = convert_to_list(names)
+
             # get file paths and names
-            img_files = list(self.metadata["data"]["images"].values())
-            img_names = list(self.metadata["data"]["images"].keys())
+            img_files = [v for k,v in self.metadata["data"]["images"].items() if k in img_names]
+            img_names = [k for k,v in self.metadata["data"]["images"].items() if k in img_names]
         else:
             nuclei_file_key = f"morphology_{nuclei_type}_filepath"
 
@@ -1637,6 +1649,20 @@ class InSituData:
                 else:
                     print(f"No history found for '{cat}'.") if verbose else None
 
+    def remove_modality(self,
+                        modality: str
+                        ):
+        if hasattr(self, modality):
+            # delete attribute from InSituData object
+            delattr(self, modality)
+
+            # delete metadata
+            self.metadata["data"].pop(modality, None) # returns None if key does not exist
+
+        else:
+            print(f"No modality '{modality}' found. Nothing removed.")
+
+
 
 def register_images(
     data: InSituData,
@@ -1649,6 +1675,7 @@ def register_images(
     add_registered_image: bool = True,
     decon_scale_factor: float = 0.2,
     physicalsize: str = 'µm',
+    prefix: str = ""
     ):
     '''
     Register images stored in XeniumData object.
@@ -1799,7 +1826,7 @@ def register_images(
 
         if save_results:
             # save files
-            identifier = f"{data.slide_id}__{data.sample_id}__{channel_names[0]}"
+            identifier = f"{prefix}__{data.slide_id}__{data.sample_id}__{channel_names[0]}"
             #current_outfile = output_dir / f"{identifier}__registered.ome.tif"
             imreg_selected.save(
                 output_dir=output_dir,

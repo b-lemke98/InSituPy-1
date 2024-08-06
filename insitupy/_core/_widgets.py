@@ -1,100 +1,25 @@
 from numbers import Number
 from typing import List, Optional
+from warnings import warn
 
 import matplotlib
 import numpy as np
 import pandas as pd
 from matplotlib.colors import rgb2hex
-from pandas.api.types import is_numeric_dtype
 from shapely.geometry.multipolygon import MultiPolygon
 
 import insitupy._core.config as config
 from insitupy import WITH_NAPARI
+from insitupy._core._layers import _create_points_layer, _update_points_layer
 
 from ..images.utils import create_img_pyramid
-from ..utils.palettes import CustomPalettes
 
 if WITH_NAPARI:
     import napari
     from magicgui import magic_factory, magicgui
     from magicgui.widgets import FunctionGui
-    from napari.types import LayerDataTuple
 
     from ._layers import _add_annotations_as_layer
-
-
-    def _create_points_layer(points,
-                            color_values: List[Number],
-                            name: str,
-                            point_names: List[str],
-                            point_size: int = 6, # is in scale unit (so mostly µm)
-                            opacity: float = 1,
-                            visible: bool = True,
-                            edge_width: float = 0,
-                            edge_color: str = 'red',
-                            upper_climit_pct: int = 99
-                            ) -> LayerDataTuple:
-
-        # remove entries with NaN
-        mask = pd.notnull(color_values)
-        color_values = color_values[mask]
-        points = points[mask]
-        point_names = point_names[mask]
-
-        # check if the data should be plotted categorical or continous
-        if is_numeric_dtype(color_values):
-            categorical = False # if the data is numeric it should be plotted continous
-        else:
-            categorical = True # if the data is not numeric it should be plotted categorically
-
-        if categorical:
-            # get color cycle for categorical data
-            color_mode = "cycle"
-            palettes = CustomPalettes()
-            color_cycle = getattr(palettes, "tab20_mod").colors
-            color_map = None
-            climits = None
-        else:
-            color_mode = "colormap"
-            color_map = "viridis"
-            color_cycle = None
-
-            color_values_above_zero = color_values[color_values > 0]
-            try:
-                upper_climit = np.percentile(color_values_above_zero, upper_climit_pct)
-            except IndexError:
-                # if there were not color_values_above_zero, a IndexError appears
-                upper_climit = 0
-
-            climits = [0, upper_climit]
-
-        # generate point layer
-        layer = (
-            points,
-            {
-                'name': name,
-                'properties': {
-                    "value": color_values,
-                    "cell_name": point_names
-                    },
-                'symbol': 'o',
-                'size': point_size,
-                'face_color': {
-                    "color_mode": color_mode, # workaround (see https://github.com/napari/napari/issues/6433)
-                    "colors": "value"
-                    },
-                'face_color_cycle': color_cycle,
-                'face_colormap': color_map,
-                'face_contrast_limits': climits,
-                'opacity': opacity,
-                'visible': visible,
-                'edge_width': edge_width,
-                'edge_color': edge_color
-                },
-            'points'
-            )
-        return layer
-
 
     def _initialize_widgets(
         xdata # xenium data object
@@ -111,10 +36,10 @@ if WITH_NAPARI:
             # initialize data_name of viewer
             config.init_data_name()
             # initialize viewer configuration
-            #config_mod.get_data_name(data_widget=select_data)
-            config.update_viewer_config(xdata=xdata,
+            config.set_viewer_config(xdata=xdata,
                                         #data_name=config.current_data_name
                                         )
+            config.init_recent_selections()
 
             data_names = ["main"]
             try:
@@ -132,7 +57,6 @@ if WITH_NAPARI:
             def select_data(
                 data_name="main"
             ):
-                #print(data_name)
                 pass
 
             # connect key change with update function
@@ -174,60 +98,94 @@ if WITH_NAPARI:
             else:
                 add_boundaries_widget = None
 
+            def _update_values_on_key_change(widget):
+                current_key = widget.key.value
+                widget.value.choices = config.value_dict[current_key]
+
             @magicgui(
                 call_button='Add',
-                gene={'choices': config.genes, 'label': "Gene:"},
-                observation={'choices': config.observations, 'label': "Observation:"},
-                size={'label': 'Size [µm]'}
+                key={'choices': ["genes", "obs", "obsm"], 'label': 'Key:'},
+                value={'choices': config.genes, 'label': "Value:"},
+                size={'label': 'Size [µm]'},
+                recent={'choices': [""], 'label': "Recent:"},
                 )
             def add_points_widget(
-                gene=None,
-                observation=None,
+                key="genes",
+                value=None,
                 size=6,
+                recent=None,
                 viewer=viewer
                 ) -> napari.types.LayerDataTuple:
 
                 # get names of cells
                 cell_names = config.adata.obs_names.values
 
-                layers = []
-                if gene is not None:
-                    if gene not in viewer.layers:
-                        # get expression values
-                        gene_loc = config.adata.var_names.get_loc(gene)
-                        color_value_gene = config.X[:, gene_loc]
+                #layers_to_add = []
+                if value is not None or recent is not None:
+                    if value is None:
+                        key = recent.split(":", maxsplit=1)[0]
+                        value = recent.split(":", maxsplit=1)[1]
+                    #if gene not in viewer.layers:
+                    # get expression values
+                    if key == "genes":
+                        gene_loc = config.adata.var_names.get_loc(value)
+                        color_value = config.X[:, gene_loc]
+                    elif key == "obs":
+                        color_value = config.adata.obs[value]
+                    elif key == "obsm":
+                        #TODO: Implement it for obsm
+                        obsm_key = value.split("-", maxsplit=1)[0]
+                        obsm_col = value.split("-", maxsplit=1)[1]
+                        data = config.adata.obsm[obsm_key]
+
+                        if isinstance(data, pd.DataFrame):
+                            color_value = data[obsm_col]
+                        elif isinstance(data, np.ndarray):
+                            color_value = data[:, int(obsm_col)-1]
+                        else:
+                            warn("Data in `obsm` needs to be either pandas DataFrame or numpy array to be parsed.")
+                        pass
+                    else:
+                        print("Unknown key selected.", flush=True)
+
+                    new_layer_name = f"{config.current_data_name}-{value}"
+
+                    # get layer names from the current data
+                    layer_names_for_current_data = [elem.name for elem in viewer.layers if elem.name.startswith(config.current_data_name)]
+
+                    # select only point layers
+                    layer_names_for_current_data = [elem for elem in layer_names_for_current_data if isinstance(viewer.layers[elem], napari.layers.points.points.Points)]
+
+                    # save last addition to add it to recent in the callback
+                    config.recent_selections.append(f"{key}:{value}")
+
+                    if len(layer_names_for_current_data) == 0:
 
                         # create points layer for genes
                         gene_layer = _create_points_layer(
                             points=config.points,
-                            color_values=color_value_gene,
-                            name=f"{config.current_data_name}-{gene}",
+                            color_values=color_value,
+                            #name=f"{config.current_data_name}-{gene}",
+                            name=new_layer_name,
                             point_names=cell_names,
                             point_size=size,
                             upper_climit_pct=99
                         )
-                        layers.append(gene_layer)
+                        return gene_layer
+                        #layers_to_add.append(gene_layer)
                     else:
-                        print(f"Key '{gene}' already in layer list.", flush=True)
-
-                if observation is not None:
-                    if observation not in viewer.layers:
-                        # get observation values
-                        color_value_obs = config.adata.obs[observation].values
-
-                        # create points layer for observations
-                        obs_layer = _create_points_layer(
-                            points=config.points,
-                            color_values=color_value_obs,
-                            name=f"{config.current_data_name}-{observation}",
-                            point_names=cell_names,
-                            point_size=size,
+                        #print(f"Key '{gene}' already in layer list.", flush=True)
+                        # update the points layer
+                        layer = viewer.layers[layer_names_for_current_data[0]]
+                        _update_points_layer(
+                            layer=layer,
+                            new_color_values=color_value,
+                            new_name=new_layer_name,
                         )
-                        layers.append(obs_layer)
-                    else:
-                        print(f"Key '{observation}' already in layer list.", flush=True)
 
-                return layers
+            @add_points_widget.key.changed.connect
+            def update_values_on_key_change(event=None):
+                _update_values_on_key_change(add_points_widget)
 
             @magicgui(
                 call_button='Show',
@@ -239,8 +197,7 @@ if WITH_NAPARI:
                 cell="",
                 zoom=5,
                 highlight=True,
-                #viewer=viewer
-            ) -> Optional[napari.types.LayerDataTuple]:
+                ) -> Optional[napari.types.LayerDataTuple]:
                 if cell in config.adata.obs_names.astype(str):
                     # get location of selected cell
                     cell_loc = config.adata.obs_names.get_loc(cell)
@@ -278,7 +235,7 @@ if WITH_NAPARI:
 
 
         if not hasattr(xdata, "regions"):
-            add_region_widget = None
+            show_regions_widget = None
         else:
             # get colormap for regions
             cmap_regions = matplotlib.colormaps["tab10"]
@@ -298,7 +255,7 @@ if WITH_NAPARI:
                 key={"choices": region_keys, "label": "Key:"},
                 #region={"choices": first_regions, "label": "Regions:"}
             )
-            def add_region_widget(
+            def show_regions_widget(
                 key,
                 tolerance: Number = 5,
                 # region
@@ -362,13 +319,9 @@ if WITH_NAPARI:
                 else:
                     print(f"Key '{key}' already in layer list.")
 
-                    # restore original configuration of dropdown lists
-                    #add_region_widget.key.value = first_region_key
-                    #add_region_widget.region.choices = first_regions
-
-            @add_region_widget.key.changed.connect
+            @show_regions_widget.key.changed.connect
             def update_region_on_key_change(event=None):
-                _update_region_on_key_change(add_region_widget)
+                _update_region_on_key_change(show_regions_widget)
 
         if not hasattr(xdata, "annotations"):
             show_annotations_widget = None
@@ -432,7 +385,7 @@ if WITH_NAPARI:
 
 
 
-        return add_points_widget, move_to_cell_widget, add_region_widget, show_annotations_widget, add_boundaries_widget, select_data #add_genes, add_observations
+        return add_points_widget, move_to_cell_widget, show_regions_widget, show_annotations_widget, add_boundaries_widget, select_data #add_genes, add_observations
 
 
     @magic_factory(

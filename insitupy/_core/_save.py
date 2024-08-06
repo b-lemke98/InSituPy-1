@@ -1,6 +1,8 @@
+import os
 import shutil
 from os.path import relpath
 from pathlib import Path
+from typing import Optional, Union
 
 import zarr
 from parse import *
@@ -12,18 +14,19 @@ from ..images.io import write_ome_tiff
 from ..utils.geo import write_qupath_geojson
 from ..utils.io import write_dict_to_json
 from ._checks import check_zip
+from .dataclasses import ImageData
 
 
-def _save_images(imagedata,
-                 path,
-                 metadata,
-                 images_as_zarr,
-                 zipped
+def _save_images(imagedata: ImageData,
+                 path: Union[str ,os.PathLike],
+                 metadata: Optional[dict] = None,
+                 images_as_zarr: bool = True,
+                 zipped: bool = False
                  ):
     img_path = (path / "images")
 
     savepaths = imagedata.save(
-        path=img_path,
+        output_folder=img_path,
         as_zarr=images_as_zarr,
         zipped=zipped,
         return_savepaths=True

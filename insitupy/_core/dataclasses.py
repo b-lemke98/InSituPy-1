@@ -4,27 +4,23 @@ from copy import deepcopy
 from numbers import Number
 from os.path import relpath
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
-import dask
 import dask.array as da
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-import xmltodict
 import zarr
 from anndata import AnnData
 from parse import *
 from shapely import Polygon, affinity
 from shapely.geometry.multipolygon import MultiPolygon
-from tifffile import TiffFile
 
 from insitupy import __version__
-from insitupy.utils.utils import (convert_int_to_xenium_hex,
-                                  convert_xenium_hex_to_int)
+from insitupy.utils.utils import convert_int_to_xenium_hex
 
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
-from ..images.io import read_ome_tiff, write_ome_tiff
+from ..images.io import read_image, write_ome_tiff, write_zarr
 from ..images.utils import create_img_pyramid, crop_dask_array_or_pyramid
 from ..utils.geo import parse_geopandas, write_qupath_geojson
 from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
@@ -117,21 +113,28 @@ class ShapesData(DeepCopyMixin, GetMixin):
             return True
 
     def _update_metadata(self,
-                         key: str,
-                         analyzed: bool
+                         keys: Union[str, Literal["all"]] = "all",
+                         analyzed: bool = False
                          ):
-        # retrieve dataframe
-        annot_df = getattr(self, key)
 
-        # record metadata information
-        self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
+        if keys == "all":
+            keys = list(self.metadata.keys())
 
-        try:
-            self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
-        except KeyError:
-            self.metadata[key]["classes"] = ["unnamed"]
+        keys = convert_to_list(keys)
 
-        self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
+        for key in keys:
+            # retrieve dataframe
+            annot_df = getattr(self, key)
+
+            # record metadata information
+            self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
+
+            try:
+                self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+            except KeyError:
+                self.metadata[key]["classes"] = ["unnamed"]
+
+            self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
 
 
     def add_shapes(self,
@@ -204,7 +207,7 @@ class ShapesData(DeepCopyMixin, GetMixin):
                 self.metadata[key] = {}
 
                 # update metadata
-                self._update_metadata(key=key, analyzed=False)
+                self._update_metadata(keys=key, analyzed=False)
 
                 if verbose:
                     # report
@@ -724,66 +727,25 @@ class ImageData(DeepCopyMixin, GetMixin):
         pixel_size: Optional[Number] = None,
         ome_meta: Optional[dict] = None
         ):
+
+        # check if image is a path or a data array
         if Path(str(image)).exists():
             # read path
             image = Path(image)
             image = image.resolve() # resolve relative path
-            suffix = image.name.split(".", maxsplit=1)[-1]
-
-            if "zarr" in suffix:
-            # load image from .zarr.zip
-                zipped = True if suffix == "zarr.zip" else False
-                with zarr.ZipStore(image, mode="r") if zipped else zarr.DirectoryStore(image) as dirstore:
-                    # get components of zip store
-                    components = dirstore.listdir()
-
-                    if ".zarray" in components:
-                        # the store is an array which can be opened
-                        if zipped:
-                            img = da.from_zarr(dirstore).persist()
-                        else:
-                            img = da.from_zarr(dirstore)
-                    else:
-                        subres = [elem for elem in components if not elem.startswith(".")]
-                        img = []
-                        for s in subres:
-                            if zipped:
-                                img.append(
-                                    da.from_zarr(dirstore, component=s).persist()
-                                            )
-                            else:
-                                img.append(
-                                    da.from_zarr(dirstore, component=s)
-                                            )
-
-                    # retrieve OME metadata
-                    store = zarr.open(dirstore)
-                    meta = store.attrs.asdict()
-                    ome_meta = meta["OME"]
-                    axes = meta["axes"]
-
-            elif suffix in ["ome.tif", "ome.tiff"]:
-                # load image from .ome.tiff
-                img = read_ome_tiff(path=image, levels=None)
-                # read ome metadata
-                with TiffFile(image) as tif:
-                    axes = tif.series[0].axes # get axes
-                    ome_meta = tif.ome_metadata # read OME metadata
-                    ome_meta = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
-
-            else:
-                raise InvalidFileTypeError(
-                    allowed_types=["zarr", "zarr.zip", "ome.tif", "ome.tiff"],
-                    received_type=suffix
-                    )
             filename = image.name
+            img, ome_meta, axes = read_image(image)
 
         elif isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
-            assert axes is not None, "If `image` is dask array, `axes` needs to be set."
-            assert pixel_size is not None, "If `image` is dask array, `pixel_size` needs to be set."
+            assert axes is not None, "If `image` is numpy or dask array, `axes` needs to be set."
+            assert pixel_size is not None, "If `image` is numpy or dask array, `pixel_size` needs to be set."
 
-            # convert to dask array before addition
-            img = da.from_array(image)
+            try:
+                # convert to dask array before addition
+                img = da.from_array(image)
+            except ValueError:
+                # in this case the array was already a dask array
+                img = image
             filename = None
 
         else:
@@ -842,8 +804,8 @@ class ImageData(DeepCopyMixin, GetMixin):
             setattr(self, n, img_loaded)
 
     def crop(self,
-             xlim: Tuple[int, int],
-             ylim: Tuple[int, int]
+             xlim: Optional[Tuple[int, int]],
+             ylim: Optional[Tuple[int, int]]
              ):
         # extract names from metadata
         names = list(self.metadata.keys())
@@ -874,15 +836,16 @@ class ImageData(DeepCopyMixin, GetMixin):
             setattr(self, n, cropped_img_data)
 
     def save(self,
-             path: Union[str, os.PathLike, Path],
+             output_folder: Union[str, os.PathLike, Path],
              keys_to_save: Optional[str] = None,
              as_zarr: bool = True,
              zipped: bool = False,
              save_pyramid: bool = True,
+             compression: Literal['jpeg', 'LZW', 'jpeg2000', 'ZLIB', None] = 'ZLIB', # jpeg2000 or ZLIB are recommended in the Xenium documentation - ZLIB is faster
              return_savepaths: bool = False,
              overwrite: bool = False
              ):
-        path = Path(path)
+        output_folder = Path(output_folder)
 
         if keys_to_save is None:
             keys_to_save = list(self.metadata.keys())
@@ -890,10 +853,10 @@ class ImageData(DeepCopyMixin, GetMixin):
             keys_to_save = convert_to_list(keys_to_save)
 
         # check overwrite
-        check_overwrite_and_remove_if_true(path=path, overwrite=overwrite)
+        check_overwrite_and_remove_if_true(path=output_folder, overwrite=overwrite)
 
         # create output directory
-        path.mkdir(parents=True, exist_ok=True)
+        output_folder.mkdir(parents=True, exist_ok=True)
 
         if return_savepaths:
             savepaths = {}
@@ -912,30 +875,11 @@ class ImageData(DeepCopyMixin, GetMixin):
                         # filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr"
                         filename = n + ".zarr"
 
-                    # decide whether to save as pyramid or not
-                    if isinstance(img, list):
-                        if not save_pyramid:
-                            img = img[0]
-                    else:
-                        if save_pyramid:
-                            # create img pyramid
-                            img = create_img_pyramid(img=img, nsubres=6)
-
-                    img_path = path / filename
-                    with zarr.ZipStore(img_path, mode="w") if zipped else zarr.DirectoryStore(img_path) as dirstore:
-                        # check whether to save the image as pyramid or not
-                        if save_pyramid:
-                            for i, im in enumerate(img):
-                                im.to_zarr(dirstore, component=str(i))
-                        else:
-                            # save image data in zipstore without pyramid
-                            img.to_zarr(dirstore)
-
-                        # open zarr store save metadata in zarr store
-                        store = zarr.open(dirstore, mode="a")
-                        store.attrs.put(img_metadata)
-                        # for k,v in img_metadata.items():
-                        #     store.attrs[k] = v
+                    # write to zarr
+                    img_path = output_folder / filename
+                    write_zarr(image=img, file=img_path,
+                               img_metadata=img_metadata,
+                               save_pyramid=save_pyramid)
 
                 else:
                     # get file name for saving
@@ -947,17 +891,23 @@ class ImageData(DeepCopyMixin, GetMixin):
 
                     # retrieve OME metadata
                     ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY", "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
-                    pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
+
+                    try:
+                        pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
+                    except KeyError:
+                        pixel_meta = img_metadata["OME"]
+
                     selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
 
                     # write images as OME-TIFF
-                    write_ome_tiff(path / filename, img,
+                    write_ome_tiff(image=img, file=output_folder / filename,
                                 photometric=photometric, axes=axes,
+                                compression=compression,
                                 metadata=selected_metadata, overwrite=False)
 
                 if return_savepaths:
                     # collect savepaths
-                    savepaths[n] = path / filename
+                    savepaths[n] = output_folder / filename
 
         if return_savepaths:
             return savepaths
