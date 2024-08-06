@@ -10,6 +10,7 @@ readme = "README.md"
 # mandatory dependencies
 python = "3.9"
 scanpy = "1.9.5"
+numpy = "1.26.4"
 dask-image = "2023.8.1"
 parse = "1.19.1"
 dask = {extras = ["diagnostics"], version = "2023.9.2"}
