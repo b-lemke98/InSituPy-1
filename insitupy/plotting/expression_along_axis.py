@@ -1,0 +1,331 @@
+from typing import Literal, Optional
+
+import pandas as pd
+from anndata import AnnData
+from matplotlib import pyplot as plt
+from scipy.stats import zscore
+from tqdm import tqdm
+
+from .._core._checks import check_raw
+from ..utils._calc import smooth_fit
+from ..utils.io import save_and_show_figure
+from ..utils.utils import get_nrows_maxcols
+
+
+def expr_along_obs_val(adata: AnnData,
+                       keys: str,
+                       x_category: str,
+                       groupby: Optional[str],
+                       splitby: str = None,
+                       hue: str = None,
+                       method: Literal["lowess", "loess"] = 'loess',
+                       stderr: bool = False,
+                       xmin=None,
+                       xmax=None,
+                       cmap="tab10",
+                       linewidth=8,
+                       extra_cats=None,
+                       normalize=False,
+                       nsteps=100,
+                       show_progress=False,
+                       use_raw=False,
+                       max_cols=4,
+                       xlabel=None,ylabel=None,
+                       vline=None, hline=None, vlinewidth=4,
+                       #values_into_title=None, title_suffix='',
+                       custom_titles=None,
+                       legend_fontsize=24,
+                       plot_legend=True,
+                       xlabel_fontsize=28, ylabel_fontsize=28, title_fontsize=20, tick_fontsize=24,
+                       figsize=(8,6),
+                       savepath=None, save_only=False, show=True, axis=None, return_data=False, fig=None,
+                       dpi_save=300,
+                       smooth=True,
+                       **kwargs
+                       ):
+
+    '''
+    Plot the expression of a gene as a function of an observation value (e.g. the automatic expression histology value
+    given by SpatialDE).
+    Grouping by one other observation is possible.
+
+    Future ideas:
+        -   Include the possibility of plotting categorical values like leiden plot (stacked line plot as done with
+            the radial expression and different cell types)
+
+    '''
+
+    # check type of input
+    if isinstance(keys, dict):
+        if custom_titles is not None:
+            print("Attention: `custom_titles` was not None and `keys` was dictionary. Titles were retrieved from dictionary.")
+        custom_titles = list(keys.keys())
+        keys = list(keys.values())
+
+    # make inputs to lists
+    keys = [keys] if isinstance(keys, str) else list(keys)
+
+    if hue is not None:
+        hue_cats = list(adata.obs[hue].unique())
+        cmap_colors = plt.get_cmap(cmap)
+        color_dict = {a: cmap_colors(i) for i, a in enumerate(hue_cats)}
+
+        if extra_cats is None:
+            extra_cats = [hue]
+        else:
+            extra_cats.append(hue)
+
+    #if show:
+    if not return_data:
+        # prepare plotting
+        if axis is None:
+            n_plots, n_rows, max_cols = get_nrows_maxcols(keys, max_cols)
+            fig, axs = plt.subplots(n_rows,max_cols, figsize=(figsize[0]*max_cols, figsize[1]*n_rows))
+
+        else:
+            axs = axis
+            #fig = None
+            n_plots = 1
+            show = False # otherwise plotting into given axes wouldn't work
+
+        if n_plots > 1:
+            axs = axs.ravel()
+        else:
+            axs = [axs]
+
+    data_collection = {}
+    for i, key in (enumerate(tqdm(keys)) if show_progress else enumerate(keys)):
+        # check if the keys are also grouped
+        keys_grouped = isinstance(key, list)
+
+        if groupby is not None:
+            # select data per group
+            groups = adata.obs[groupby].unique()
+        else:
+            groups = [None]
+
+        added_to_legend = []
+
+        # check if plotting raw data
+        X, var, var_names = check_raw(adata, use_raw=use_raw)
+
+        group_collection = {}
+        for group in groups:
+            #partial = extract_groups(adata, groupby=groupby, groups=group)
+
+            if group is not None:
+                group_mask = adata.obs[groupby] == group
+                group_obs = adata.obs.loc[group_mask, :].copy()
+            else:
+                group_mask = [True] * len(adata.obs)
+                group_obs = adata.obs
+
+            if hue is not None:
+                _hue = adata.obs.loc[group_mask, hue][0]
+
+            # hue_data = adata.obs.loc[group_mask, hue].copy()
+            # print(hue_data)
+
+            # select only group values from matrix
+            group_X = X[group_mask, :]
+
+            if splitby is None:
+                # select x value
+                x = group_obs.loc[:, x_category].values
+
+                if keys_grouped:
+                    # extract expression values of all keys in the group
+                    idx = var.index.get_indexer(key)
+                    dd = pd.DataFrame(group_X[:, idx], index=x)
+
+                    if normalize:
+                        #dd = dd.apply(minmax_scale, axis=0)
+                        dd = dd.apply(zscore, axis=0)
+
+                    dd = dd.reset_index().melt(id_vars="index") # reshape to get long list of x values
+                    x = dd["index"].values
+                    y = dd["value"].values
+
+                elif key in var_names:
+                    # extract expression values as y
+                    idx = var.index.get_loc(key)
+                    y = group_X[:, idx].copy()
+
+                    if normalize:
+                        #y = minmax_scale(y)
+                        y = zscore(y)
+
+                elif key in group_obs.columns:
+                    y = group_obs.loc[:, key].values.copy()
+                else:
+                    print("Key '{}' not found.".format(key))
+
+                if smooth:
+                    # do smooth fitting
+                    df = smooth_fit(x, y,
+                                min=xmin, max=xmax,
+                                nsteps=nsteps, method=method, stderr=stderr, **kwargs)
+                else:
+                    # set up dataframe without smooth fitting
+                    df = pd.DataFrame({"x": x, "y_pred": y})
+
+                if extra_cats is not None:
+                    df = df.join(adata.obs.loc[group_mask, extra_cats].reset_index(drop=True))
+
+            else:
+                splits = group_obs[splitby].unique()
+                df_collection = {}
+
+                # get min and max values for x values
+                x = group_obs[x_category].values
+                xmin = x.min()
+                xmax = x.max()
+                for split in splits:
+                    # extract x values
+                    split_mask = group_obs[splitby] == split
+                    x = group_obs.loc[split_mask, x_category].values
+
+                    # extract expression values as y
+                    idx = var.index.get_loc(key)
+                    y = group_X[split_mask, idx].copy()
+
+                    # do smooth fitting
+                    if smooth:
+                        df_split = smooth_fit(x, y,
+                                min=xmin, max=xmax,
+                                nsteps=nsteps, method=method, stderr=stderr, **kwargs)
+                    else:
+                        # set up dataframe without smooth fitting
+                        df_split = pd.DataFrame({"x": x, "y_pred": y})
+
+                    # collect data
+                    df_collection[split] = df_split
+
+                df_collection = pd.concat(df_collection)
+
+                # calculate mean and std
+                df = df_collection[['x', 'y_pred']].groupby('x').mean()
+                df['std'] = df_collection[['x', 'y_pred']].groupby('x').std()
+                df['conf_lower'] = [a-b for a,b in zip(df['y_pred'], df['std'])]
+                df['conf_upper'] = [a+b for a,b in zip(df['y_pred'], df['std'])]
+                df.reset_index(inplace=True)
+
+            # remove NaNs
+            df = df.dropna(how="all", axis=1)
+
+            if return_data:
+                group_collection[group] = df
+            else:
+                # sort by x-value
+                df.sort_values('x', inplace=True)
+
+                # plotting
+                cols = df.columns
+                if 'conf_lower' in cols and 'conf_upper' in cols:
+                    axs[i].fill_between(df['x'],
+                                    df['conf_lower'],
+                                    df['conf_upper'],
+                                    alpha = 0.2,
+                                    color = 'grey')
+
+                # determine label variable
+                if hue is not None:
+                    label = _hue if _hue not in added_to_legend else ""
+                    color = color_dict[_hue]
+                else:
+                    label = group
+                    color = None
+
+                axs[i].plot(df['x'],
+                    df['y_pred'],
+                    label=label,
+                    color=color,
+                    linewidth=linewidth)
+
+                if hue is not None and _hue not in added_to_legend:
+                    added_to_legend.append(_hue)
+
+        # optionally add vertical or horizontal lines to plot
+        if vline is not None:
+            if isinstance(vline, dict):
+                linecolors = list(vline.keys())
+                vline = list(vline.values())
+            else:
+                vline = [vline] if isinstance(vline, int) or isinstance(vline, float) else list(vline)
+                linecolors = ['k'] * len(vline)
+
+            for c, v in zip(linecolors, vline):
+                axs[i].axvline(x=v, ymin=0, ymax=1, c=c, linewidth=vlinewidth, linestyle='dashed')
+
+        if hline is not None:
+            if isinstance(hline, dict):
+                linecolors = list(hline.keys())
+                hline = list(hline.values())
+            else:
+                hline = [hline] if isinstance(hline, int) or isinstance(hline, float) else list(hline)
+                linecolors = ['k'] * len(hline)
+
+            for c, h in zip(linecolors, hline):
+                axs[i].axhline(y=h, xmin=0, xmax=1, c=c, linewidth=4, linestyle='dashed')
+
+        if not return_data:
+            if xlabel is None:
+                xlabel = x_category
+            if ylabel is None:
+                ylabel = "Gene expression"
+
+            axs[i].set_xlabel(xlabel, fontsize=xlabel_fontsize)
+            axs[i].set_ylabel(ylabel, fontsize=ylabel_fontsize)
+            axs[i].tick_params(axis='both', which='major', labelsize=tick_fontsize)
+            #axs[i].set_xlim(0, 1)
+            #axs[i].xaxis.set_major_locator(ticker.FixedLocator([0.1, 0.9]))
+
+            if custom_titles is None:
+                axs[i].set_title(key, fontsize=title_fontsize)
+            else:
+                assert len(custom_titles) == len(keys), "List of title values has not the same length as list of keys."
+                axs[i].set_title(str(custom_titles[i]), fontsize=title_fontsize)
+
+            if plot_legend:
+                axs[i].legend(fontsize=legend_fontsize,
+                #bbox_to_anchor=(legend_x, 1),
+                loc='best'
+                )
+            else:
+                axs[i].legend().remove()
+
+            # if values_into_title is None:
+            #     axs[i].set_title("{}{}".format(key, title_suffix), fontsize=title_fontsize)
+            # else:
+            #     assert len(values_into_title) == len(keys), "List of title values has not the same length as list of keys."
+            #     axs[i].set_title("{}{}{}".format(key, title_suffix, round(values_into_title[i], 5)), fontsize=title_fontsize)
+
+        if return_data:
+            # collect data
+            group_collection = pd.concat(group_collection)
+            data_collection[key] = group_collection
+
+
+
+    if return_data:
+        # close plot
+        plt.close()
+
+        # return data
+        data_collection = pd.concat(data_collection)
+        data_collection.index.names = ['key', groupby, None]
+        return data_collection
+
+    else:
+        if n_plots > 1:
+
+            # check if there are empty plots remaining
+            while i < n_rows * max_cols - 1:
+                i+=1
+                # remove empty plots
+                axs[i].set_axis_off()
+        if show:
+            #fig.tight_layout()
+            save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=True)
+        else:
+            return fig, axs

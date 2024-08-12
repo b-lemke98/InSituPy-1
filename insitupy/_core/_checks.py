@@ -31,19 +31,40 @@ def check_sanity(adata, batch, hvg, hvg_key):
     if hvg:
         check_hvg(hvg, hvg_key, adata.var)
 
-    
-def check_raw(X):
+
+def check_integer_counts(X):
     '''
     Check if a matrix consists of raw integer counts or if it is processed already.
     '''
-    
+
     # convert sparse matrix to numpy array
     if issparse(X):
         X = X.toarray()
-    
+
     # check if the matrix contains raw counts
     if not np.all(np.modf(X)[0] == 0):
         raise ValueError("Anndata object does not contain raw counts. Preprocessing aborted.")
+
+def check_raw(adata, use_raw, layer=None):
+    # check if plotting raw data
+    if use_raw:
+        adata_X = adata.raw.X
+        adata_var = adata.raw.var
+        adata_var_names = adata.raw.var_names
+    else:
+        if layer is None:
+            adata_X = adata.X
+        else:
+            #adata_X = adata.layers[layer].toarray()
+            adata_X = adata.layers[layer]
+
+        if issparse(adata_X):
+            adata_X = adata_X.toarray()
+
+        adata_var = adata.var
+        adata_var_names = adata.var_names
+
+    return adata_X, adata_var, adata_var_names
 
 def check_zip(path):
     # check if the output directory is going to be zipped or not
@@ -54,5 +75,5 @@ def check_zip(path):
         zip_output = False
     else:
         raise ValueError(f"The specified output path ({path}) must be a valid directory or a zip file. It does not need to exist yet.")
-    
+
     return zip_output
