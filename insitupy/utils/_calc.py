@@ -9,18 +9,19 @@ from skmisc.loess import loess
 
 #from sympy import lowergamma
 #from ..exceptions import ImportErrorLoess, ModuleNotFoundOnWindows
-from ..utils._lowess import lowess
+from ._regression import bootstrap_loess, lowess
 
 
 def smooth_fit(xs: np.ndarray, ys: np.ndarray,
     #x_to_fit_on: Optional[List] = None,
     #dist_thrs: Optional[float] = None,
-    min: Optional[float] = None,
-    max: Optional[float] = None,
+    xmin: Optional[float] = None,
+    xmax: Optional[float] = None,
     #stepsize: Optional[float] = None,
     nsteps: Optional[float] = None,
     method: Literal["lowess", "loess"] = "loess",
     stderr: bool = True,
+    loess_bootstrap: bool = True,
     K: int = 100
     ):
 
@@ -64,23 +65,12 @@ def smooth_fit(xs: np.ndarray, ys: np.ndarray,
     # check method
     if method == "loess":
         use_loess = True
-        if stderr == True:
-            warn("When using the LOESS method, `stderr` should be set False, since otherwise their were problems with the kernel crashing.")
+        if (stderr == True) & (bootstrap_loess == False):
+            warn("When using the LOESS method and `stderr=True`, `bootstrap_loess` should be set True. Otherwise it could be that the kernel is crashing due to the high number of data points in Xenium experiments.")
     elif method == "lowess":
         use_loess = False
     else:
         raise ValueError('Invalid `method`. Expected is one of: ["loess", "lowess"')
-
-    # if loess:
-    #     try:
-    #         from skmisc.loess import loess
-
-    #     except ModuleNotFoundError as e:
-    #         raise ModuleNotFoundOnWindows(e)
-
-    #     except ImportError as e:
-    #         #warn('{}`skmisc.loess` package not found. Used custom lowess impolementation instead.'.format(e))
-    #         raise ImportErrorLoess(e)
 
     # sort x values
     srt = np.argsort(xs)
@@ -88,12 +78,12 @@ def smooth_fit(xs: np.ndarray, ys: np.ndarray,
     ys = ys[srt]
 
     # determine min and max x values and select x inside this range
-    if min is None:
-        min = xs.min()
-    if max is None:
-        max = xs.max()
+    if xmin is None:
+        xmin = xs.min()
+    if xmax is None:
+        xmax = xs.max()
 
-    keep = (xs >= min) & (xs <= max)
+    keep = (xs >= xmin) & (xs <= xmax)
     xs = xs[keep]
     ys = ys[keep]
 
@@ -108,15 +98,18 @@ def smooth_fit(xs: np.ndarray, ys: np.ndarray,
 
     # if stepsize is given determine xs to fit the data on
     if nsteps is not None:
-        stepsize = (max - min) / nsteps
+        stepsize = (xmax - xmin) / nsteps
         #if stepsize is not None:
-        xs_pred = np.asarray(np.arange(min, max+stepsize, stepsize))
-        xs_pred = np.linspace(min, max, nsteps)
+        xs_pred = np.asarray(np.arange(xmin, xmax+stepsize, stepsize))
+        xs_pred = np.linspace(xmin, xmax, nsteps)
         xs_pred = xs_pred[(xs_pred < xs.max()) & (xs_pred > xs.min())]
 
     # predict on data
     if use_loess:
-        pred =  ls.predict(xs_pred, stderror=stderr)
+        if loess_bootstrap:
+            pred =  ls.predict(xs_pred, stderror=False)
+        else:
+            pred =  ls.predict(xs_pred, stderror=stderr)
     else:
         pred =  ls.predict(xs_pred, stderror=stderr, K=K)
 
@@ -124,9 +117,16 @@ def smooth_fit(xs: np.ndarray, ys: np.ndarray,
     ys_hat = pred.values
 
     if stderr:
-        # get standard error
-        stderr = pred.stderr
-        conf = pred.confidence()
+        # calculate confidence intervals and standard error if that was not calculated before
+        if loess_bootstrap:
+            bl = bootstrap_loess(ls)
+            bl.calc_loess_stderror_by_bootstrap(newdata=xs_pred, K=K)
+            conf = bl.confidence()
+        else:
+            stderr = pred.stderr
+            conf = pred.confidence()
+
+        # retrieve upper and lower confidence intervals
         lower = conf.lower
         upper = conf.upper
     else:

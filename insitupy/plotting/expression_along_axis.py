@@ -20,6 +20,8 @@ def expr_along_obs_val(adata: AnnData,
                        hue: str = None,
                        method: Literal["lowess", "loess"] = 'loess',
                        stderr: bool = False,
+                       loess_bootstrap: bool = True,
+                       n_bootstraps_iterations: int = 100,
                        xmin=None,
                        xmax=None,
                        cmap="tab10",
@@ -163,8 +165,11 @@ def expr_along_obs_val(adata: AnnData,
                 if smooth:
                     # do smooth fitting
                     df = smooth_fit(x, y,
-                                min=xmin, max=xmax,
-                                nsteps=nsteps, method=method, stderr=stderr, **kwargs)
+                                    xmax=xmin, xmin=xmax,
+                                    nsteps=nsteps, method=method,
+                                    stderr=stderr, loess_bootstrap=loess_bootstrap,
+                                    K=n_bootstraps_iterations,
+                                    **kwargs)
                 else:
                     # set up dataframe without smooth fitting
                     df = pd.DataFrame({"x": x, "y_pred": y})
@@ -192,7 +197,7 @@ def expr_along_obs_val(adata: AnnData,
                     # do smooth fitting
                     if smooth:
                         df_split = smooth_fit(x, y,
-                                min=xmin, max=xmax,
+                                xmax=xmin, xmin=xmax,
                                 nsteps=nsteps, method=method, stderr=stderr, **kwargs)
                     else:
                         # set up dataframe without smooth fitting
