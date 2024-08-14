@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from scipy.stats import zscore
 from tqdm import tqdm
 
-from .._core._checks import check_raw
+from .._core._checks import check_raw, has_valid_labels
 from ..utils._calc import smooth_fit
 from ..utils.io import save_and_show_figure
 from ..utils.utils import get_nrows_maxcols
@@ -292,18 +292,14 @@ def expr_along_obs_val(adata: AnnData,
                 axs[i].set_title(str(custom_titles[i]), fontsize=title_fontsize)
 
             if plot_legend:
-                axs[i].legend(fontsize=legend_fontsize,
-                #bbox_to_anchor=(legend_x, 1),
-                loc='best'
-                )
+                if has_valid_labels(axs[i]):
+                    axs[i].legend(fontsize=legend_fontsize,
+                    loc='best'
+                    )
             else:
-                axs[i].legend().remove()
-
-            # if values_into_title is None:
-            #     axs[i].set_title("{}{}".format(key, title_suffix), fontsize=title_fontsize)
-            # else:
-            #     assert len(values_into_title) == len(keys), "List of title values has not the same length as list of keys."
-            #     axs[i].set_title("{}{}{}".format(key, title_suffix, round(values_into_title[i], 5)), fontsize=title_fontsize)
+                # first check if there are valid labels in the axis to circumvent warning
+                if has_valid_labels(axs[i]):
+                    axs[i].legend().remove()
 
         if return_data:
             # collect data

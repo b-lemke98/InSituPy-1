@@ -77,3 +77,10 @@ def check_zip(path):
         raise ValueError(f"The specified output path ({path}) must be a valid directory or a zip file. It does not need to exist yet.")
 
     return zip_output
+
+# Function to check if there are any valid labels in matplotlib figure
+def has_valid_labels(ax):
+    for artist in ax.get_legend_handles_labels()[0]:  # Get the handles (artists)
+        if artist.get_label() and not artist.get_label().startswith('_'):
+            return True
+    return False
