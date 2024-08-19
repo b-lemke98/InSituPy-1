@@ -59,7 +59,7 @@ class ShapesData(DeepCopyMixin, GetMixin):
             if files is not None:
                 for key, file in zip(keys, files):
                     # read annotation and store in dictionary
-                    self.add_shapes(data=file,
+                    self.add_data(data=file,
                                         key=key,
                                         pixel_size=pixel_size,
                                         assert_uniqueness=assert_uniqueness
@@ -114,30 +114,35 @@ class ShapesData(DeepCopyMixin, GetMixin):
 
     def _update_metadata(self,
                          keys: Union[str, Literal["all"]] = "all",
-                         analyzed: bool = False
+                         analyzed: bool = False,
+                         verbose: bool = False
                          ):
 
         if keys == "all":
             keys = list(self.metadata.keys())
 
         keys = convert_to_list(keys)
-
+        keys_to_remove = []
         for key in keys:
-            # retrieve dataframe
-            annot_df = getattr(self, key)
-
-            # record metadata information
-            self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
-
             try:
-                self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
-            except KeyError:
-                self.metadata[key]["classes"] = ["unnamed"]
+                # retrieve dataframe
+                annot_df = getattr(self, key)
+            except AttributeError:
+                self.metadata.pop(key)
+                if verbose:
+                    print(f'Removed {key}', flush=True)
+            else:
+                # record metadata information
+                self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
 
-            self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
+                try:
+                    self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+                except KeyError:
+                    self.metadata[key]["classes"] = ["unnamed"]
 
+                self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
 
-    def add_shapes(self,
+    def add_data(self,
                    data: Union[gpd.GeoDataFrame, pd.DataFrame, dict,
                                 str, os.PathLike, Path],
                    key: str,
@@ -245,6 +250,11 @@ class ShapesData(DeepCopyMixin, GetMixin):
                 delattr(self, n)
 
         self.metadata = new_metadata
+
+    def remove_data(self,
+                   key_to_remove: str):
+        delattr(self, key_to_remove)
+        self._update_metadata()
 
     def save(self,
              path: Union[str, os.PathLike, Path],
