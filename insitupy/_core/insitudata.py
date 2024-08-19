@@ -21,8 +21,7 @@ from dask_image.imread import imread
 from geopandas import GeoDataFrame
 from parse import *
 from scipy.sparse import issparse
-from shapely import Polygon
-from shapely.geometry.polygon import Polygon
+from shapely import Point, Polygon
 from tqdm import tqdm
 
 from insitupy import WITH_NAPARI, __version__
@@ -49,7 +48,8 @@ from .._exceptions import (ModalityNotFoundError, NotOneElementError,
 from ..images.utils import create_img_pyramid
 from ..utils.io import (check_overwrite_and_remove_if_true, read_json,
                         write_dict_to_json)
-from ..utils.utils import convert_to_list
+from ..utils.utils import (convert_napari_shape_to_polygon_or_line,
+                           convert_to_list)
 from ..utils.utils import textformat as tf
 from ._layers import _create_points_layer
 from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
@@ -59,9 +59,9 @@ from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData
 # optional packages that are not always installed
 if WITH_NAPARI:
     import napari
-    from napari.layers import Layer, Shapes
-    from napari.layers.shapes.shapes import Shapes
+    from napari.layers import Layer, Points, Shapes
 
+    #from napari.layers.shapes.shapes import Shapes
     from ._layers import _add_annotations_as_layer
     from ._widgets import _initialize_widgets, add_new_annotations_widget
 
@@ -1254,7 +1254,7 @@ class InSituData:
             annotations = self.annotations = AnnotationsData()
         else:
             for k in ad.metadata.keys():
-                annotations.add_shapes(getattr(ad, k), k, verbose=True)
+                annotations.add_data(getattr(ad, k), k, verbose=True)
 
 
     def show(self,
@@ -1437,7 +1437,7 @@ class InSituData:
 
             # add annotation widget to napari
             annot_widget = add_new_annotations_widget()
-            annot_widget.max_height = 100
+            #annot_widget.max_height = 100
             annot_widget.max_width = widgets_max_width
             self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
 
@@ -1476,16 +1476,17 @@ class InSituData:
                 # print(layer.properties)
 
         for layer in self.viewer.layers:
-            if isinstance(layer, Shapes):
+            if isinstance(layer, Shapes) or isinstance(layer, Points):
                 layer.events.data.connect(_update_uid)
                 #layer.metadata = layer.properties
 
         # Connect the function to all shapes layers in the viewer
         def connect_to_all_shapes_layers(event):
             layer = event.source[event.index]
-            if event is not None and isinstance(layer, Shapes):
-                # print('Annotation layer added')
-                layer.events.data.connect(_update_uid)
+            if event is not None:
+                if isinstance(layer, Shapes) or isinstance(layer, Points):
+                    # print('Annotation layer added')
+                    layer.events.data.connect(_update_uid)
 
         # Connect the function to any new layers added to the viewer
         self.viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
@@ -1502,8 +1503,8 @@ class InSituData:
             return self.viewer
 
     def store_annotations(self,
-                        name_pattern = "*{class_name} ({annot_key})",
-                        uid_col: str = "id"
+                          name_pattern = "*{class_name} ({annot_key})",
+                          uid_col: str = "id"
                         ):
         '''
         Function to extract annotation layers from shapes layers and store them in the XeniumData object.
@@ -1517,9 +1518,7 @@ class InSituData:
         layers = viewer.layers
         collection_dict = {}
         for layer in layers:
-            if not isinstance(layer, Shapes):
-                pass
-            else:
+            if isinstance(layer, Shapes) or isinstance(layer, Points):
                 name_parsed = parse(name_pattern, layer.name)
                 if name_parsed is not None:
                     annot_key = name_parsed.named["annot_key"]
@@ -1530,26 +1529,47 @@ class InSituData:
                         self.annotations = AnnotationsData() # initialize empty object
 
                     # extract shapes coordinates and colors
-                    shapes = layer.data
+                    layer_data = layer.data
                     colors = layer.edge_color.tolist()
+                    scale = layer.scale
 
-                    # scale coordinates
-                    #shapes = [elem / self.metadata["pixel_size"] for elem in shapes]
+                    if isinstance(layer, Shapes):
+                        # extract shape types
+                        shape_types = layer.shape_type
+                        # build annotation GeoDataFrame
+                        annot_df = {
+                            uid_col: layer.properties["uid"],
+                            "objectType": "annotation",
+                            #"geometry": [Polygon(np.stack([ar[:, 1], ar[:, 0]], axis=1)) for ar in layer_data],  # switch x/y
+                            "geometry": [convert_napari_shape_to_polygon_or_line(napari_shape_data=ar, shape_type=st) for ar, st in zip(layer_data, shape_types)],
+                            "name": class_name,
+                            "color": [[int(elem[e]*255) for e in range(3)] for elem in colors],
+                            "scale": [scale] * len(layer_data)
+                        }
 
-                    # build annotation GeoDataFrame
-                    annot_df = {
-                        uid_col: layer.properties["uid"],
-                        "objectType": "annotation",
-                        "geometry": [Polygon(np.stack([ar[:, 1], ar[:, 0]], axis=1)) for ar in shapes],  # switch x/y
-                        "name": class_name,
-                        "color": [[int(elem[e]*255) for e in range(3)] for elem in colors]
-                    }
+                        # generate GeoDataFrame
+                        annot_df = GeoDataFrame(annot_df, geometry="geometry")
 
-                    # generate GeoDataFrame
-                    annot_df = GeoDataFrame(annot_df, geometry="geometry")
+                        # add annotations
+                        self.annotations.add_data(data=annot_df, key=annot_key, verbose=True)
+                    elif isinstance(layer, Points):
+                        # build annotation GeoDataFrame
+                        annot_df = {
+                            uid_col: layer.properties["uid"],
+                            "objectType": "annotation",
+                            "geometry": [Point(d[1], d[0]) for d in layer_data],  # switch x/y
+                            "name": class_name,
+                            "color": [[int(elem[e]*255) for e in range(3)] for elem in colors],
+                            "scale": [scale] * len(layer_data)
+                        }
 
-                    # add annotations
-                    self.annotations.add_shapes(data=annot_df, key=annot_key, verbose=True)
+                        # generate GeoDataFrame
+                        annot_df = GeoDataFrame(annot_df, geometry="geometry")
+
+                        # add annotations
+                        self.annotations.add_data(data=annot_df, key=annot_key, verbose=True)
+            else:
+                pass
 
     def plot_binned_expression(
         self,

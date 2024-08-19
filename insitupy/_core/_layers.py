@@ -1,12 +1,11 @@
 from numbers import Number
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 from matplotlib.colors import rgb2hex
 from napari.types import LayerDataTuple
-from shapely.geometry.multipolygon import MultiPolygon
-from shapely.geometry.polygon import LinearRing, Polygon
+from shapely import LinearRing, LineString, MultiPolygon, Polygon
 
 from insitupy import WITH_NAPARI
 from insitupy.utils.palettes import data_to_rgba
@@ -17,13 +16,15 @@ if WITH_NAPARI:
     def _add_annotations_as_layer(
         dataframe: pd.DataFrame,
         viewer: napari.Viewer,
-        layer_name: str
+        layer_name: str,
+        scale: Union[Tuple, List, np.ndarray]
         ):
         # iterate through annotations of this class and collect them as list
         shape_list = []
         color_list = []
         uid_list = []
         type_list = [] # list to store whether the polygon is exterior or interior
+        shape_type_list = []
         for uid, row in dataframe.iterrows():
             # get coordinates
             polygon = row["geometry"]
@@ -32,38 +33,55 @@ if WITH_NAPARI:
 
             # check if polygon is a MultiPolygon or just a simple Polygon object
             if isinstance(polygon, MultiPolygon):
-                poly_list = list(polygon.geoms)
+                data = list(polygon.geoms)
+                annotation_type = "polygon_like"
             elif isinstance(polygon, Polygon):
-                poly_list = [polygon]
+                data = [polygon]
+                annotation_type = "polygon_like"
+            elif isinstance(polygon, LineString):
+                data = polygon
+                annotation_type = "line_like"
             else:
                 raise ValueError(f"Input must be a Polygon or MultiPolygon object. Received: {type(polygon)}")
 
-            for p in poly_list:
-                # extract exterior coordinates from shapely object
-                # Note: the last coordinate is removed since it is identical with the first
-                # in shapely objects, leading sometimes to visualization bugs in napari
-                exterior_array = np.array([p.exterior.coords.xy[1].tolist()[:-1],
-                                        p.exterior.coords.xy[0].tolist()[:-1]]).T
-                #exterior_array *= pixel_size # convert to length unit
-                shape_list.append(exterior_array)  # collect shape
+            if annotation_type == "polygon_like":
+                for p in data:
+                    # extract exterior coordinates from shapely object
+                    # Note: the last coordinate is removed since it is identical with the first
+                    # in shapely objects, leading sometimes to visualization bugs in napari
+                    exterior_array = np.array([p.exterior.coords.xy[1].tolist()[:-1],
+                                            p.exterior.coords.xy[0].tolist()[:-1]]).T
+                    #exterior_array *= pixel_size # convert to length unit
+                    shape_list.append(exterior_array)  # collect shape
+                    color_list.append(hexcolor)  # collect corresponding color
+                    uid_list.append(uid)  # collect corresponding unique id
+                    type_list.append("exterior")
+                    shape_type_list.append("polygon")
+
+                    # if polygon has interiors, plot them as well
+                    # for information on donut-shaped polygons in napari see: https://forum.image.sc/t/is-it-possible-to-generate-doughnut-shapes-in-napari-shapes-layer/88834
+                    if len(p.interiors) > 0:
+                        for linear_ring in p.interiors:
+                            if isinstance(linear_ring, LinearRing):
+                                interior_array = np.array([linear_ring.coords.xy[1].tolist()[:-1],
+                                                        linear_ring.coords.xy[0].tolist()[:-1]]).T
+                                #interior_array *= pixel_size # convert to length unit
+                                shape_list.append(interior_array)  # collect shape
+                                color_list.append(hexcolor)  # collect corresponding color
+                                uid_list.append(uid)  # collect corresponding unique id
+                                type_list.append("interior")
+                                shape_type_list.append("polygon")
+                            else:
+                                ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
+            elif annotation_type == "line_like":
+                line_array = np.array([data.coords.xy[1].tolist(), data.coords.xy[0].tolist()]).T
+
+                # collect data
+                shape_list.append(line_array)
                 color_list.append(hexcolor)  # collect corresponding color
                 uid_list.append(uid)  # collect corresponding unique id
-                type_list.append("exterior")
-
-                # if polygon has interiors, plot them as well
-                # for information on donut-shaped polygons in napari see: https://forum.image.sc/t/is-it-possible-to-generate-doughnut-shapes-in-napari-shapes-layer/88834
-                if len(p.interiors) > 0:
-                    for linear_ring in p.interiors:
-                        if isinstance(linear_ring, LinearRing):
-                            interior_array = np.array([linear_ring.coords.xy[1].tolist()[:-1],
-                                                    linear_ring.coords.xy[0].tolist()[:-1]]).T
-                            #interior_array *= pixel_size # convert to length unit
-                            shape_list.append(interior_array)  # collect shape
-                            color_list.append(hexcolor)  # collect corresponding color
-                            uid_list.append(uid)  # collect corresponding unique id
-                            type_list.append("interior")
-                        else:
-                            ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
+                type_list.append("line")
+                shape_type_list.append("path")
 
         viewer.add_shapes(shape_list,
                         name=layer_name,
@@ -71,10 +89,11 @@ if WITH_NAPARI:
                             'uid': uid_list, # list with uids
                             'type': type_list # list giving information on whether the polygon is interior or exterior
                         },
-                        shape_type='polygon',
-                        edge_width=10,
+                        shape_type=shape_type_list,
+                        edge_width=40,
                         edge_color=color_list,
-                        face_color='transparent'
+                        face_color='transparent',
+                        scale=scale
                         )
 
 

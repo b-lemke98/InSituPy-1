@@ -371,11 +371,15 @@ if WITH_NAPARI:
                         # simplify polygons for visualization
                         class_df["geometry"] = class_df["geometry"].simplify(tolerance)
 
+                        # extract scale
+                        scale = class_df.iloc[0]["scale"]
+
                         # add layer to viewer
                         _add_annotations_as_layer(
                             dataframe=class_df,
                             viewer=viewer,
-                            layer_name=layer_name
+                            layer_name=layer_name,
+                            scale=scale
                         )
 
             # connect key change with update function
@@ -390,33 +394,53 @@ if WITH_NAPARI:
 
     @magic_factory(
         call_button='Add annotation layer',
+        key={"choices": ["Shapes", "Points"], "label": "Type:"},
         annot_key={'label': 'Key:'},
         class_name={'label': 'Class:'}
         )
     def add_new_annotations_widget(
-        annot_key: str = "",
-        class_name: str = ""
+        key: str = "Shapes",
+        annot_key: str = "TestKey",
+        class_name: str = "TestClass",
     ) -> napari.types.LayerDataTuple:
         # generate name
         name_pattern: str = "*{class_name} ({annot_key})"
         name = name_pattern.format(class_name=class_name, annot_key=annot_key)
 
         if (class_name != "") & (annot_key != ""):
-            # generate shapes layer for annotation
-            layer = (
-                [],
-                {
-                    'name': name,
-                    'shape_type': 'polygon',
-                    'edge_width': 10,
-                    'edge_color': "red",
-                    'face_color': 'transparent',
-                    'properties': {
-                        'uid': np.array([], dtype='object')
-                    }
-                    },
-                'shapes'
-                )
+            if key == "Shapes":
+                # generate shapes layer for annotation
+                layer = (
+                    [],
+                    {
+                        'name': name,
+                        'shape_type': 'polygon',
+                        'edge_width': 40,
+                        'edge_color': 'red',
+                        'face_color': 'transparent',
+                        'scale': (config.pixel_size, config.pixel_size),
+                        'properties': {
+                            'uid': np.array([], dtype='object')
+                        }
+                        },
+                    'shapes'
+                    )
+            elif key == "Points":
+                # generate points layer for annotation
+                layer = (
+                    [],
+                    {
+                        'name': name,
+                        'size': 100,
+                        'edge_color': 'blue',
+                        'face_color': 'blue',
+                        'scale': (config.pixel_size, config.pixel_size),
+                        'properties': {
+                            'uid': np.array([], dtype='object')
+                        }
+                        },
+                    'points'
+                    )
 
             add_new_annotations_widget.class_name.value = ""
 
