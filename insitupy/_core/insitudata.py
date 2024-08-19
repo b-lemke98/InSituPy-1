@@ -890,7 +890,7 @@ class InSituData:
             raise ModalityNotFoundError(modality="cells")
 
         reduce_dimensions_anndata(adata=cells.matrix,
-                                  umap=umap, tsne=tsne,
+                                  umap=umap, tsne=tsne, layer=layer, 
                                   batch_correction_key=batch_correction_key,
                                   perform_clustering=perform_clustering,
                                   verbose=verbose,
