@@ -1503,7 +1503,7 @@ class InSituData:
             return self.viewer
 
     def store_annotations(self,
-                          name_pattern = "*{class_name} ({annot_key})",
+                          name_pattern = "{type_symbol} {class_name} ({annot_key})",
                           uid_col: str = "id"
                         ):
         '''
@@ -1521,6 +1521,7 @@ class InSituData:
             if isinstance(layer, Shapes) or isinstance(layer, Points):
                 name_parsed = parse(name_pattern, layer.name)
                 if name_parsed is not None:
+                    #type_symbol = name_parsed.named["type_symbol"]
                     annot_key = name_parsed.named["annot_key"]
                     class_name = name_parsed.named["class_name"]
 
@@ -1544,7 +1545,8 @@ class InSituData:
                             "geometry": [convert_napari_shape_to_polygon_or_line(napari_shape_data=ar, shape_type=st) for ar, st in zip(layer_data, shape_types)],
                             "name": class_name,
                             "color": [[int(elem[e]*255) for e in range(3)] for elem in colors],
-                            "scale": [scale] * len(layer_data)
+                            "scale": [scale] * len(layer_data),
+                            "layer_type": ["Shapes"] * len(layer_data)
                         }
 
                         # generate GeoDataFrame
@@ -1560,7 +1562,8 @@ class InSituData:
                             "geometry": [Point(d[1], d[0]) for d in layer_data],  # switch x/y
                             "name": class_name,
                             "color": [[int(elem[e]*255) for e in range(3)] for elem in colors],
-                            "scale": [scale] * len(layer_data)
+                            "scale": [scale] * len(layer_data),
+                            "layer_type": ["Points"] * len(layer_data)
                         }
 
                         # generate GeoDataFrame

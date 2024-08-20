@@ -12,6 +12,7 @@ import insitupy._core.config as config
 from insitupy import WITH_NAPARI
 from insitupy._core._layers import _create_points_layer, _update_points_layer
 
+from .._constants import POINTS_SYMBOL, SHAPES_SYMBOL
 from ..images.utils import create_img_pyramid
 
 if WITH_NAPARI:
@@ -359,28 +360,39 @@ if WITH_NAPARI:
                 else:
                     classes = [annot_class]
 
+                # check which layer types are in the dataframe
+                layer_types = annot_df["layer_type"].unique()
+
                 # iterate through classes
                 for cl in classes:
-                    # generate layer name
-                    layer_name = f"*{cl} ({key})"
+                    for layer_type in layer_types:
+                        # generate layer name
+                        if layer_type == "Shapes":
+                            type_symbol = SHAPES_SYMBOL
+                        elif layer_type == "Points":
+                            type_symbol = POINTS_SYMBOL
+                        else:
+                            TypeError(f"Unknown layer type: {layer_type}")
 
-                    if layer_name not in viewer.layers:
-                        # get dataframe for this class
-                        class_df = annot_df.loc[annot_df["name"] == cl]
+                        layer_name = f"{type_symbol} {cl} ({key})"
 
-                        # simplify polygons for visualization
-                        class_df["geometry"] = class_df["geometry"].simplify(tolerance)
+                        if layer_name not in viewer.layers:
+                            # get dataframe for this class
+                            class_df = annot_df.loc[annot_df["name"] == cl]
 
-                        # extract scale
-                        scale = class_df.iloc[0]["scale"]
+                            # simplify polygons for visualization
+                            class_df["geometry"] = class_df["geometry"].simplify(tolerance)
 
-                        # add layer to viewer
-                        _add_annotations_as_layer(
-                            dataframe=class_df,
-                            viewer=viewer,
-                            layer_name=layer_name,
-                            scale=scale
-                        )
+                            # extract scale
+                            scale = class_df.iloc[0]["scale"]
+
+                            # add layer to viewer
+                            _add_annotations_as_layer(
+                                dataframe=class_df,
+                                viewer=viewer,
+                                layer_name=layer_name,
+                                scale=scale
+                            )
 
             # connect key change with update function
             @show_annotations_widget.key.changed.connect
@@ -403,12 +415,18 @@ if WITH_NAPARI:
         annot_key: str = "TestKey",
         class_name: str = "TestClass",
     ) -> napari.types.LayerDataTuple:
-        # generate name
-        name_pattern: str = "*{class_name} ({annot_key})"
-        name = name_pattern.format(class_name=class_name, annot_key=annot_key)
+        # name pattern of layer name
+        name_pattern: str = "{type_symbol} {class_name} ({annot_key})"
 
         if (class_name != "") & (annot_key != ""):
             if key == "Shapes":
+                # generate name
+                name = name_pattern.format(
+                    type_symbol=SHAPES_SYMBOL,
+                    class_name=class_name,
+                    annot_key=annot_key
+                    )
+
                 # generate shapes layer for annotation
                 layer = (
                     [],
@@ -426,13 +444,20 @@ if WITH_NAPARI:
                     'shapes'
                     )
             elif key == "Points":
+                # generate name
+                name = name_pattern.format(
+                    type_symbol=POINTS_SYMBOL,
+                    class_name=class_name,
+                    annot_key=annot_key
+                    )
+
                 # generate points layer for annotation
                 layer = (
                     [],
                     {
                         'name': name,
                         'size': 100,
-                        'edge_color': 'blue',
+                        'edge_color': 'black',
                         'face_color': 'blue',
                         'scale': (config.pixel_size, config.pixel_size),
                         'properties': {
@@ -442,7 +467,8 @@ if WITH_NAPARI:
                     'points'
                     )
 
-            add_new_annotations_widget.class_name.value = ""
+            # # reset class name to nothing
+            # add_new_annotations_widget.class_name.value = ""
 
             return layer
 

@@ -18,3 +18,7 @@ XENIUM_HEX_RANGE = string.ascii_lowercase[:16]
 NORMAL_HEX_RANGE = "".join([str(e) for e in range(10)]) + string.ascii_lowercase[:6]
 XENIUM_INT_TO_HEX_CONV_DICT = {k:v for k,v in zip(NORMAL_HEX_RANGE, XENIUM_HEX_RANGE)}
 XENIUM_HEX_TO_INT_CONV_DICT = {v:k for k,v in zip(NORMAL_HEX_RANGE, XENIUM_HEX_RANGE)}
+
+# napari layer symbols
+SHAPES_SYMBOL = "\u2605" # Star: ★
+POINTS_SYMBOL = "\u2022" # Bullet: •

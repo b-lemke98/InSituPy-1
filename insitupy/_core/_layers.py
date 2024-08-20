@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import rgb2hex
 from napari.types import LayerDataTuple
-from shapely import LinearRing, LineString, MultiPolygon, Polygon
+from shapely import LinearRing, LineString, MultiPolygon, Point, Polygon
 
 from insitupy import WITH_NAPARI
 from insitupy.utils.palettes import data_to_rgba
@@ -19,30 +19,40 @@ if WITH_NAPARI:
         layer_name: str,
         scale: Union[Tuple, List, np.ndarray]
         ):
-        # iterate through annotations of this class and collect them as list
+        # list to store information on shapes
         shape_list = []
-        color_list = []
-        uid_list = []
-        type_list = [] # list to store whether the polygon is exterior or interior
         shape_type_list = []
+
+        # lists to store the point x and y coordinates
+        point_x_list = []
+        point_y_list = []
+
+        # iterate through annotations of this class and collect them as list
+        color_list = {"Points": [], "Shapes": []}
+        uid_list = {"Points": [], "Shapes": []}
+        type_list = {"Points": [], "Shapes": []} # list to store whether the polygon is exterior or interior
+
         for uid, row in dataframe.iterrows():
             # get coordinates
-            polygon = row["geometry"]
+            geometry = row["geometry"]
             #uid = row["id"]
             hexcolor = rgb2hex([elem / 255 for elem in row["color"]])
 
             # check if polygon is a MultiPolygon or just a simple Polygon object
-            if isinstance(polygon, MultiPolygon):
-                data = list(polygon.geoms)
+            if isinstance(geometry, MultiPolygon):
+                data = list(geometry.geoms)
                 annotation_type = "polygon_like"
-            elif isinstance(polygon, Polygon):
-                data = [polygon]
+            elif isinstance(geometry, Polygon):
+                data = [geometry]
                 annotation_type = "polygon_like"
-            elif isinstance(polygon, LineString):
-                data = polygon
+            elif isinstance(geometry, LineString):
+                data = geometry
                 annotation_type = "line_like"
+            elif isinstance(geometry, Point):
+                data = geometry
+                annotation_type = "point_like"
             else:
-                raise ValueError(f"Input must be a Polygon or MultiPolygon object. Received: {type(polygon)}")
+                raise ValueError(f"Input must be a Polygon or MultiPolygon object. Received: {type(geometry)}")
 
             if annotation_type == "polygon_like":
                 for p in data:
@@ -53,9 +63,9 @@ if WITH_NAPARI:
                                             p.exterior.coords.xy[0].tolist()[:-1]]).T
                     #exterior_array *= pixel_size # convert to length unit
                     shape_list.append(exterior_array)  # collect shape
-                    color_list.append(hexcolor)  # collect corresponding color
-                    uid_list.append(uid)  # collect corresponding unique id
-                    type_list.append("exterior")
+                    color_list["Shapes"].append(hexcolor)  # collect corresponding color
+                    uid_list["Shapes"].append(uid)  # collect corresponding unique id
+                    type_list["Shapes"].append("polygon_exterior")
                     shape_type_list.append("polygon")
 
                     # if polygon has interiors, plot them as well
@@ -67,34 +77,62 @@ if WITH_NAPARI:
                                                         linear_ring.coords.xy[0].tolist()[:-1]]).T
                                 #interior_array *= pixel_size # convert to length unit
                                 shape_list.append(interior_array)  # collect shape
-                                color_list.append(hexcolor)  # collect corresponding color
-                                uid_list.append(uid)  # collect corresponding unique id
-                                type_list.append("interior")
+                                color_list["Shapes"].append(hexcolor)  # collect corresponding color
+                                uid_list["Shapes"].append(uid)  # collect corresponding unique id
+                                type_list["Shapes"].append("polygon_interior")
                                 shape_type_list.append("polygon")
                             else:
                                 ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
+
             elif annotation_type == "line_like":
                 line_array = np.array([data.coords.xy[1].tolist(), data.coords.xy[0].tolist()]).T
 
                 # collect data
                 shape_list.append(line_array)
-                color_list.append(hexcolor)  # collect corresponding color
-                uid_list.append(uid)  # collect corresponding unique id
-                type_list.append("line")
+                color_list["Shapes"].append(hexcolor)  # collect corresponding color
+                uid_list["Shapes"].append(uid)  # collect corresponding unique id
+                type_list["Shapes"].append("line") # information on type of coordinates - important for interior/exterior of polygons
                 shape_type_list.append("path")
 
-        viewer.add_shapes(shape_list,
-                        name=layer_name,
-                        properties={
-                            'uid': uid_list, # list with uids
-                            'type': type_list # list giving information on whether the polygon is interior or exterior
-                        },
-                        shape_type=shape_type_list,
-                        edge_width=40,
-                        edge_color=color_list,
-                        face_color='transparent',
-                        scale=scale
-                        )
+            elif annotation_type == "point_like":
+                # collect coordinates and other data on the points
+                point_x_list.append(geometry.coords.xy[1].tolist()[0])
+                point_y_list.append(geometry.coords.xy[0].tolist()[0])
+                color_list["Points"].append(hexcolor)  # collect corresponding color
+                uid_list["Points"].append(uid)  # collect corresponding unique id
+                type_list["Points"].append("point") # information on type of coordinates - important for interior/exterior of polygons
+
+        if len(shape_list) > 0:
+            # add shapes to viewer
+            viewer.add_shapes(
+                data=shape_list,
+                name=layer_name,
+                properties={
+                    'uid': uid_list["Shapes"], # list with uids
+                    'type': type_list["Shapes"] # list giving information on whether the polygon is interior or exterior
+                },
+                shape_type=shape_type_list,
+                edge_width=40,
+                edge_color=color_list["Shapes"],
+                face_color='transparent',
+                scale=scale
+                )
+
+        point_data = np.stack([point_x_list, point_y_list]).T
+        if len(point_data) > 0:
+            # add points to viewer
+            viewer.add_points(
+                data=point_data,
+                name=layer_name,
+                properties={
+                    'uid': uid_list["Points"], # list with uids
+                    'type': type_list["Points"] # list giving information on whether the polygon is interior or exterior
+                },
+                size=100,
+                edge_color="black",
+                face_color=color_list["Points"],
+                scale=scale
+            )
 
 
     def _create_points_layer(points,
