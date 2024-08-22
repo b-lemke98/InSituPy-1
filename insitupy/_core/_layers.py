@@ -1,6 +1,8 @@
 from numbers import Number
 from typing import List, Optional, Tuple, Union
+from warnings import warn
 
+import matplotlib
 import numpy as np
 import pandas as pd
 from matplotlib.colors import rgb2hex
@@ -10,6 +12,9 @@ from shapely import LinearRing, LineString, MultiPolygon, Point, Polygon
 from insitupy import WITH_NAPARI
 from insitupy.utils.palettes import data_to_rgba
 
+from .._constants import REGION_CMAP
+from ._checks import check_rgb_column
+
 if WITH_NAPARI:
     import napari
 
@@ -17,7 +22,9 @@ if WITH_NAPARI:
         dataframe: pd.DataFrame,
         viewer: napari.Viewer,
         layer_name: str,
-        scale: Union[Tuple, List, np.ndarray]
+        scale_factor: Union[Tuple, List, np.ndarray],
+        rgb_color: Optional[Tuple] = None,
+        show_names: bool = False
         ):
         # list to store information on shapes
         shape_list = []
@@ -31,6 +38,20 @@ if WITH_NAPARI:
         color_list = {"Points": [], "Shapes": []}
         uid_list = {"Points": [], "Shapes": []}
         type_list = {"Points": [], "Shapes": []} # list to store whether the polygon is exterior or interior
+        names_list = {"Points": [], "Shapes": []}
+
+        # check if colors are given
+        if "color" in dataframe.columns:
+            # make sure the RGB column consists only of valid RGB tuples or lists
+            rgbs_valid = check_rgb_column(dataframe, "color")
+            if not rgbs_valid:
+                warn('Not all RGB values given in column "color" are valid. Used blue for all geometries.')
+                dataframe["color"] = [(0,0,255)] * len(dataframe)
+        else:
+            if rgb_color is not None:
+                dataframe["color"] = [rgb_color] * len(dataframe)
+            else:
+                dataframe["color"] = [(0,0,255)] * len(dataframe)
 
         for uid, row in dataframe.iterrows():
             # get coordinates
@@ -66,6 +87,7 @@ if WITH_NAPARI:
                     color_list["Shapes"].append(hexcolor)  # collect corresponding color
                     uid_list["Shapes"].append(uid)  # collect corresponding unique id
                     type_list["Shapes"].append("polygon_exterior")
+                    names_list["Shapes"].append(row["name"])
                     shape_type_list.append("polygon")
 
                     # if polygon has interiors, plot them as well
@@ -80,6 +102,7 @@ if WITH_NAPARI:
                                 color_list["Shapes"].append(hexcolor)  # collect corresponding color
                                 uid_list["Shapes"].append(uid)  # collect corresponding unique id
                                 type_list["Shapes"].append("polygon_interior")
+                                names_list["Shapes"].append(row["name"])
                                 shape_type_list.append("polygon")
                             else:
                                 ValueError(f"Input must be a LinearRing object. Received: {type(linear_ring)}")
@@ -92,6 +115,7 @@ if WITH_NAPARI:
                 color_list["Shapes"].append(hexcolor)  # collect corresponding color
                 uid_list["Shapes"].append(uid)  # collect corresponding unique id
                 type_list["Shapes"].append("line") # information on type of coordinates - important for interior/exterior of polygons
+                names_list["Shapes"].append(row["name"])
                 shape_type_list.append("path")
 
             elif annotation_type == "point_like":
@@ -101,21 +125,37 @@ if WITH_NAPARI:
                 color_list["Points"].append(hexcolor)  # collect corresponding color
                 uid_list["Points"].append(uid)  # collect corresponding unique id
                 type_list["Points"].append("point") # information on type of coordinates - important for interior/exterior of polygons
+                names_list["Points"].append(row["name"])
 
         if len(shape_list) > 0:
+            properties_dict = {
+                    'uid': uid_list["Shapes"], # list with uids
+                    'type': type_list["Shapes"] # list giving information on whether the polygon is interior or exterior
+                }
+            if show_names:
+                properties_dict['name'] = names_list["Shapes"]
+
+                text_dict = {
+                    'string': '{name}',
+                    'anchor': 'upper_left',
+                    #'translation': [-5, 0],
+                    'size': 8,
+                    'color': color_list["Shapes"]
+                    }
+            else:
+                text_dict = None
+
             # add shapes to viewer
             viewer.add_shapes(
                 data=shape_list,
                 name=layer_name,
-                properties={
-                    'uid': uid_list["Shapes"], # list with uids
-                    'type': type_list["Shapes"] # list giving information on whether the polygon is interior or exterior
-                },
+                properties=properties_dict,
                 shape_type=shape_type_list,
                 edge_width=40,
                 edge_color=color_list["Shapes"],
                 face_color='transparent',
-                scale=scale
+                scale=scale_factor,
+                text=text_dict
                 )
 
         point_data = np.stack([point_x_list, point_y_list]).T
@@ -131,7 +171,7 @@ if WITH_NAPARI:
                 size=100,
                 edge_color="black",
                 face_color=color_list["Points"],
-                scale=scale
+                scale=scale_factor
             )
 
 

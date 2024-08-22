@@ -687,6 +687,8 @@ class InSituData:
                                            pixel_size=self.metadata["xenium"]['pixel_size']
                                            )
 
+
+
     def load_regions(self):
         print("Loading regions...", flush=True)
         try:
@@ -704,7 +706,9 @@ class InSituData:
         # add regions object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        self.regions = RegionsData(files=files, keys=keys, pixel_size=self.metadata["xenium"]['pixel_size'])
+        self.regions = RegionsData(files=files,
+                                   keys=keys,
+                                   pixel_size=self.metadata["xenium"]['pixel_size'])
 
 
     def load_cells(self):
@@ -1259,12 +1263,12 @@ class InSituData:
 
     def show(self,
         keys: Optional[str] = None,
-        annotation_keys: Optional[str] = None,
+        # annotation_keys: Optional[str] = None,
         point_size: int = 6,
         scalebar: bool = True,
         pixel_size: float = None, # if none, extract from metadata
         unit: str = "µm",
-        cmap_annotations: str ="Dark2",
+        # cmap_annotations: str ="Dark2",
         grayscale_colormap: List[str] = ["red", "green", "cyan", "magenta", "yellow", "gray"],
         return_viewer: bool = False,
         widgets_max_width: int = 200
@@ -1370,36 +1374,40 @@ class InSituData:
                     # see: https://forum.image.sc/t/add-layerdatatuple-to-napari-viewer-programmatically/69878
                     self.viewer.add_layer(Layer.create(*layer))
 
-        # optionally add annotations
-        if annotation_keys is not None:
-            # get colorcycle for region annotations
-            cmap_annot = matplotlib.colormaps[cmap_annotations]
-            cc_annot = cmap_annot.colors
+        # # optionally add annotations
+        # if annotation_keys is not None:
+        #     # get colorcycle for region annotations
+        #     cmap_annot = matplotlib.colormaps[cmap_annotations]
+        #     cc_annot = cmap_annot.colors
 
-            if annotation_keys == "all":
-                annotation_keys = self.annotations.metadata.keys()
-            annotation_keys = convert_to_list(annotation_keys)
-            for annotation_key in annotation_keys:
-                annot_df = getattr(self.annotations, annotation_key)
+        #     if annotation_keys == "all":
+        #         annotation_keys = self.annotations.metadata.keys()
+        #     annotation_keys = convert_to_list(annotation_keys)
+        #     for annotation_key in annotation_keys:
+        #         annot_df = getattr(self.annotations, annotation_key)
 
-                # get classes
-                classes = annot_df['name'].unique()
+        #         # get classes
+        #         classes = annot_df['name'].unique()
 
-                # iterate through classes
-                for cl in classes:
-                    # generate layer name
-                    layer_name = f"*{cl} ({annotation_key})"
+        #         # iterate through classes
+        #         for cl in classes:
+        #             # generate layer name
+        #             layer_name = f"*{cl} ({annotation_key})"
 
-                    # get dataframe for this class
-                    class_df = annot_df[annot_df["name"] == cl]
+        #             # get dataframe for this class
+        #             class_df = annot_df[annot_df["name"] == cl]
 
-                    if layer_name not in self.viewer.layers:
-                        # add layer to viewer
-                        _add_annotations_as_layer(
-                            dataframe=class_df,
-                            viewer=self.viewer,
-                            layer_name=layer_name
-                        )
+        #             # extract scale
+        #             scale_factor = class_df.iloc[0]["scale"]
+
+        #             if layer_name not in self.viewer.layers:
+        #                 # add layer to viewer
+        #                 _add_annotations_as_layer(
+        #                     dataframe=class_df,
+        #                     viewer=self.viewer,
+        #                     layer_name=layer_name,
+        #                     scale_factor=scale_factor
+        #                 )
 
         # WIDGETS
         try:
@@ -1412,7 +1420,7 @@ class InSituData:
             self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
         else:
             # initialize the widgets
-            show_points_widget, locate_cells_widget, add_region_widget, show_annotations_widget, show_boundaries_widget, select_data = _initialize_widgets(xdata=self)
+            show_points_widget, locate_cells_widget, show_geometries_widget, show_boundaries_widget, select_data = _initialize_widgets(xdata=self)
 
             # add widgets to napari window
             if select_data is not None:
@@ -1441,15 +1449,15 @@ class InSituData:
             annot_widget.max_width = widgets_max_width
             self.viewer.window.add_dock_widget(annot_widget, name="Add annotations", area="right")
 
-            if add_region_widget is not None:
-                self.viewer.window.add_dock_widget(add_region_widget, name="Show regions", area="right")
-                add_region_widget.max_height = 100
-                add_region_widget.max_width = widgets_max_width
+            # if show_region_widget is not None:
+            #     self.viewer.window.add_dock_widget(show_region_widget, name="Show regions", area="right")
+            #     show_region_widget.max_height = 100
+            #     show_region_widget.max_width = widgets_max_width
 
-            if show_annotations_widget is not None:
-                self.viewer.window.add_dock_widget(show_annotations_widget, name="Show annotations", area="right", tabify=True)
-                show_annotations_widget.max_height = 100
-                show_annotations_widget.max_width = widgets_max_width
+            if show_geometries_widget is not None:
+                self.viewer.window.add_dock_widget(show_geometries_widget, name="Show annotations", area="right", tabify=True)
+                #show_annotations_widget.max_height = 100
+                show_geometries_widget.max_width = widgets_max_width
 
 
         # EVENTS
@@ -1545,15 +1553,15 @@ class InSituData:
                             "geometry": [convert_napari_shape_to_polygon_or_line(napari_shape_data=ar, shape_type=st) for ar, st in zip(layer_data, shape_types)],
                             "name": class_name,
                             "color": [[int(elem[e]*255) for e in range(3)] for elem in colors],
-                            "scale": [scale] * len(layer_data),
-                            "layer_type": ["Shapes"] * len(layer_data)
+                            #"scale": [scale] * len(layer_data),
+                            #"layer_type": ["Shapes"] * len(layer_data)
                         }
 
                         # generate GeoDataFrame
                         annot_df = GeoDataFrame(annot_df, geometry="geometry")
 
                         # add annotations
-                        self.annotations.add_data(data=annot_df, key=annot_key, verbose=True)
+                        self.annotations.add_data(data=annot_df, key=annot_key, verbose=True, scale_factor=scale)
                     elif isinstance(layer, Points):
                         # build annotation GeoDataFrame
                         annot_df = {
@@ -1562,15 +1570,15 @@ class InSituData:
                             "geometry": [Point(d[1], d[0]) for d in layer_data],  # switch x/y
                             "name": class_name,
                             "color": [[int(elem[e]*255) for e in range(3)] for elem in colors],
-                            "scale": [scale] * len(layer_data),
-                            "layer_type": ["Points"] * len(layer_data)
+                            #"scale": [scale] * len(layer_data),
+                            #"layer_type": ["Points"] * len(layer_data)
                         }
 
                         # generate GeoDataFrame
                         annot_df = GeoDataFrame(annot_df, geometry="geometry")
 
                         # add annotations
-                        self.annotations.add_data(data=annot_df, key=annot_key, verbose=True)
+                        self.annotations.add_data(data=annot_df, key=annot_key, verbose=True, scale_factor=scale)
             else:
                 pass
 

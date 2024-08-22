@@ -13,8 +13,7 @@ import pandas as pd
 import zarr
 from anndata import AnnData
 from parse import *
-from shapely import Polygon, affinity
-from shapely.geometry.multipolygon import MultiPolygon
+from shapely import MultiPolygon, Point, Polygon, affinity
 
 from insitupy import __version__
 from insitupy.utils.utils import convert_int_to_xenium_hex
@@ -34,6 +33,7 @@ class ShapesData(DeepCopyMixin, GetMixin):
     Object to store annotations.
     '''
     default_assert_uniqueness = False
+    default_skip_multipolygons = False
     shape_name = "shapes"
     repr_color = tf.Cyan
     def __init__(self,
@@ -41,6 +41,7 @@ class ShapesData(DeepCopyMixin, GetMixin):
                  keys: Optional[List[str]] = None,
                  pixel_size: float = 1,
                  assert_uniqueness: Optional[bool] = None,
+                 skip_multipolygons: Optional[bool] = None
                  # shape_name: Optional[str] = None
                  ) -> None:
 
@@ -56,12 +57,15 @@ class ShapesData(DeepCopyMixin, GetMixin):
             if assert_uniqueness is None:
                 assert_uniqueness = self.default_assert_uniqueness
 
+            if skip_multipolygons is None:
+                skip_multipolygons = self.default_skip_multipolygons
+
             if files is not None:
                 for key, file in zip(keys, files):
                     # read annotation and store in dictionary
                     self.add_data(data=file,
                                         key=key,
-                                        pixel_size=pixel_size,
+                                        scale_factor=(pixel_size, pixel_size),
                                         assert_uniqueness=assert_uniqueness
                                         )
 
@@ -143,18 +147,32 @@ class ShapesData(DeepCopyMixin, GetMixin):
                 self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
 
     def add_data(self,
-                   data: Union[gpd.GeoDataFrame, pd.DataFrame, dict,
+                    data: Union[gpd.GeoDataFrame, pd.DataFrame, dict,
                                 str, os.PathLike, Path],
-                   key: str,
-                   pixel_size: Optional[float] = 1,
-                   verbose: bool = False,
-                   assert_uniqueness: bool = False
+                    key: str,
+                    scale_factor: Tuple[float, float],
+                    #pixel_size: Optional[float] = 1,
+                    verbose: bool = False,
+                    assert_uniqueness: bool = False,
+                    skip_multipolygons: bool = False
                    ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
 
-        # convert pixel coordinates to metric units
-        new_df["geometry"] = new_df.geometry.scale(origin=(0,0), xfact=pixel_size, yfact=pixel_size)
+        # add scale factor to data
+        new_df["scale"] = [scale_factor] * len(new_df)
+
+        # determine the type of layer that needs to be used in napari later
+        layer_types = []
+        for geom in new_df["geometry"]:
+            if isinstance(geom, Point):
+                layer_types.append("Points")
+            else:
+                layer_types.append("Shapes")
+        new_df["layer_type"] = layer_types
+
+        # # convert pixel coordinates to metric units
+        # new_df["geometry"] = new_df.geometry.scale(origin=(0,0), xfact=pixel_size, yfact=pixel_size)
 
         if not hasattr(self, key):
             # if key does not exist yet, the new df is the whole annotation dataframe
@@ -195,14 +213,15 @@ class ShapesData(DeepCopyMixin, GetMixin):
                 if not is_unique:
                     add = False
 
-            # check if any of the shapes are shapely MultiPolygons
-            is_not_multipolygon = [not isinstance(p, MultiPolygon) for p in annot_df.geometry]
-            if not np.all(is_not_multipolygon):
-                annot_df = annot_df.loc[is_not_multipolygon]
-                warnings.warn(
-                    f"Some {self.shape_name} were a shapely 'MultiPolygon' objects and skipped.",
-                    stacklevel=2
-                    )
+            if skip_multipolygons:
+                # check if any of the shapes are shapely MultiPolygons
+                is_not_multipolygon = [not isinstance(p, MultiPolygon) for p in annot_df.geometry]
+                if not np.all(is_not_multipolygon):
+                    annot_df = annot_df.loc[is_not_multipolygon]
+                    warnings.warn(
+                        f"Some {self.shape_name} were a shapely 'MultiPolygon' objects and skipped.",
+                        stacklevel=2
+                        )
 
             if add:
                 # add dataframe to AnnotationData object
@@ -295,6 +314,7 @@ class AnnotationsData(ShapesData):
                  pixel_size: float = 1
                  ) -> None:
         self.default_assert_uniqueness = False
+        self.default_skip_multipolygons = False
         self.shape_name = "annotations"
         self.repr_color = tf.Cyan
 
@@ -307,6 +327,7 @@ class RegionsData(ShapesData):
                  pixel_size: float = 1
                  ) -> None:
         self.default_assert_uniqueness = True
+        self.default_skip_multipolygons = True # MultiPolygons are not allowed in regions
         self.shape_name = "regions"
         self.repr_color = tf.Yellow
 

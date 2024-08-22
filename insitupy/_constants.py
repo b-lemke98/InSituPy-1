@@ -1,6 +1,8 @@
 import string
 from pathlib import Path
 
+import matplotlib
+
 # make sure that images do not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
 # see also https://www.geeksforgeeks.org/climits-limits-h-cc/
 SHRT_MAX = 2**15-1 # 32767
@@ -22,3 +24,6 @@ XENIUM_HEX_TO_INT_CONV_DICT = {v:k for k,v in zip(NORMAL_HEX_RANGE, XENIUM_HEX_R
 # napari layer symbols
 SHAPES_SYMBOL = "\u2605" # Star: ★
 POINTS_SYMBOL = "\u2022" # Bullet: •
+
+# cmaps
+REGION_CMAP = matplotlib.colormaps["tab10"]

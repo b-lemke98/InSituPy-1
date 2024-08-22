@@ -7,7 +7,7 @@ from scipy.stats import zscore
 from tqdm import tqdm
 
 from .._core._checks import check_raw, has_valid_labels
-from ..utils._calc import smooth_fit
+from ..utils._regression import smooth_fit
 from ..utils.io import save_and_show_figure
 from ..utils.utils import get_nrows_maxcols
 
