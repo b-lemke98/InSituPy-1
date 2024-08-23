@@ -22,8 +22,11 @@ XENIUM_INT_TO_HEX_CONV_DICT = {k:v for k,v in zip(NORMAL_HEX_RANGE, XENIUM_HEX_R
 XENIUM_HEX_TO_INT_CONV_DICT = {v:k for k,v in zip(NORMAL_HEX_RANGE, XENIUM_HEX_RANGE)}
 
 # napari layer symbols
-SHAPES_SYMBOL = "\u2605" # Star: ★
-POINTS_SYMBOL = "\u2022" # Bullet: •
+# SHAPES_SYMBOL = "\u2605" # Star: ★
+# POINTS_SYMBOL = "\u2022" # Bullet: •
+SHAPES_SYMBOL = "\U0001F52C" # 🔬
+POINTS_SYMBOL = "\U0001F4CD" # 📍
+REGIONS_SYMBOL = "\U0001F30D" # 🌍
 
 # cmaps
 REGION_CMAP = matplotlib.colormaps["tab10"]

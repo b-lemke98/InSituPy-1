@@ -12,7 +12,8 @@ import insitupy._core.config as config
 from insitupy import WITH_NAPARI
 from insitupy._core._layers import _create_points_layer, _update_points_layer
 
-from .._constants import POINTS_SYMBOL, REGION_CMAP, SHAPES_SYMBOL
+from .._constants import (POINTS_SYMBOL, REGION_CMAP, REGIONS_SYMBOL,
+                          SHAPES_SYMBOL)
 from ..images.utils import create_img_pyramid
 from ._callbacks import (_set_show_names_based_on_geom_type,
                          _update_classes_on_key_change,
@@ -364,6 +365,8 @@ if WITH_NAPARI:
                     # get regions dataframe
                     annot_df = getattr(xdata.regions, key)
                     all_keys = list(xdata.regions.metadata.keys())
+                else:
+                    TypeError(f"Unknown geometry type: {geom_type}")
 
                 if annot_class == "all":
                     # get classes
@@ -371,47 +374,50 @@ if WITH_NAPARI:
                 else:
                     classes = [annot_class]
 
-                # check which layer types are in the dataframe
-                layer_types = annot_df["layer_type"].unique()
+                # # check which layer types are in the dataframe
+                # layer_types = annot_df["layer_type"].unique()
 
                 # iterate through classes
                 for cl in classes:
-                    for layer_type in layer_types:
-                        # generate layer name
-                        if layer_type == "Shapes":
-                            type_symbol = SHAPES_SYMBOL
-                        elif layer_type == "Points":
-                            type_symbol = POINTS_SYMBOL
+                    # for layer_type in layer_types:
+                    #     # generate layer name
+                    #     if geom_type == "Annotations":
+                    #         if layer_type == "Shapes":
+                    #             layer_type_symbol = SHAPES_SYMBOL
+                    #         elif layer_type == "Points":
+                    #             layer_type_symbol = POINTS_SYMBOL
+                    #         else:
+                    #             TypeError(f"Unknown layer type: {layer_type}")
+                    #     else:
+                    #         layer_type_symbol = REGIONS_SYMBOL
+
+                    layer_name = f"{cl} ({key})"
+
+                    if layer_name not in viewer.layers:
+                        # get dataframe for this class
+                        class_df = annot_df[annot_df["name"] == cl].copy()
+
+                        # simplify polygons for visualization
+                        class_df["geometry"] = class_df["geometry"].simplify(tolerance)
+
+                        # extract scale
+                        scale_factor = class_df.iloc[0]["scale"]
+
+                        if not "color" in class_df.columns:
+                            # create a RGB color with range 0-255 for this key
+                            rgb_color = [elem * 255 for elem in REGION_CMAP(all_keys.index(key))][:3]
                         else:
-                            TypeError(f"Unknown layer type: {layer_type}")
+                            rgb_color = None
 
-                        layer_name = f"{type_symbol} {cl} ({key})"
-
-                        if layer_name not in viewer.layers:
-                            # get dataframe for this class
-                            class_df = annot_df[annot_df["name"] == cl].copy()
-
-                            # simplify polygons for visualization
-                            class_df["geometry"] = class_df["geometry"].simplify(tolerance)
-
-                            # extract scale
-                            scale_factor = class_df.iloc[0]["scale"]
-
-                            if not "color" in class_df.columns:
-                                # create a RGB color with range 0-255 for this key
-                                rgb_color = [elem * 255 for elem in REGION_CMAP(all_keys.index(key))][:3]
-                            else:
-                                rgb_color = None
-
-                            # add layer to viewer
-                            _add_annotations_as_layer(
-                                dataframe=class_df,
-                                viewer=viewer,
-                                layer_name=layer_name,
-                                scale_factor=scale_factor,
-                                rgb_color=rgb_color,
-                                show_names=show_names
-                            )
+                        # add layer to viewer
+                        _add_annotations_as_layer(
+                            dataframe=class_df,
+                            viewer=viewer,
+                            layer_name=layer_name,
+                            scale_factor=scale_factor,
+                            rgb_color=rgb_color,
+                            show_names=show_names
+                        )
 
             # connect key change with update function
             @show_geometries_widget.geom_type.changed.connect
@@ -428,13 +434,13 @@ if WITH_NAPARI:
 
 
     @magic_factory(
-        call_button='Add annotation layer',
-        key={"choices": ["Shapes", "Points"], "label": "Type:"},
+        call_button='Add geometry layer',
+        key={"choices": ["Geometric annotations", "Point annotations", "Regions"], "label": "Type:"},
         annot_key={'label': 'Key:'},
         class_name={'label': 'Class:'}
         )
-    def add_new_annotations_widget(
-        key: str = "Shapes",
+    def add_new_geometries_widget(
+        key: str = "Geometric annotations",
         annot_key: str = "TestKey",
         class_name: str = "TestClass",
     ) -> napari.types.LayerDataTuple:
@@ -442,7 +448,7 @@ if WITH_NAPARI:
         name_pattern: str = "{type_symbol} {class_name} ({annot_key})"
 
         if (class_name != "") & (annot_key != ""):
-            if key == "Shapes":
+            if key == "Geometric annotations":
                 # generate name
                 name = name_pattern.format(
                     type_symbol=SHAPES_SYMBOL,
@@ -466,7 +472,7 @@ if WITH_NAPARI:
                         },
                     'shapes'
                     )
-            elif key == "Points":
+            elif key == "Point annotations":
                 # generate name
                 name = name_pattern.format(
                     type_symbol=POINTS_SYMBOL,
@@ -490,8 +496,36 @@ if WITH_NAPARI:
                     'points'
                     )
 
-            # # reset class name to nothing
-            # add_new_annotations_widget.class_name.value = ""
+            elif key == "Regions":
+                # generate name
+                name = name_pattern.format(
+                    type_symbol=REGIONS_SYMBOL,
+                    class_name=class_name,
+                    annot_key=annot_key
+                    )
+
+                # generate shapes layer for annotation
+                layer = (
+                    [],
+                    {
+                        'name': name,
+                        'shape_type': 'polygon',
+                        'edge_width': 40,
+                        'edge_color': '#ffaa00ff',
+                        'face_color': 'transparent',
+                        'scale': (config.pixel_size, config.pixel_size),
+                        'properties': {
+                            'uid': np.array([], dtype='object')
+                        }
+                        },
+                    'shapes'
+                    )
+
+            else:
+                layer = None
+
+            # reset class name to nothing
+            add_new_geometries_widget.class_name.value = ""
 
             return layer
 

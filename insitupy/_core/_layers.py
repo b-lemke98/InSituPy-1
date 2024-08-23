@@ -7,12 +7,14 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import rgb2hex
 from napari.types import LayerDataTuple
-from shapely import LinearRing, LineString, MultiPolygon, Point, Polygon
+from shapely import (LinearRing, LineString, MultiPoint, MultiPolygon, Point,
+                     Polygon)
 
 from insitupy import WITH_NAPARI
 from insitupy.utils.palettes import data_to_rgba
 
-from .._constants import REGION_CMAP
+from .._constants import (POINTS_SYMBOL, REGION_CMAP, REGIONS_SYMBOL,
+                          SHAPES_SYMBOL)
 from ._checks import check_rgb_column
 
 if WITH_NAPARI:
@@ -24,8 +26,11 @@ if WITH_NAPARI:
         layer_name: str,
         scale_factor: Union[Tuple, List, np.ndarray],
         rgb_color: Optional[Tuple] = None,
-        show_names: bool = False
+        show_names: bool = False,
+        #layer_name_pattern: str = "{layer_type_symbol} {cl} ({key})",
+        region_mode: bool = False
         ):
+
         # list to store information on shapes
         shape_list = []
         shape_type_list = []
@@ -69,11 +74,11 @@ if WITH_NAPARI:
             elif isinstance(geometry, LineString):
                 data = geometry
                 annotation_type = "line_like"
-            elif isinstance(geometry, Point):
+            elif isinstance(geometry, Point) or isinstance(geometry, MultiPoint):
                 data = geometry
                 annotation_type = "point_like"
             else:
-                raise ValueError(f"Input must be a Polygon or MultiPolygon object. Received: {type(geometry)}")
+                raise ValueError(f"Received unknown geometry type: {type(geometry)}")
 
             if annotation_type == "polygon_like":
                 for p in data:
@@ -119,13 +124,21 @@ if WITH_NAPARI:
                 shape_type_list.append("path")
 
             elif annotation_type == "point_like":
+                try:
+                    # in case of MultiPoints we first have to extract the individual geometries
+                    point_coords = [elem.coords.xy for elem in geometry.geoms]
+                except AttributeError:
+                    # a normal Point object does not have multiple geometries and coordinates can be accessed directly
+                    point_coords = [geometry.coords.xy]
+
                 # collect coordinates and other data on the points
-                point_x_list.append(geometry.coords.xy[1].tolist()[0])
-                point_y_list.append(geometry.coords.xy[0].tolist()[0])
-                color_list["Points"].append(hexcolor)  # collect corresponding color
-                uid_list["Points"].append(uid)  # collect corresponding unique id
-                type_list["Points"].append("point") # information on type of coordinates - important for interior/exterior of polygons
-                names_list["Points"].append(row["name"])
+                for coord in point_coords:
+                    point_x_list.append(coord[1].tolist()[0])
+                    point_y_list.append(coord[0].tolist()[0])
+                    color_list["Points"].append(hexcolor)  # collect corresponding color
+                    uid_list["Points"].append(uid)  # collect corresponding unique id
+                    type_list["Points"].append("point") # information on type of coordinates - important for interior/exterior of polygons
+                    names_list["Points"].append(row["name"])
 
         if len(shape_list) > 0:
             properties_dict = {
@@ -145,10 +158,15 @@ if WITH_NAPARI:
             else:
                 text_dict = None
 
+            if region_mode:
+                layer_name_with_symbol = REGIONS_SYMBOL + " " + layer_name
+            else:
+                layer_name_with_symbol = SHAPES_SYMBOL + " " + layer_name
+
             # add shapes to viewer
             viewer.add_shapes(
                 data=shape_list,
-                name=layer_name,
+                name=layer_name_with_symbol,
                 properties=properties_dict,
                 shape_type=shape_type_list,
                 edge_width=40,
@@ -160,10 +178,11 @@ if WITH_NAPARI:
 
         point_data = np.stack([point_x_list, point_y_list]).T
         if len(point_data) > 0:
+            layer_name_with_symbol = POINTS_SYMBOL + " " + layer_name
             # add points to viewer
             viewer.add_points(
                 data=point_data,
-                name=layer_name,
+                name=layer_name_with_symbol,
                 properties={
                     'uid': uid_list["Points"], # list with uids
                     'type': type_list["Points"] # list giving information on whether the polygon is interior or exterior

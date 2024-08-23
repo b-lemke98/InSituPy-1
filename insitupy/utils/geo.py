@@ -57,8 +57,8 @@ def read_qupath_geojson(file: Union[str, os.PathLike, Path]) -> pd.DataFrame:
     # annotation geojsons contain a classification column where each entry is a dict with name and color of the annotation
     if "classification" in dataframe.columns:
         # Flatten the "classification" column into separate "name" and "color" columns
-        dataframe["name"] = [elem["name"] if elem is not None else "unclassified" for elem in dataframe["classification"]]
-        dataframe["color"] = [elem["color"] if elem is not None else [0,0,0] for elem in dataframe["classification"]]
+        dataframe["name"] = [elem["name"] if pd.notnull(elem) else "unclassified" for elem in dataframe["classification"]]
+        dataframe["color"] = [elem["color"] if pd.notnull(elem) else [0,0,0] for elem in dataframe["classification"]]
 
         # Remove the redundant "classification" column
         dataframe = dataframe.drop(["classification"], axis=1)

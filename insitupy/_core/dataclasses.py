@@ -13,7 +13,7 @@ import pandas as pd
 import zarr
 from anndata import AnnData
 from parse import *
-from shapely import MultiPolygon, Point, Polygon, affinity
+from shapely import MultiPoint, MultiPolygon, Point, Polygon, affinity
 
 from insitupy import __version__
 from insitupy.utils.utils import convert_int_to_xenium_hex
@@ -109,7 +109,13 @@ class ShapesData(DeepCopyMixin, GetMixin):
             annot_df = dataframe
 
         if len(annot_df.index.unique()) != len(annot_df.name.unique()):
-            warnings.warn(message=f"Names of {self.shape_name} for key '{key}' were not unique. Key was skipped.")
+            warnings.warn(
+                message=
+                (
+                    f"Names of {self.shape_name} for key '{key}' were not unique. "
+                    f"Key was skipped. Please only add one geometry per class for regions."
+                    )
+                )
             return False
         else:
             if verbose:
@@ -165,7 +171,7 @@ class ShapesData(DeepCopyMixin, GetMixin):
         # determine the type of layer that needs to be used in napari later
         layer_types = []
         for geom in new_df["geometry"]:
-            if isinstance(geom, Point):
+            if isinstance(geom, Point) or isinstance(geom, MultiPoint):
                 layer_types.append("Points")
             else:
                 layer_types.append("Shapes")
@@ -208,7 +214,7 @@ class ShapesData(DeepCopyMixin, GetMixin):
                 #         print(f"Names of {self.shape_name} for key '{key}' are unique.")
 
                 # check if the shapes data for this key is unique (same number of names than indices)
-                is_unique = self._check_uniqueness(dataframe=annot_df, key=key, verbose=verbose)
+                is_unique = self._check_uniqueness(dataframe=annot_df, key=key, verbose=False)
 
                 if not is_unique:
                     add = False
