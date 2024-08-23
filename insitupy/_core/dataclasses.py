@@ -112,8 +112,8 @@ class ShapesData(DeepCopyMixin, GetMixin):
             warnings.warn(
                 message=
                 (
-                    f"Names of {self.shape_name} for key '{key}' were not unique. "
-                    f"Key was skipped. Please only add one geometry per class for regions."
+                    f"The names of the {self.shape_name} for key '{key}' were not unique and thus "
+                    f"the key was skipped. In regions only one geometry per class is allowed."
                     )
                 )
             return False
