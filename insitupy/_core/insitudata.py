@@ -33,10 +33,11 @@ from insitupy._core._xenium import (_read_binned_expression,
                                     _restructure_transcripts_dataframe)
 from insitupy._exceptions import UnknownOptionError
 from insitupy.images import ImageRegistration, deconvolve_he, resize_image
+from insitupy.io.files import read_json, write_dict_to_json
 from insitupy.io.io import (read_annotationsdata, read_baysor_cells,
                             read_baysor_transcripts, read_celldata,
                             read_regionsdata)
-from insitupy.utils.io import read_json, save_and_show_figure
+from insitupy.io.plots import save_and_show_figure
 from insitupy.utils.preprocessing import (normalize_anndata,
                                           reduce_dimensions_anndata)
 from insitupy.utils.utils import get_nrows_maxcols
@@ -46,8 +47,7 @@ from .._exceptions import (ModalityNotFoundError, NotOneElementError,
                            WrongNapariLayerTypeError, XeniumDataMissingObject,
                            XeniumDataRepeatedCropError)
 from ..images.utils import create_img_pyramid
-from ..utils.io import (check_overwrite_and_remove_if_true, read_json,
-                        write_dict_to_json)
+from ..io.files import check_overwrite_and_remove_if_true, read_json
 from ..utils.utils import (convert_napari_shape_to_polygon_or_line,
                            convert_to_list)
 from ..utils.utils import textformat as tf
@@ -682,12 +682,21 @@ class InSituData:
         # add annotations object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        self.annotations = AnnotationsData(files=files,
-                                           keys=keys,
-                                           pixel_size=self.metadata["xenium"]['pixel_size']
-                                           )
+        pixel_size = self.metadata["xenium"]['pixel_size']
 
+        if not hasattr(self, "annotations"):
+            self.annotations = AnnotationsData()
 
+        for key, file in zip(keys, files):
+            # read annotation and store in dictionary
+            self.annotations.add_data(data=file,
+                                      key=key,
+                                      scale_factor=(pixel_size, pixel_size)
+                                      )
+
+        # check if anything really added to annotations and if not, remove it again
+        if len(self.annotations.metadata) == 0:
+            self.remove_modality("annotations")
 
     def load_regions(self):
         print("Loading regions...", flush=True)
@@ -706,9 +715,25 @@ class InSituData:
         # add regions object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        self.regions = RegionsData(files=files,
-                                   keys=keys,
-                                   pixel_size=self.metadata["xenium"]['pixel_size'])
+        pixel_size = self.metadata["xenium"]['pixel_size']
+
+        if not hasattr(self, "regions"):
+            self.regions = RegionsData()
+
+        for key, file in zip(keys, files):
+            # read annotation and store in dictionary
+            self.regions.add_data(data=file,
+                                key=key,
+                                scale_factor=(pixel_size, pixel_size),
+                                )
+
+        # self.regions = RegionsData(files=files,
+        #                            keys=keys,
+        #                            pixel_size=self.metadata["xenium"]['pixel_size'])
+
+        # check if anything really added to regions and if not, remove it again
+        if len(self.regions.metadata) == 0:
+            self.remove_modality("regions")
 
 
     def load_cells(self):
@@ -1610,15 +1635,13 @@ class InSituData:
                             self.regions.add_data(data=geom_df,
                                                   key=annot_key,
                                                   verbose=True,
-                                                  scale_factor=scale,
-                                                  assert_uniqueness=True)
+                                                  scale_factor=scale)
                         else:
                             # add annotations
                             self.annotations.add_data(data=geom_df,
                                                       key=annot_key,
                                                       verbose=True,
-                                                      scale_factor=scale,
-                                                      assert_uniqueness=False)
+                                                      scale_factor=scale)
             else:
                 pass
 

@@ -14,7 +14,8 @@ from zarr.errors import ArrayNotFoundError
 
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
                                         CellData, RegionsData)
-from insitupy.utils.io import read_baysor_polygons, read_json
+from insitupy.io.baysor import read_baysor_polygons
+from insitupy.io.files import read_json
 
 
 def read_baysor_cells(
