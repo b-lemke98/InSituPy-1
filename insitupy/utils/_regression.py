@@ -144,10 +144,23 @@ class bootstrap_loess:
         self.x = loess_object.inputs.x
         self.y = loess_object.inputs.y
 
-    def _single_bootstrap_loess(self, newdata, sample_frac=0.5):
+    def _single_bootstrap_loess(self, newdata, sample_frac=0.5, assert_minmax: bool = True):
+
+        # get indices of max and min in x
+        max_id = np.argmax(self.x)
+        min_id = np.argmin(self.x)
 
         # subsample data
-        samples = np.random.choice(len(self.x), int(len(self.x)*sample_frac), replace=True)
+        samples = np.random.choice(len(self.x), int(len(self.x)*sample_frac), replace=False)
+
+        if assert_minmax:
+            # make sure that the minimum and maximum values stay
+            if max_id not in samples:
+                samples = np.append(samples, max_id)
+            if min_id not in samples:
+                samples = np.append(samples, min_id)
+
+        # do subsampling
         y_s = self.y[samples]
         x_s = self.x[samples]
 

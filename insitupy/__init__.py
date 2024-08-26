@@ -10,7 +10,9 @@ except ImportError:
     WITH_NAPARI = False
 
 from . import images as im
-from . import io, utils
+from . import io
+from . import plotting as pl
+from . import utils
 from ._core._deprecated import XeniumData
 from ._core.dataclasses import AnnotationsData, BoundariesData, ImageData
 from ._core.insitudata import InSituData, register_images

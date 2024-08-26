@@ -239,7 +239,7 @@ if WITH_NAPARI:
             if add_boundaries_widget is not None:
                 add_boundaries_widget.call_button.clicked.connect(callback)
 
-        if not (hasattr(xdata, "annotations") & hasattr(xdata, "regions")):
+        if not (hasattr(xdata, "annotations") | hasattr(xdata, "regions")):
             show_geometries_widget = None
         else:
 

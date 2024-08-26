@@ -307,3 +307,16 @@ def convert_napari_shape_to_polygon_or_line(napari_shape_data, shape_type):
         TypeError(f"Shape has an unknown type: {shape_type}")
 
     return result
+
+def exclude_index(array, exclude_index):
+    """
+    Exclude the element at the specified index from the array.
+
+    Args:
+        array (np.ndarray): The input NumPy array.
+        exclude_index (int): The index of the element to exclude.
+
+    Returns:
+        np.ndarray: A new array with the element at exclude_index excluded.
+    """
+    return np.concatenate((array[:exclude_index], array[exclude_index+1:]))

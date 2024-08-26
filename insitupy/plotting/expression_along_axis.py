@@ -15,7 +15,7 @@ from ..utils.utils import get_nrows_maxcols
 def expr_along_obs_val(adata: AnnData,
                        keys: str,
                        x_category: str,
-                       groupby: Optional[str],
+                       groupby: Optional[str] = None,
                        splitby: str = None,
                        hue: str = None,
                        method: Literal["lowess", "loess"] = 'loess',
@@ -45,17 +45,58 @@ def expr_along_obs_val(adata: AnnData,
                        smooth=True,
                        **kwargs
                        ):
+    """
+    Plot gene expression values along a specified observation category.
 
-    '''
-    Plot the expression of a gene as a function of an observation value (e.g. the automatic expression histology value
-    given by SpatialDE).
-    Grouping by one other observation is possible.
+    Args:
+        adata (AnnData): Annotated data matrix.
+        keys (str): Keys for the gene expression values to be plotted.
+        x_category (str): Observation category to be plotted on the x-axis.
+        groupby (Optional[str]): Observation category to group by.
+        splitby (str, optional): Observation category to split by.
+        hue (str, optional): Observation category to color by.
+        method (Literal["lowess", "loess"], optional): Smoothing method to use. Defaults to 'loess'.
+        stderr (bool, optional): Whether to plot standard error. Defaults to False.
+        loess_bootstrap (bool, optional): Whether to use bootstrap for loess smoothing. Defaults to True.
+        n_bootstraps_iterations (int, optional): Number of bootstrap iterations for loess smoothing. Defaults to 100.
+        xmin (optional): Minimum x value for plotting.
+        xmax (optional): Maximum x value for plotting.
+        cmap (str, optional): Colormap to use for plotting. Defaults to "tab10".
+        linewidth (int, optional): Line width for plotting. Defaults to 8.
+        extra_cats (optional): Additional observation categories to include in the plot.
+        normalize (bool, optional): Whether to normalize the expression values. Defaults to False.
+        nsteps (int, optional): Number of steps for smoothing. Defaults to 100.
+        show_progress (bool, optional): Whether to show progress bar. Defaults to False.
+        use_raw (bool, optional): Whether to use raw data. Defaults to False.
+        max_cols (int, optional): Maximum number of columns for subplots. Defaults to 4.
+        xlabel (optional): Label for the x-axis.
+        ylabel (optional): Label for the y-axis.
+        vline (optional): Vertical lines to add to the plot.
+        hline (optional): Horizontal lines to add to the plot.
+        vlinewidth (int, optional): Line width for vertical lines. Defaults to 4.
+        custom_titles (optional): Custom titles for the plots.
+        legend_fontsize (int, optional): Font size for the legend. Defaults to 24.
+        plot_legend (bool, optional): Whether to plot the legend. Defaults to True.
+        xlabel_fontsize (int, optional): Font size for the x-axis label. Defaults to 28.
+        ylabel_fontsize (int, optional): Font size for the y-axis label. Defaults to 28.
+        title_fontsize (int, optional): Font size for the plot titles. Defaults to 20.
+        tick_fontsize (int, optional): Font size for the axis ticks. Defaults to 24.
+        figsize (tuple, optional): Figure size. Defaults to (8, 6).
+        savepath (optional): Path to save the plot.
+        save_only (bool, optional): Whether to only save the plot without showing. Defaults to False.
+        show (bool, optional): Whether to show the plot. Defaults to True.
+        axis (optional): Axis to plot on.
+        return_data (bool, optional): Whether to return the data instead of plotting. Defaults to False.
+        fig (optional): Figure to plot on.
+        dpi_save (int, optional): DPI for saving the plot. Defaults to 300.
+        smooth (bool, optional): Whether to apply smoothing. Defaults to True.
+        **kwargs: Additional arguments for smoothing.
 
-    Future ideas:
-        -   Include the possibility of plotting categorical values like leiden plot (stacked line plot as done with
-            the radial expression and different cell types)
-
-    '''
+    Returns:
+        Union[DataFrame, Tuple[Figure, Axes]]:
+            If return_data is True, returns a DataFrame with the smoothed data.
+            Otherwise, returns the figure and axes of the plot.
+    """
 
     # check type of input
     if isinstance(keys, dict):
