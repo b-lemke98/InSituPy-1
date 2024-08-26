@@ -22,6 +22,7 @@ from geopandas import GeoDataFrame
 from parse import *
 from scipy.sparse import issparse
 from shapely import Point, Polygon
+from shapely.affinity import scale as scale_func
 from tqdm import tqdm
 
 from insitupy import WITH_NAPARI, __version__
@@ -168,49 +169,76 @@ class InSituData:
         with open(metadata_path, "w") as metafile:
             metafile.write(metadata_json)
 
-    def assign_annotations(self,
-                annotation_keys: str = "all",
-                add_annotation_masks: bool = False
-                ):
+    def _remove_empty_modalities(self):
+        try:
+            # check if anything really added to regions and if not, remove it again
+            if len(self.regions.metadata) == 0:
+                self.remove_modality("regions")
+        except AttributeError:
+            pass
+        try:
+            # check if anything really added to annotations and if not, remove it again
+            if len(self.annotations.metadata) == 0:
+                self.remove_modality("annotations")
+        except AttributeError:
+            pass
+
+    def assign_geometries(self,
+                          modality: Literal["annotations", "regions"],
+                          keys: Union[str, Literal["all"]] = "all",
+                          add_masks: bool = False,
+                          overwrite: bool = True
+                          ):
         '''
         Function to assign the annotations to the anndata object in XeniumData.matrix.
         Annotation information is added to the DataFrame in `.obs`.
         '''
         # assert that prerequisites are met
-        assert hasattr(self, "cells"), "No .cells attribute available. Run `load_cells()`."
-        assert hasattr(self, "annotations"), "No .annotations attribute available. Run `load_annotations()`."
+        try:
+            geom_attr = getattr(self, modality)
+        except AttributeError:
+            raise ModalityNotFoundError(modality=modality)
 
-        if annotation_keys == "all":
-            annotation_keys = self.annotations.metadata.keys()
+        try:
+            cell_attr = self.cells
+        except AttributeError:
+            raise ModalityNotFoundError("cells")
+
+        if keys == "all":
+            keys = geom_attr.metadata.keys()
 
         # make sure annotation keys are a list
-        annotation_keys = convert_to_list(annotation_keys)
+        keys = convert_to_list(keys)
 
         # convert coordinates into shapely Point objects
-        x = self.cells.matrix.obsm["spatial"][:, 0]
-        y = self.cells.matrix.obsm["spatial"][:, 1]
-        points = gpd.points_from_xy(x, y)
+        x = cell_attr.matrix.obsm["spatial"][:, 0]
+        y = cell_attr.matrix.obsm["spatial"][:, 1]
+        cells = gpd.points_from_xy(x, y)
 
         # iterate through annotation keys
-        for annotation_key in annotation_keys:
-            print(f"Assigning key '{annotation_key}'...")
+        for key in keys:
+            print(f"Assigning key '{key}'...")
             # extract pandas dataframe of current key
-            annot = getattr(self.annotations, annotation_key)
+            geom_df = getattr(geom_attr, key)
 
             # get unique list of annotation names
-            annot_names = annot.name.unique()
+            geom_names = geom_df.name.unique()
 
             # initiate dataframe as dictionary
             df = {}
 
             # iterate through names
-            for n in annot_names:
-                polygons = annot[annot.name == n].geometry.tolist()
+            for n in geom_names:
+                polygons = geom_df[geom_df["name"] == n]["geometry"].tolist()
+                scales = geom_df[geom_df["name"] == n]["scale"].tolist()
 
                 in_poly = []
-                for poly in polygons:
+                for poly, scale in zip(polygons, scales):
+                    # scale the polygon
+                    poly = scale_func(poly, xfact=scale[0], yfact=scale[1], origin=(0,0))
+
                     # check if which of the points are inside the current annotation polygon
-                    in_poly.append(poly.contains(points))
+                    in_poly.append(poly.contains(cells))
 
                 # check if points were in any of the polygons
                 in_poly_res = np.array(in_poly).any(axis=0)
@@ -220,82 +248,56 @@ class InSituData:
 
             # convert into pandas dataframe
             df = pd.DataFrame(df)
-            df.index = self.cells.matrix.obs_names
+            df.index = cell_attr.matrix.obs_names
 
             # create annotation from annotation masks
-            df[f"annotation-{annotation_key}"] = [" & ".join(annot_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
+            col_name = f"annotation-{key}"
+            df[col_name] = [" & ".join(geom_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
 
-            if add_annotation_masks:
-                self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df, left_index=True, right_index=True)
-            else:
-                self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df.iloc[:, -1], left_index=True, right_index=True)
+            add = True
+            if col_name in self.cells.matrix.obs:
+                if overwrite:
+                    self.cells.matrix.obs.drop(col_name, axis=1, inplace=True)
+                    print(f'Existing column "{col_name}" is overwritten.', flush=True)
+                    add = True
+                else:
+                    warn(f'Column "{col_name}" exists already in `xd.cells.matrix.obs`. Assignment of key "{key}" was skipped. To force assignment, select `overwrite=True`.')
+                    add = False
 
-            # save that the current key was analyzed
-            self.annotations.metadata[annotation_key]["analyzed"] = tf.TICK
+            if add:
+                if add_masks:
+                    self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df, left_index=True, right_index=True)
+                else:
+                    self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df.iloc[:, -1], left_index=True, right_index=True)
 
-    def assign_regions(self,
-                       region_keys: str = "all",
-                       ):
-        '''
-        Function to assign the annotations to the anndata object in XeniumData.matrix.
-        Annotation information is added to the DataFrame in `.obs`.
-        '''
-        # assert that prerequisites are met
-        try:
-            regions = self.regions
-        except AttributeError:
-            raise ModalityNotFoundError("regions")
+                # save that the current key was analyzed
+                geom_attr.metadata[key]["analyzed"] = tf.TICK
 
-        try:
-            cells = self.cells
-        except AttributeError:
-            raise ModalityNotFoundError("cells")
+    def assign_annotations(
+        self,
+        keys: Union[str, Literal["all"]] = "all",
+        add_masks: bool = False,
+        overwrite: bool = True
+    ):
+        self.assign_geometries(
+            modality="annotations",
+            keys=keys,
+            add_masks=add_masks,
+            overwrite=overwrite
+        )
 
-        if region_keys == "all":
-            region_keys = regions.metadata.keys()
-
-        # make sure annotation keys are a list
-        region_keys = convert_to_list(region_keys)
-
-        # convert coordinates into shapely Point objects
-        x = cells.matrix.obsm["spatial"][:, 0]
-        y = cells.matrix.obsm["spatial"][:, 1]
-        points = gpd.points_from_xy(x, y)
-
-        # iterate through annotation keys
-        for reg_key in region_keys:
-            print(f"Assigning key '{reg_key}'...")
-            # check that the names are unique
-            regions._check_uniqueness(key=reg_key)
-
-            # extract pandas dataframe of current key
-            reg = getattr(regions, reg_key)
-
-            # get unique list of annotation names
-            annot_names = reg.name.unique()
-
-            # initiate dataframe as dictionary
-            df = {}
-
-            # iterate through names
-            for n in tqdm(annot_names):
-                poly = reg[reg.name == n].geometry.iloc[0]
-
-                df[n] = poly.contains(points)
-
-            # convert into pandas dataframe
-            df = pd.DataFrame(df)
-            df.index = self.cells.matrix.obs_names
-
-            # create annotation from annotation masks
-            print("Adding information to `.obs`...")
-            obs_key = f"region-{reg_key}"
-            self.cells.matrix.obs[obs_key] = [" & ".join(annot_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
-
-            # save that the current key was analyzed
-            self.regions.metadata[reg_key]["analyzed"] = tf.TICK
-
-            print(f"Information added to `.obs['{obs_key}']`.")
+    def assign_regions(
+        self,
+        keys: Union[str, Literal["all"]] = "all",
+        add_masks: bool = False,
+        overwrite: bool = True
+    ):
+        self.assign_geometries(
+            modality="regions",
+            keys=keys,
+            add_masks=add_masks,
+            overwrite=overwrite
+        )
 
     def copy(self):
         '''
@@ -694,9 +696,11 @@ class InSituData:
                                       scale_factor=(pixel_size, pixel_size)
                                       )
 
-        # check if anything really added to annotations and if not, remove it again
-        if len(self.annotations.metadata) == 0:
-            self.remove_modality("annotations")
+        # # check if anything really added to annotations and if not, remove it again
+        # if len(self.annotations.metadata) == 0:
+        #     self.remove_modality("annotations")
+
+        self._remove_empty_modalities()
 
     def load_regions(self):
         print("Loading regions...", flush=True)
@@ -731,9 +735,11 @@ class InSituData:
         #                            keys=keys,
         #                            pixel_size=self.metadata["xenium"]['pixel_size'])
 
-        # check if anything really added to regions and if not, remove it again
-        if len(self.regions.metadata) == 0:
-            self.remove_modality("regions")
+        # # check if anything really added to regions and if not, remove it again
+        # if len(self.regions.metadata) == 0:
+        #     self.remove_modality("regions")
+
+        self._remove_empty_modalities()
 
 
     def load_cells(self):
@@ -1631,19 +1637,28 @@ class InSituData:
                         geom_df = GeoDataFrame(geom_df, geometry="geometry")
 
                         if is_region_layer:
+                            if not hasattr(self, "regions"):
+                                self.regions = RegionsData()
+
                             # add regions
                             self.regions.add_data(data=geom_df,
                                                   key=annot_key,
                                                   verbose=True,
                                                   scale_factor=scale)
                         else:
+                            if not hasattr(self, "annotations"):
+                                self.annotations = AnnotationsData()
+
                             # add annotations
                             self.annotations.add_data(data=geom_df,
                                                       key=annot_key,
                                                       verbose=True,
                                                       scale_factor=scale)
+
             else:
                 pass
+
+        self._remove_empty_modalities()
 
     def plot_binned_expression(
         self,
@@ -1996,3 +2011,51 @@ def register_images(
         # free RAM
         del imreg_complete, imreg_selected, image, template, nuclei_img
     gc.collect()
+
+
+def calc_distance_of_cells_from(
+    data: InSituData,
+    annotation_key: str,
+    annotation_class: str,
+    key_to_save: str = None
+    ):
+
+    """
+    Calculate the distance of cells from a specified annotation class and save the results.
+
+    This function calculates the distance of each cell in the spatial data to the closest point
+    of a specified annotation class. The distances are then saved in the cell data matrix.
+
+    Args:
+        data (InSituData): The input data containing cell and annotation information.
+        annotation_key (str): The key to retrieve the annotation information.
+        annotation_class (str): The specific annotation class to calculate distances from.
+        key_to_save (str, optional): The key under which to save the calculated distances in the cell data matrix.
+                                     If None, a default key is generated based on the annotation class.
+
+    Returns:
+        None
+    """
+
+    # create geopandas points from cells
+    x = data.cells.matrix.obsm["spatial"][:, 0]
+    y = data.cells.matrix.obsm["spatial"][:, 1]
+    cells = gpd.points_from_xy(x, y)
+
+    # retrieve annotation information
+    annot_df = data.annotations.get(annotation_key)
+    class_df = annot_df[annot_df["name"] == annotation_class]
+
+    # calculate distance of cells to their closest point
+    scaled_geometries = [
+        scale_func(geometry, xfact=scale[0], yfact=scale[1], origin=(0,0))
+        for geometry, scale in zip(class_df["geometry"], class_df["scale"])
+        ]
+    dists = np.array([cells.distance(geometry) for geometry in scaled_geometries])
+    min_dists = dists.min(axis=0)
+
+    # add results to CellData
+    if key_to_save is None:
+        key_to_save = f"dist_from_{annotation_class}"
+    data.cells.matrix.obs[key_to_save] = min_dists
+    print(f'Save distances to `.cells.matrix.obs["{key_to_save}"]`')

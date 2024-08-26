@@ -175,8 +175,11 @@ class ShapesData(DeepCopyMixin, GetMixin):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
 
-        # add scale factor to data
-        new_df["scale"] = [scale_factor] * len(new_df)
+        if "scale" not in new_df.columns:
+            # add scale factor to data
+            new_df["scale"] = [scale_factor] * len(new_df)
+        else:
+            print("Scale inferred from file.", flush=True)
 
         # determine the type of layer that needs to be used in napari later
         layer_types = []

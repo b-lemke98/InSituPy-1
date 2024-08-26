@@ -15,7 +15,8 @@ from . import plotting as pl
 from . import utils
 from ._core._deprecated import XeniumData
 from ._core.dataclasses import AnnotationsData, BoundariesData, ImageData
-from ._core.insitudata import InSituData, register_images
+from ._core.insitudata import (InSituData, calc_distance_of_cells_from,
+                               register_images)
 from ._core.xenium import read_xenium
 
 __all__ = [
