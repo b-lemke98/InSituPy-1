@@ -27,7 +27,7 @@ if WITH_NAPARI:
         scale_factor: Union[Tuple, List, np.ndarray],
         rgb_color: Optional[Tuple] = None,
         show_names: bool = False,
-        #layer_name_pattern: str = "{layer_type_symbol} {cl} ({key})",
+        allow_duplicate_layers: bool = False,
         region_mode: bool = False
         ):
 
@@ -164,34 +164,51 @@ if WITH_NAPARI:
                 layer_name_with_symbol = SHAPES_SYMBOL + " " + layer_name
 
             # add shapes to viewer
-            viewer.add_shapes(
-                data=shape_list,
-                name=layer_name_with_symbol,
-                properties=properties_dict,
-                shape_type=shape_type_list,
-                edge_width=40,
-                edge_color=color_list["Shapes"],
-                face_color='transparent',
-                scale=scale_factor,
-                text=text_dict
-                )
+            if not layer_name_with_symbol in viewer.layers:
+                add = True
+            elif allow_duplicate_layers:
+                add = True
+            else:
+                add = False
+
+            if add:
+                viewer.add_shapes(
+                    data=shape_list,
+                    name=layer_name_with_symbol,
+                    properties=properties_dict,
+                    shape_type=shape_type_list,
+                    edge_width=40,
+                    edge_color=color_list["Shapes"],
+                    face_color='transparent',
+                    scale=scale_factor,
+                    text=text_dict
+                    )
 
         point_data = np.stack([point_x_list, point_y_list]).T
         if len(point_data) > 0:
             layer_name_with_symbol = POINTS_SYMBOL + " " + layer_name
             # add points to viewer
-            viewer.add_points(
-                data=point_data,
-                name=layer_name_with_symbol,
-                properties={
-                    'uid': uid_list["Points"], # list with uids
-                    'type': type_list["Points"] # list giving information on whether the polygon is interior or exterior
-                },
-                size=100,
-                edge_color="black",
-                face_color=color_list["Points"],
-                scale=scale_factor
-            )
+            # add shapes to viewer
+            if not layer_name_with_symbol in viewer.layers:
+                add = True
+            elif allow_duplicate_layers:
+                add = True
+            else:
+                add = False
+
+            if add:
+                viewer.add_points(
+                    data=point_data,
+                    name=layer_name_with_symbol,
+                    properties={
+                        'uid': uid_list["Points"], # list with uids
+                        'type': type_list["Points"] # list giving information on whether the polygon is interior or exterior
+                    },
+                    size=100,
+                    edge_color="black",
+                    face_color=color_list["Points"],
+                    scale=scale_factor
+                )
 
 
     def _create_points_layer(points,

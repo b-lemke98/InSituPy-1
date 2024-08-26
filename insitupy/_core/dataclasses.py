@@ -76,7 +76,6 @@ class ShapesData(DeepCopyMixin, GetMixin):
                     self.add_data(data=file,
                                         key=key,
                                         scale_factor=(pixel_size, pixel_size),
-                                        #assert_uniqueness=assert_uniqueness
                                         )
 
     def __repr__(self):
@@ -166,20 +165,20 @@ class ShapesData(DeepCopyMixin, GetMixin):
                     data: Union[gpd.GeoDataFrame, pd.DataFrame, dict,
                                 str, os.PathLike, Path],
                     key: str,
-                    scale_factor: Tuple[float, float],
-                    #pixel_size: Optional[float] = 1,
+                    scale_factor: Optional[Tuple[float, float]] = None,
                     verbose: bool = False,
-                    #assert_uniqueness: bool = False,
-                    #skip_multipolygons: bool = False
                    ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
 
         if "scale" not in new_df.columns:
             # add scale factor to data
+            if scale_factor is None:
+                warnings.warn("No `scale_factor` added to data.")
             new_df["scale"] = [scale_factor] * len(new_df)
         else:
-            print("Scale inferred from file.", flush=True)
+            if verbose:
+                print("Scale inferred from file.", flush=True)
 
         # determine the type of layer that needs to be used in napari later
         layer_types = []

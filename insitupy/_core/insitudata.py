@@ -35,9 +35,8 @@ from insitupy._core._xenium import (_read_binned_expression,
 from insitupy._exceptions import UnknownOptionError
 from insitupy.images import ImageRegistration, deconvolve_he, resize_image
 from insitupy.io.files import read_json, write_dict_to_json
-from insitupy.io.io import (read_annotationsdata, read_baysor_cells,
-                            read_baysor_transcripts, read_celldata,
-                            read_regionsdata)
+from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
+                            read_celldata, read_shapesdata)
 from insitupy.io.plots import save_and_show_figure
 from insitupy.utils.preprocessing import (normalize_anndata,
                                           reduce_dimensions_anndata)
@@ -672,7 +671,7 @@ class InSituData:
             p = self.metadata["data"]["annotations"]
         except KeyError:
             raise ModalityNotFoundError(modality="annotations")
-        self.annotations = read_annotationsdata(path=self.path / p)
+        self.annotations = read_shapesdata(path=self.path / p, mode="annotations")
 
 
     def import_annotations(self,
@@ -708,7 +707,7 @@ class InSituData:
             p = self.metadata["data"]["regions"]
         except KeyError:
             raise ModalityNotFoundError(modality="regions")
-        self.regions = read_regionsdata(path=self.path / p)
+        self.regions = read_shapesdata(path=self.path / p, mode="regions")
 
     def import_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]],
@@ -1276,7 +1275,7 @@ class InSituData:
         files = list(self.quicksave_dir.glob(f"*{uid}*"))
 
         if len(files) == 1:
-            ad = read_annotationsdata(files[0] / "annotations")
+            ad = read_shapesdata(files[0] / "annotations", mode="annotations")
         elif len(files) == 0:
             print(f"No quicksave with uid '{uid}' found. Use `.list_quicksaves()` to list all available quicksaves.")
         else:
