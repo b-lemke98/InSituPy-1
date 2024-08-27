@@ -295,6 +295,8 @@ class ShapesData(DeepCopyMixin, GetMixin):
 
         self.metadata = new_metadata
 
+        self._update_metadata()
+
     def remove_data(self,
                    key_to_remove: str):
         delattr(self, key_to_remove)

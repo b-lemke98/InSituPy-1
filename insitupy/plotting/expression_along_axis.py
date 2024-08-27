@@ -14,7 +14,7 @@ from ..utils.utils import get_nrows_maxcols
 
 def expr_along_obs_val(adata: AnnData,
                        keys: str,
-                       x_category: str,
+                       obs_val: str,
                        groupby: Optional[str] = None,
                        splitby: str = None,
                        hue: str = None,
@@ -51,7 +51,7 @@ def expr_along_obs_val(adata: AnnData,
     Args:
         adata (AnnData): Annotated data matrix.
         keys (str): Keys for the gene expression values to be plotted.
-        x_category (str): Observation category to be plotted on the x-axis.
+        obs_val (str): Observation category to be plotted on the x-axis.
         groupby (Optional[str]): Observation category to group by.
         splitby (str, optional): Observation category to split by.
         hue (str, optional): Observation category to color by.
@@ -108,8 +108,19 @@ def expr_along_obs_val(adata: AnnData,
     # make inputs to lists
     keys = [keys] if isinstance(keys, str) else list(keys)
 
+    # remove NaNs `obs_val` column
+    adata_obs = adata.obs.copy()
+    not_na_mask = adata_obs[obs_val].notna()
+    adata_obs = adata_obs[not_na_mask]
+
+    # check whether to plot raw data
+    X, var, var_names = check_raw(adata, use_raw=use_raw)
+
+    # remove rows from X which were NaN above
+    X = X[not_na_mask]
+
     if hue is not None:
-        hue_cats = list(adata.obs[hue].unique())
+        hue_cats = list(adata_obs[hue].unique())
         cmap_colors = plt.get_cmap(cmap)
         color_dict = {a: cmap_colors(i) for i, a in enumerate(hue_cats)}
 
@@ -143,30 +154,29 @@ def expr_along_obs_val(adata: AnnData,
 
         if groupby is not None:
             # select data per group
-            groups = adata.obs[groupby].unique()
+            groups = adata_obs[groupby].unique()
         else:
             groups = [None]
 
         added_to_legend = []
 
-        # check if plotting raw data
-        X, var, var_names = check_raw(adata, use_raw=use_raw)
+
 
         group_collection = {}
         for group in groups:
             #partial = extract_groups(adata, groupby=groupby, groups=group)
 
             if group is not None:
-                group_mask = adata.obs[groupby] == group
-                group_obs = adata.obs.loc[group_mask, :].copy()
+                group_mask = adata_obs[groupby] == group
+                group_obs = adata_obs.loc[group_mask, :].copy()
             else:
-                group_mask = [True] * len(adata.obs)
-                group_obs = adata.obs
+                group_mask = [True] * len(adata_obs)
+                group_obs = adata_obs
 
             if hue is not None:
-                _hue = adata.obs.loc[group_mask, hue][0]
+                _hue = adata_obs.loc[group_mask, hue][0]
 
-            # hue_data = adata.obs.loc[group_mask, hue].copy()
+            # hue_data = adata_obs.loc[group_mask, hue].copy()
             # print(hue_data)
 
             # select only group values from matrix
@@ -174,7 +184,7 @@ def expr_along_obs_val(adata: AnnData,
 
             if splitby is None:
                 # select x value
-                x = group_obs.loc[:, x_category].values
+                x = group_obs.loc[:, obs_val].values
 
                 if keys_grouped:
                     # extract expression values of all keys in the group
@@ -216,20 +226,20 @@ def expr_along_obs_val(adata: AnnData,
                     df = pd.DataFrame({"x": x, "y_pred": y})
 
                 if extra_cats is not None:
-                    df = df.join(adata.obs.loc[group_mask, extra_cats].reset_index(drop=True))
+                    df = df.join(adata_obs.loc[group_mask, extra_cats].reset_index(drop=True))
 
             else:
                 splits = group_obs[splitby].unique()
                 df_collection = {}
 
                 # get min and max values for x values
-                x = group_obs[x_category].values
+                x = group_obs[obs_val].values
                 xmin = x.min()
                 xmax = x.max()
                 for split in splits:
                     # extract x values
                     split_mask = group_obs[splitby] == split
-                    x = group_obs.loc[split_mask, x_category].values
+                    x = group_obs.loc[split_mask, obs_val].values
 
                     # extract expression values as y
                     idx = var.index.get_loc(key)
@@ -316,7 +326,7 @@ def expr_along_obs_val(adata: AnnData,
 
         if not return_data:
             if xlabel is None:
-                xlabel = x_category
+                xlabel = obs_val
             if ylabel is None:
                 ylabel = "Gene expression"
 

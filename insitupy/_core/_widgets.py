@@ -242,15 +242,21 @@ if WITH_NAPARI:
         if not (hasattr(xdata, "annotations") | hasattr(xdata, "regions")):
             show_geometries_widget = None
         else:
+            # check which geometries are available
+            choices = ["Annotations", "Regions"]
+            choices = [ch for ch in choices if hasattr(xdata, ch.lower())]
 
-            # extract region keys
-            annot_keys = list(xdata.annotations.metadata.keys())
+            # extract geometry object
+            geom = getattr(xdata, choices[0].lower())
+
+            # extract annotations keys
+            annot_keys = list(geom.metadata.keys())
             first_annot_key = list(annot_keys)[0] # for dropdown menu
-            first_classes = ["all"] + sorted(xdata.annotations.metadata[first_annot_key]['classes'])
+            first_classes = ["all"] + sorted(geom.metadata[first_annot_key]['classes'])
 
             @magicgui(
                 call_button='Show',
-                geom_type={"choices": ["Annotations", "Regions"], "label": "Type:"},
+                geom_type={"choices": choices, "label": "Type:"},
                 key={"choices": annot_keys, "label": "Key:"},
                 annot_class={"choices": first_classes, "label": "Class:"},
                 show_names={'label': 'Show names'}

@@ -48,6 +48,7 @@ from .._exceptions import (ModalityNotFoundError, NotOneElementError,
                            XeniumDataRepeatedCropError)
 from ..images.utils import create_img_pyramid
 from ..io.files import check_overwrite_and_remove_if_true, read_json
+from ..plotting import expr_along_obs_val
 from ..utils.utils import (convert_napari_shape_to_polygon_or_line,
                            convert_to_list)
 from ..utils.utils import textformat as tf
@@ -250,7 +251,7 @@ class InSituData:
             df.index = cell_attr.matrix.obs_names
 
             # create annotation from annotation masks
-            col_name = f"annotation-{key}"
+            col_name = f"{modality}-{key}"
             df[col_name] = [" & ".join(geom_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
 
             add = True
@@ -469,11 +470,17 @@ class InSituData:
                 empty_alt_hist_dict = {k: [] for k in _self.metadata["history"]["alt"].keys()}
                 _self.metadata["history"]["alt"] = empty_alt_hist_dict
 
+        # sometimes modalities like annotations or regions can be empty in the meantime
+        # here such empty modalities are removed
+        _self._remove_empty_modalities()
+
         if inplace:
             if hasattr(self, "viewer"):
                 del _self.viewer # delete viewer
         else:
             return _self
+
+
 
 
     def hvg(self,
@@ -1404,41 +1411,6 @@ class InSituData:
                     # see: https://forum.image.sc/t/add-layerdatatuple-to-napari-viewer-programmatically/69878
                     self.viewer.add_layer(Layer.create(*layer))
 
-        # # optionally add annotations
-        # if annotation_keys is not None:
-        #     # get colorcycle for region annotations
-        #     cmap_annot = matplotlib.colormaps[cmap_annotations]
-        #     cc_annot = cmap_annot.colors
-
-        #     if annotation_keys == "all":
-        #         annotation_keys = self.annotations.metadata.keys()
-        #     annotation_keys = convert_to_list(annotation_keys)
-        #     for annotation_key in annotation_keys:
-        #         annot_df = getattr(self.annotations, annotation_key)
-
-        #         # get classes
-        #         classes = annot_df['name'].unique()
-
-        #         # iterate through classes
-        #         for cl in classes:
-        #             # generate layer name
-        #             layer_name = f"*{cl} ({annotation_key})"
-
-        #             # get dataframe for this class
-        #             class_df = annot_df[annot_df["name"] == cl]
-
-        #             # extract scale
-        #             scale_factor = class_df.iloc[0]["scale"]
-
-        #             if layer_name not in self.viewer.layers:
-        #                 # add layer to viewer
-        #                 _add_annotations_as_layer(
-        #                     dataframe=class_df,
-        #                     viewer=self.viewer,
-        #                     layer_name=layer_name,
-        #                     scale_factor=scale_factor
-        #                 )
-
         # WIDGETS
         try:
             cells = self.cells
@@ -1716,6 +1688,35 @@ class InSituData:
         else:
             return fig, axs
 
+    def plot_expr_along_obs_val(
+        self,
+        keys: str,
+        obs_val: str,
+        groupby: Optional[str] = None,
+        method: Literal["lowess", "loess"] = 'loess',
+        stderr: bool = False,
+        savepath=None,
+        return_data=False,
+        **kwargs
+        ):
+        # retrieve anndata object from InSituData
+        adata = self.cells.matrix
+
+        results = expr_along_obs_val(
+            adata=adata,
+            keys=keys,
+            obs_val=obs_val,
+            groupby=groupby,
+            method=method,
+            stderr=stderr,
+            savepath=savepath,
+            return_data=return_data
+            **kwargs
+            )
+
+        if return_data:
+            return results
+
     def reload(self):
         data_meta = self.metadata["data"]
         current_modalities = [m for m in MODALITIES if hasattr(self, m) and m in data_meta]
@@ -1745,17 +1746,17 @@ class InSituData:
 
         for cat in ["annotations", "cells", "regions"]:
             dirs_to_remove = []
-            if hasattr(self, cat):
-                files = sorted((self.path / cat).glob("*"))
-                if len(files) > 1:
-                    dirs_to_remove = files[:-1]
+            #if hasattr(self, cat):
+            files = sorted((self.path / cat).glob("*"))
+            if len(files) > 1:
+                dirs_to_remove = files[:-1]
 
-                    for d in dirs_to_remove:
-                        shutil.rmtree(d)
+                for d in dirs_to_remove:
+                    shutil.rmtree(d)
 
-                    print(f"Removed {len(dirs_to_remove)} entries from '.{cat}'.") if verbose else None
-                else:
-                    print(f"No history found for '{cat}'.") if verbose else None
+                print(f"Removed {len(dirs_to_remove)} entries from '.{cat}'.") if verbose else None
+            else:
+                print(f"No history found for '{cat}'.") if verbose else None
 
     def remove_modality(self,
                         modality: str
@@ -2016,11 +2017,13 @@ def calc_distance_of_cells_from(
     data: InSituData,
     annotation_key: str,
     annotation_class: str,
-    key_to_save: str = None
+    region_key: Optional[str] = None,
+    region_name: Optional[str] = None,
+    key_to_save: Optional[str] = None
     ):
 
     """
-    Calculate the distance of cells from a specified annotation class and save the results.
+    Calculate the distance of cells from a specified annotation class within a given region and save the results.
 
     This function calculates the distance of each cell in the spatial data to the closest point
     of a specified annotation class. The distances are then saved in the cell data matrix.
@@ -2028,17 +2031,35 @@ def calc_distance_of_cells_from(
     Args:
         data (InSituData): The input data containing cell and annotation information.
         annotation_key (str): The key to retrieve the annotation information.
-        annotation_class (str): The specific annotation class to calculate distances from.
-        key_to_save (str, optional): The key under which to save the calculated distances in the cell data matrix.
+        annotation_class (Optional[str]): The specific annotation class to calculate distances from.
+        region_key: (Optional[str]): If not None, `region_key` is used together with `region_name` to determine the region in which cells are considered
+                                     for the analysis.
+        region_name: (Optional[str]): If not None, `region_name` is used together with `region_key` to determine the region in which cells are considered
+                                     for the analysis.
+        key_to_save (Optional[str]): The key under which to save the calculated distances in the cell data matrix.
                                      If None, a default key is generated based on the annotation class.
 
     Returns:
         None
     """
+    if region_name is None:
+        print(f'Calculate the distance of cells from the annotation "{annotation_class}"')
+        region_mask = [True] * len(data.cells.matrix)
+    else:
+        assert region_key is not None, "`region_key` must not be None if `region_name` is not None."
+        print(f'Calculate the distance of cells from the annotation "{annotation_class}" within region "{region_name}"')
+        region_col_name = f'regions-{region_key}'
+
+        if region_col_name not in data.cells.matrix.obs.columns:
+            data.assign_regions(keys=region_key)
+
+        # generate mask for selected region
+        region_mask = data.cells.matrix.obs[region_col_name] == region_name
 
     # create geopandas points from cells
-    x = data.cells.matrix.obsm["spatial"][:, 0]
-    y = data.cells.matrix.obsm["spatial"][:, 1]
+    x = data.cells.matrix.obsm["spatial"][:, 0][region_mask]
+    y = data.cells.matrix.obsm["spatial"][:, 1][region_mask]
+    indices = data.cells.matrix.obs_names[region_mask]
     cells = gpd.points_from_xy(x, y)
 
     # retrieve annotation information
@@ -2052,6 +2073,9 @@ def calc_distance_of_cells_from(
         ]
     dists = np.array([cells.distance(geometry) for geometry in scaled_geometries])
     min_dists = dists.min(axis=0)
+
+    # add indices to minimum distances
+    min_dists = pd.Series(min_dists, index=indices)
 
     # add results to CellData
     if key_to_save is None:
