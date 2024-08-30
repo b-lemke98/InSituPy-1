@@ -4,10 +4,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 
-def save_and_show_figure(savepath, fig, save_only=False, show=True, dpi_save=300, save_background=None, tight=True):
-    #if fig is not None and axis is not None:
-    #    return fig, axis
-    #elif savepath is not None:
+def save_and_show_figure(savepath, fig, save_only=False, show=True, dpi_save=300, background_color=None, tight=True):
+
     if tight:
         fig.tight_layout()
 
@@ -19,7 +17,7 @@ def save_and_show_figure(savepath, fig, save_only=False, show=True, dpi_save=300
 
         # save figure
         plt.savefig(savepath, dpi=dpi_save,
-                    facecolor=save_background, bbox_inches='tight')
+                    facecolor=background_color, bbox_inches='tight')
         print("Saved.")
     if save_only:
         plt.close(fig)

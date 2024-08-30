@@ -7,14 +7,16 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import rgb2hex
 from napari.types import LayerDataTuple
+from pandas.api.types import is_numeric_dtype
 from shapely import (LinearRing, LineString, MultiPoint, MultiPolygon, Point,
                      Polygon)
 
 from insitupy import WITH_NAPARI
-from insitupy.utils.palettes import data_to_rgba
+from insitupy._constants import (DEFAULT_CATEGORICAL_CMAP, POINTS_SYMBOL,
+                                 REGION_CMAP, REGIONS_SYMBOL, SHAPES_SYMBOL)
+from insitupy.plotting._colors import _data_to_rgba, _determine_climits
+from insitupy.utils.palettes import CustomPalettes
 
-from .._constants import (POINTS_SYMBOL, REGION_CMAP, REGIONS_SYMBOL,
-                          SHAPES_SYMBOL)
 from ._checks import check_rgb_column
 
 if WITH_NAPARI:
@@ -231,7 +233,7 @@ if WITH_NAPARI:
         # point_names = point_names[mask]
 
         # get colors
-        colors = data_to_rgba(data=color_values)
+        colors = _data_to_rgba(data=color_values)
 
         # generate point layer
         layer = (
@@ -269,7 +271,7 @@ if WITH_NAPARI:
         # cmap: str = "viridis"
         ) -> None:
         # get the RGBA colors for the new values
-        new_colors = data_to_rgba(data=new_color_values, upper_climit_pct=upper_climit_pct)
+        new_colors = _data_to_rgba(data=new_color_values, upper_climit_pct=upper_climit_pct)
 
         # change the colors of the layer
         layer.face_color = new_colors
@@ -281,3 +283,35 @@ if WITH_NAPARI:
 
         if new_name is not None:
             layer.name = new_name
+
+#TODO: Why is this function not used anywhere?
+def _determine_color_settings(
+    color_values,
+    cmap,
+    upper_climit_pct
+    ):
+    # check if the data should be plotted categorical or continous
+    if is_numeric_dtype(color_values):
+        is_categorical = False # if the data is numeric it should be plotted continous
+    else:
+        is_categorical = True # if the data is not numeric it should be plotted categorically
+
+    if is_categorical:
+        # get color cycle for categorical data
+        color_mode = "cycle"
+        # palettes = CustomPalettes()
+        # color_cycle = getattr(palettes, "tab20_mod").colors
+        color_cycle = DEFAULT_CATEGORICAL_CMAP.colors
+        color_map = None
+        climits = None
+    else:
+        color_mode = "colormap"
+        color_map = cmap
+        color_cycle = None
+
+        climits = _determine_climits(
+            color_values=color_values,
+            upper_climit_pct=upper_climit_pct
+        )
+
+    return color_mode, color_cycle, color_map, climits
