@@ -3,6 +3,8 @@ from pathlib import Path
 
 import matplotlib
 
+from insitupy.utils import CustomPalettes
+
 # make sure that images do not exceed limits in c++ (required for cv2::remap function in cv2::warpAffine)
 # see also https://www.geeksforgeeks.org/climits-limits-h-cc/
 SHRT_MAX = 2**15-1 # 32767
@@ -29,4 +31,6 @@ POINTS_SYMBOL = "\U0001F4CD" # 📍
 REGIONS_SYMBOL = "\U0001F30D" # 🌍
 
 # cmaps
+palettes = CustomPalettes()
+DEFAULT_CATEGORICAL_CMAP = palettes.tab20_mod
 REGION_CMAP = matplotlib.colormaps["tab10"]

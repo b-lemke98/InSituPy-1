@@ -1,10 +1,17 @@
-from typing import Literal, Optional
+import os
+from numbers import Number
+from typing import Literal, Optional, Tuple
 
 import pandas as pd
+import seaborn as sns
 from anndata import AnnData
 from matplotlib import pyplot as plt
+from matplotlib.axes._axes import Axes
+from matplotlib.figure import Figure
 from scipy.stats import zscore
 from tqdm import tqdm
+
+from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
 
 from .._core._checks import check_raw, has_valid_labels
 from ..io.plots import save_and_show_figure
@@ -12,39 +19,45 @@ from ..utils._regression import smooth_fit
 from ..utils.utils import get_nrows_maxcols
 
 
-def expr_along_obs_val(adata: AnnData,
-                       keys: str,
-                       obs_val: str,
-                       groupby: Optional[str] = None,
-                       splitby: str = None,
-                       hue: str = None,
-                       method: Literal["lowess", "loess"] = 'loess',
-                       stderr: bool = False,
-                       loess_bootstrap: bool = True,
-                       n_bootstraps_iterations: int = 100,
-                       xmin=None,
-                       xmax=None,
-                       cmap="tab10",
-                       linewidth=8,
-                       extra_cats=None,
-                       normalize=False,
-                       nsteps=100,
-                       show_progress=False,
-                       use_raw=False,
-                       max_cols=4,
-                       xlabel=None,ylabel=None,
-                       vline=None, hline=None, vlinewidth=4,
-                       #values_into_title=None, title_suffix='',
-                       custom_titles=None,
-                       legend_fontsize=24,
-                       plot_legend=True,
-                       xlabel_fontsize=28, ylabel_fontsize=28, title_fontsize=20, tick_fontsize=24,
-                       figsize=(8,6),
-                       savepath=None, save_only=False, show=True, axis=None, return_data=False, fig=None,
-                       dpi_save=300,
-                       smooth=True,
-                       **kwargs
-                       ):
+def expr_along_obs_val(
+    adata: AnnData,
+    keys: str,
+    obs_val: str,
+    groupby: Optional[str] = None,
+    splitby: str = None,
+    hue: str = None,
+    method: Literal["lowess", "loess"] = 'loess',
+    stderr: bool = False,
+    loess_bootstrap: bool = True,
+    n_bootstraps_iterations: int = 100,
+    xmin=None,
+    xmax=None,
+    cmap="tab10",
+    linewidth=8,
+    extra_cats=None,
+    normalize=False,
+    nsteps=100,
+    show_progress=False,
+    use_raw=False,
+    max_cols=4,
+    xlabel=None,ylabel=None,
+    vline=None, hline=None, vlinewidth=4,
+    #values_into_title=None, title_suffix='',
+    custom_titles=None,
+    legend_fontsize=24,
+    plot_legend=True,
+    xlabel_fontsize=28, ylabel_fontsize=28, title_fontsize=20, tick_fontsize=24,
+    figsize=(8,6),
+    savepath: Optional[os.PathLike] = None,
+    save_only: bool = False,
+    show: bool = True,
+    return_data: bool = False,
+    fig: Optional[Figure] = None,
+    axis: Optional[Axes] = None,
+    dpi_save: int = 300,
+    smooth=True,
+    **kwargs
+    ):
     """
     Plot gene expression values along a specified observation category.
 
@@ -110,14 +123,14 @@ def expr_along_obs_val(adata: AnnData,
 
     # remove NaNs `obs_val` column
     adata_obs = adata.obs.copy()
-    not_na_mask = adata_obs[obs_val].notna()
-    adata_obs = adata_obs[not_na_mask]
+    not_na_and_not_zero_mask = adata_obs[obs_val].notna() & adata_obs[obs_val] > 0
+    adata_obs = adata_obs[not_na_and_not_zero_mask]
 
     # check whether to plot raw data
     X, var, var_names = check_raw(adata, use_raw=use_raw)
 
     # remove rows from X which were NaN above
-    X = X[not_na_mask]
+    X = X[not_na_and_not_zero_mask]
 
     if hue is not None:
         hue_cats = list(adata_obs[hue].unique())
@@ -160,8 +173,6 @@ def expr_along_obs_val(adata: AnnData,
 
         added_to_legend = []
 
-
-
         group_collection = {}
         for group in groups:
             #partial = extract_groups(adata, groupby=groupby, groups=group)
@@ -185,6 +196,9 @@ def expr_along_obs_val(adata: AnnData,
             if splitby is None:
                 # select x value
                 x = group_obs.loc[:, obs_val].values
+                # if xmin is None:
+                #     xmin = x[x>0].min()
+                #     print(xmin, flush=True)
 
                 if keys_grouped:
                     # extract expression values of all keys in the group
@@ -212,6 +226,7 @@ def expr_along_obs_val(adata: AnnData,
                     y = group_obs.loc[:, key].values.copy()
                 else:
                     print("Key '{}' not found.".format(key))
+                    break
 
                 if smooth:
                     # do smooth fitting
@@ -236,6 +251,7 @@ def expr_along_obs_val(adata: AnnData,
                 x = group_obs[obs_val].values
                 xmin = x.min()
                 xmax = x.max()
+
                 for split in splits:
                     # extract x values
                     split_mask = group_obs[splitby] == split
@@ -353,9 +369,12 @@ def expr_along_obs_val(adata: AnnData,
                     axs[i].legend().remove()
 
         if return_data:
-            # collect data
-            group_collection = pd.concat(group_collection)
-            data_collection[key] = group_collection
+            if len(group_collection) > 0:
+                # collect data
+                group_collection = pd.concat(group_collection)
+                data_collection[key] = group_collection
+            else:
+                pass
 
 
 
@@ -381,3 +400,40 @@ def expr_along_obs_val(adata: AnnData,
             save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=True)
         else:
             return fig, axs
+
+def cell_abundance_along_obs_val(
+    adata: AnnData,
+    obs_val: str,
+    groupby: Optional[str] = None,
+    xmin: Number = 0,
+    savepath: Optional[os.PathLike] = None,
+    figsize: Tuple = (8,6),
+    save_only: bool = False,
+    dpi_save: int = 300,
+    histplot_multiple: str = "stack",
+    histplot_element: str = "bars"
+    ):
+    # get data for plotting
+    data = adata.obs[[obs_val, groupby]].dropna()
+
+    # remove zeros
+    data = data[data[obs_val] > xmin].copy()
+
+    # Create the histogram
+    fig, ax = plt.subplots(1,1, figsize=(figsize[0], figsize[1]))
+    h = sns.histplot(data=data, x=obs_val,
+                hue=groupby, palette=DEFAULT_CATEGORICAL_CMAP.colors,
+                multiple=histplot_multiple, element=histplot_element,
+                alpha=1, ax=ax
+                )
+
+    # Move the legend outside of the plot
+    sns.move_legend(h, "upper left", bbox_to_anchor=(1, 1))
+
+    # save or show figure
+    save_and_show_figure(savepath=savepath,
+                         fig=h.get_figure(),
+                         save_only=save_only,
+                         dpi_save=dpi_save,
+                         tight=True
+                         )

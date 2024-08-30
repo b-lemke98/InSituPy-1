@@ -1,1 +1,2 @@
-from .expression_along_axis import expr_along_obs_val
+from .expression_along_axis import (cell_abundance_along_obs_val,
+                                    expr_along_obs_val)
