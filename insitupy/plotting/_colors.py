@@ -8,7 +8,7 @@ from matplotlib.colors import ListedColormap
 from pandas.api.types import is_numeric_dtype
 
 from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
-from insitupy.utils.palettes import CustomPalettes
+from insitupy.palettes import CustomPalettes
 
 
 def create_cmap_mapping(data, cmap: Union[str, ListedColormap] = None):

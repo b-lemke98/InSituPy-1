@@ -15,7 +15,7 @@ from insitupy import WITH_NAPARI
 from insitupy._constants import (DEFAULT_CATEGORICAL_CMAP, POINTS_SYMBOL,
                                  REGION_CMAP, REGIONS_SYMBOL, SHAPES_SYMBOL)
 from insitupy.plotting._colors import _data_to_rgba, _determine_climits
-from insitupy.utils.palettes import CustomPalettes
+from insitupy.palettes import CustomPalettes
 
 from ._checks import check_rgb_column
 
