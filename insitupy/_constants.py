@@ -34,3 +34,6 @@ REGIONS_SYMBOL = "\U0001F30D" # 🌍
 palettes = CustomPalettes()
 DEFAULT_CATEGORICAL_CMAP = palettes.tab20_mod
 REGION_CMAP = matplotlib.colormaps["tab10"]
+
+# annotations
+FORBIDDEN_ANNOTATION_NAMES = ["rest"]

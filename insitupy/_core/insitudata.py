@@ -10,6 +10,7 @@ from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 from warnings import warn
 
+import anndata
 import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
@@ -17,6 +18,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
+from anndata._core.anndata import AnnData
 from dask_image.imread import imread
 from geopandas import GeoDataFrame
 from parse import *
@@ -27,6 +29,8 @@ from tqdm import tqdm
 
 from insitupy import WITH_NAPARI, __version__
 from insitupy._constants import ISPY_METADATA_FILE, REGIONS_SYMBOL
+from insitupy._core._checks import (_check_annotations_assignment,
+                                    _substitution_func)
 from insitupy._core._save import _save_images
 from insitupy._core._xenium import (_read_binned_expression,
                                     _read_boundaries_from_xenium,
@@ -38,9 +42,12 @@ from insitupy.io.files import read_json, write_dict_to_json
 from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_celldata, read_shapesdata)
 from insitupy.io.plots import save_and_show_figure
+from insitupy.plotting import volcano_plot
+from insitupy.utils import create_deg_dataframe
+from insitupy.utils.deg import create_deg_dataframe
 from insitupy.utils.preprocessing import (normalize_anndata,
                                           reduce_dimensions_anndata)
-from insitupy.utils.utils import get_nrows_maxcols
+from insitupy.utils.utils import convert_to_list, get_nrows_maxcols
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
 from .._exceptions import (ModalityNotFoundError, NotOneElementError,
@@ -184,9 +191,10 @@ class InSituData:
             pass
 
     def assign_geometries(self,
-                          modality: Literal["annotations", "regions"],
+                          geometry_type: Literal["annotations", "regions"],
                           keys: Union[str, Literal["all"]] = "all",
                           add_masks: bool = False,
+                          add_to_obs: bool = False,
                           overwrite: bool = True
                           ):
         '''
@@ -195,9 +203,9 @@ class InSituData:
         '''
         # assert that prerequisites are met
         try:
-            geom_attr = getattr(self, modality)
+            geom_attr = getattr(self, geometry_type)
         except AttributeError:
-            raise ModalityNotFoundError(modality=modality)
+            raise ModalityNotFoundError(modality=geometry_type)
 
         try:
             cell_attr = self.cells
@@ -225,7 +233,7 @@ class InSituData:
             geom_names = geom_df.name.unique()
 
             # initiate dataframe as dictionary
-            df = {}
+            data = {}
 
             # iterate through names
             for n in geom_names:
@@ -244,34 +252,50 @@ class InSituData:
                 in_poly_res = np.array(in_poly).any(axis=0)
 
                 # collect results
-                df[n] = in_poly_res
+                data[n] = in_poly_res
 
             # convert into pandas dataframe
-            df = pd.DataFrame(df)
-            df.index = cell_attr.matrix.obs_names
+            data = pd.DataFrame(data)
+            data.index = cell_attr.matrix.obs_names
 
-            # create annotation from annotation masks
-            col_name = f"{modality}-{key}"
-            df[col_name] = [" & ".join(geom_names[row.values]) if np.any(row.values) else np.nan for i, row in df.iterrows()]
+            # transform data into one column
+            column_to_add = [" & ".join(geom_names[row.values]) if np.any(row.values) else "unassigned" for _, row in data.iterrows()]
 
-            add = True
-            if col_name in self.cells.matrix.obs:
-                if overwrite:
-                    self.cells.matrix.obs.drop(col_name, axis=1, inplace=True)
-                    print(f'Existing column "{col_name}" is overwritten.', flush=True)
-                    add = True
-                else:
-                    warn(f'Column "{col_name}" exists already in `xd.cells.matrix.obs`. Assignment of key "{key}" was skipped. To force assignment, select `overwrite=True`.')
-                    add = False
+            if add_to_obs:
+                # create annotation from annotation masks
+                col_name = f"{geometry_type}-{key}"
+                data[col_name] = column_to_add
 
-            if add:
-                if add_masks:
-                    self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df, left_index=True, right_index=True)
-                else:
-                    self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=df.iloc[:, -1], left_index=True, right_index=True)
+                if col_name in self.cells.matrix.obs:
+                    if overwrite:
+                        self.cells.matrix.obs.drop(col_name, axis=1, inplace=True)
+                        print(f'Existing column "{col_name}" is overwritten.', flush=True)
+                        add = True
+                    else:
+                        warn(f'Column "{col_name}" exists already in `xd.cells.matrix.obs`. Assignment of key "{key}" was skipped. To force assignment, select `overwrite=True`.')
+                        add = False
+
+                if add:
+                    if add_masks:
+                        self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=data, left_index=True, right_index=True)
+                    else:
+                        self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=data.iloc[:, -1], left_index=True, right_index=True)
+
+                    # save that the current key was analyzed
+                    geom_attr.metadata[key]["analyzed"] = tf.TICK
+            else:
+                # add to obsm
+                obsm_keys = self.cells.matrix.obsm.keys()
+                if geometry_type not in obsm_keys:
+                    # add empty pandas dataframe with obs_names as index
+                    self.cells.matrix.obsm[geometry_type] = pd.DataFrame(index=self.cells.matrix.obs_names)
+
+                self.cells.matrix.obsm[geometry_type][key] = column_to_add
 
                 # save that the current key was analyzed
                 geom_attr.metadata[key]["analyzed"] = tf.TICK
+
+                print(f"Added results to `.cells.matrix.obsm[{geometry_type}]", flush=True)
 
     def assign_annotations(
         self,
@@ -280,7 +304,7 @@ class InSituData:
         overwrite: bool = True
     ):
         self.assign_geometries(
-            modality="annotations",
+            geometry_type="annotations",
             keys=keys,
             add_masks=add_masks,
             overwrite=overwrite
@@ -293,7 +317,7 @@ class InSituData:
         overwrite: bool = True
     ):
         self.assign_geometries(
-            modality="regions",
+            geometry_type="regions",
             keys=keys,
             add_masks=add_masks,
             overwrite=overwrite
@@ -927,13 +951,14 @@ class InSituData:
         except AttributeError:
             raise ModalityNotFoundError(modality="cells")
 
-        reduce_dimensions_anndata(adata=cells.matrix,
-                                  umap=umap, tsne=tsne,
-                                  batch_correction_key=batch_correction_key,
-                                  perform_clustering=perform_clustering,
-                                  verbose=verbose,
-                                  tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
-                                  )
+        reduce_dimensions_anndata(
+            adata=cells.matrix,
+            umap=umap, tsne=tsne,
+            batch_correction_key=batch_correction_key,
+            perform_clustering=perform_clustering,
+            verbose=verbose,
+            tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
+            )
 
         try:
             alt = self.alt
@@ -943,13 +968,14 @@ class InSituData:
             print("Found `.alt` modality.")
             for k, cells in alt.items():
                 print(f"\tReducing dimensions in `.alt['{k}']...")
-                reduce_dimensions_anndata(adata=cells.matrix,
-                                        umap=umap, tsne=tsne,
-                                        batch_correction_key=batch_correction_key,
-                                        perform_clustering=perform_clustering,
-                                        verbose=verbose,
-                                        tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
-                                        )
+                reduce_dimensions_anndata(
+                    adata=cells.matrix,
+                    umap=umap, tsne=tsne,
+                    batch_correction_key=batch_correction_key,
+                    perform_clustering=perform_clustering,
+                    verbose=verbose,
+                    tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
+                    )
 
 
     def saveas(self,
@@ -1318,7 +1344,7 @@ class InSituData:
             pixel_size = 1
 
         # create viewer
-        self.viewer = napari.Viewer()
+        self.viewer = napari.Viewer(title=f"{self.slide_id}: {self.sample_id}")
 
         try:
             image_keys = self.images.metadata.keys()
@@ -2082,3 +2108,125 @@ def calc_distance_of_cells_from(
         key_to_save = f"dist_from_{annotation_class}"
     data.cells.matrix.obs[key_to_save] = min_dists
     print(f'Save distances to `.cells.matrix.obs["{key_to_save}"]`')
+
+
+def differential_gene_expression(
+    data: InSituData,
+    annotation_tuple: Union[Tuple[str, str], Tuple[str, str]], # tuple of annotation key and names
+    reference_data: Optional[InSituData] = None, # if comparing across two InSituData objects this argument can be used
+    reference_tuple: Union[Literal["rest"], Tuple[str, str], Tuple[str, str]] = "rest",
+    region_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
+    # reference: str = "rest",
+    plot_volcano: bool = True,
+    comb_col_name: str = "combined_annotation_column",
+    method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
+    ignore_duplicate_assignments: bool = False,
+    **kwargs
+    ):
+    # extract annotation information
+    annotation_key = annotation_tuple[0]
+    annotation_name = annotation_tuple[1]
+
+    # extract information from reference tuple
+    if reference_tuple == "rest":
+        assert reference_data is None, "If `reference_tuple` is 'rest', `reference_data` must be None."
+        reference_key = None
+        reference_name = "rest"
+    elif isinstance(reference_tuple, tuple) & (len(reference_tuple) == 2):
+        reference_key = reference_tuple[0]
+        reference_name = reference_tuple[1]
+    else:
+        raise ValueError("`reference_tuple` is neither 'rest' nor a 2-tuple.")
+
+    _check_annotations_assignment(data=data, annotation_key=annotation_key)
+
+    # extract main anndata
+    adata1 = data.cells.matrix.copy()
+
+    # check if the reference needs to be checked
+    check_reference = True if reference_data is None else False
+
+    col_with_id = adata1.obsm["annotations"].apply(
+        func=lambda row: _substitution_func(
+            row=row,
+            annotation_key=annotation_key,
+            annotation_name=annotation_name,
+            reference_name=reference_name,
+            check_reference=check_reference,
+            ignore_duplicate_assignments=ignore_duplicate_assignments
+            ), axis=1
+        )
+    # mark the annotations with 1 or 2 depending if it is adata1 or adata2
+    if reference_data is not None:
+        # add a 1- in front of the annotation to differentiate it later from the reference data
+        col_with_id = col_with_id.apply(func=lambda x: f"1-{x}")
+
+    # add the column to obs
+    adata1.obs[comb_col_name] = col_with_id
+
+    # check if there is reference data
+    if reference_data is not None:
+        if reference_tuple is None:
+            reference_tuple = annotation_tuple
+
+        _check_annotations_assignment(data=reference_data, annotation_key=reference_key)
+
+        # extract reference anndata
+        adata2 = reference_data.cells.matrix.copy()
+        # repeat the same as for adata1 for adata2
+        col_with_id_ref = adata2.obsm["annotations"].apply(
+            func=lambda row: _substitution_func(
+                row=row,
+                annotation_key=annotation_key,
+                annotation_name=reference_name,
+                reference_name=None,
+                check_reference=check_reference,
+                ignore_duplicate_assignments=ignore_duplicate_assignments
+                ), axis=1
+            )
+        col_with_id_ref = col_with_id_ref.apply(func=lambda x: f"2-{x}")
+
+        # add column to obs
+        adata2.obs[comb_col_name] = col_with_id_ref
+
+        # combine anndatas
+        adata_combined = anndata.concat([adata1, adata2])
+
+        # create settings for rank_genes_groups
+        rgg_groups = [f"1-{annotation_name}"]
+        rgg_reference = f"2-{reference_name}"
+
+        # create plot title for later
+        plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {reference_data.sample_id}"
+
+    else:
+        adata_combined = adata1
+        rgg_groups = [annotation_name]
+        rgg_reference = reference_name
+
+        plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {data.sample_id}"
+
+    # add column to .obs for its use in rank_genes_groups()
+    adata_combined.obs = adata_combined.obs.filter([comb_col_name]) # empty obs
+    #adata_combined.obs[comb_col_name] = adata_combined.obsm["annotations"][comb_col_name]
+    print(f"Calculate differentially expressed genes with Scanpy's `rank_genes_groups` using '{method}'.")
+    sc.tl.rank_genes_groups(adata=adata_combined,
+                            groupby=comb_col_name,
+                            groups=rgg_groups,
+                            reference=rgg_reference,
+                            method=method,
+                            )
+
+    # create dataframe from results
+    df = create_deg_dataframe(
+        adata=adata_combined, groups=None,
+    )
+
+    if plot_volcano:
+        volcano_plot(
+            data=df[rgg_groups[0]],
+            title=plot_title,
+            **kwargs
+            )
+    else:
+        return df
