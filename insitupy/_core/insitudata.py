@@ -2115,12 +2115,14 @@ def differential_gene_expression(
     annotation_tuple: Union[Tuple[str, str], Tuple[str, str]], # tuple of annotation key and names
     reference_data: Optional[InSituData] = None, # if comparing across two InSituData objects this argument can be used
     reference_tuple: Union[Literal["rest"], Tuple[str, str], Tuple[str, str]] = "rest",
+    obs_tuple: Optional[Tuple[str, str]] = None,
     region_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
     # reference: str = "rest",
     plot_volcano: bool = True,
     comb_col_name: str = "combined_annotation_column",
     method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
     ignore_duplicate_assignments: bool = False,
+    force_assignment: bool = False,
     **kwargs
     ):
     # extract annotation information
@@ -2138,7 +2140,7 @@ def differential_gene_expression(
     else:
         raise ValueError("`reference_tuple` is neither 'rest' nor a 2-tuple.")
 
-    _check_annotations_assignment(data=data, annotation_key=annotation_key)
+    _check_annotations_assignment(data=data, annotation_key=annotation_key, force_assignment=force_assignment)
 
     # extract main anndata
     adata1 = data.cells.matrix.copy()
@@ -2205,6 +2207,10 @@ def differential_gene_expression(
         rgg_reference = reference_name
 
         plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {data.sample_id}"
+
+    if obs_tuple is not None:
+        # filter for observation value
+        adata_combined = adata_combined[adata_combined.obs[obs_tuple[0]] == obs_tuple[1]].copy()
 
     # add column to .obs for its use in rank_genes_groups()
     adata_combined.obs = adata_combined.obs.filter([comb_col_name]) # empty obs

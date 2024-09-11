@@ -301,8 +301,16 @@ class ShapesData(DeepCopyMixin, GetMixin):
         self._update_metadata()
 
     def remove_data(self,
-                   key_to_remove: str):
-        delattr(self, key_to_remove)
+                   key_to_remove: str,
+                   classes_to_remove: Union[Literal["all"], List[str], str] = "all"
+                   ):
+        if classes_to_remove == "all":
+            delattr(self, key_to_remove)
+        else:
+            classes_to_remove = convert_to_list(classes_to_remove)
+            geom_df = self.get(key_to_remove)
+            setattr(self, key_to_remove, geom_df[~geom_df.name.isin(classes_to_remove)])
+
         self._update_metadata()
 
     def save(self,

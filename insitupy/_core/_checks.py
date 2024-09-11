@@ -127,7 +127,7 @@ def check_rgb_column(df, column_name):
 
 
 def _check_annotations_assignment(
-    data, annotation_key
+    data, annotation_key, force_assignment
 ):
     try:
         annotation_columns = data.cells.matrix.obsm["annotations"].columns
@@ -139,7 +139,7 @@ def _check_annotations_assignment(
         else:
             do_assignment = True
 
-    if do_assignment:
+    if do_assignment or force_assignment:
         # assign annotations
         data.assign_annotations(keys=annotation_key)
     else:
