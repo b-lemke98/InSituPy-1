@@ -29,8 +29,7 @@ from tqdm import tqdm
 
 from insitupy import WITH_NAPARI, __version__
 from insitupy._constants import ISPY_METADATA_FILE, REGIONS_SYMBOL
-from insitupy._core._checks import (_check_annotations_assignment,
-                                    _substitution_func)
+from insitupy._core._checks import _check_assignment, _substitution_func
 from insitupy._core._save import _save_images
 from insitupy._core._xenium import (_read_binned_expression,
                                     _read_boundaries_from_xenium,
@@ -2140,13 +2139,29 @@ def differential_gene_expression(
     else:
         raise ValueError("`reference_tuple` is neither 'rest' nor a 2-tuple.")
 
-    _check_annotations_assignment(data=data, annotation_key=annotation_key, force_assignment=force_assignment)
+    _check_assignment(data=data, key=annotation_key, force_assignment=force_assignment, modality="annotations")
+
+    # check if the reference needs to be checked
+    check_reference_during_substitution = True if reference_data is None else False
+
+    if region_tuple is not None:
+        assert reference_data is None, "If `reference_data` is not None, `region_tuple` must be None."
+
+        region_key = region_tuple[0]
+        region_name = region_tuple[1]
+
+        # assign region
+        _check_assignment(data=data, key=region_key, force_assignment=force_assignment, modality="regions")
 
     # extract main anndata
     adata1 = data.cells.matrix.copy()
 
-    # check if the reference needs to be checked
-    check_reference = True if reference_data is None else False
+    if region_tuple is not None:
+        # select only one region
+        region_mask = [region_name in elem for elem in adata1.obsm["regions"][region_key]]
+
+        print(f"Select only region '{region_name}' from key '{region_key}'.", flush=True)
+        adata1 = adata1[region_mask].copy()
 
     col_with_id = adata1.obsm["annotations"].apply(
         func=lambda row: _substitution_func(
@@ -2154,10 +2169,14 @@ def differential_gene_expression(
             annotation_key=annotation_key,
             annotation_name=annotation_name,
             reference_name=reference_name,
-            check_reference=check_reference,
+            check_reference=check_reference_during_substitution,
             ignore_duplicate_assignments=ignore_duplicate_assignments
             ), axis=1
         )
+
+    # check that the annotation_name exists inside the column
+    assert np.any(col_with_id == annotation_name), f"annotation_name '{annotation_name}' not found under annotation_key '{annotation_key}'."
+
     # mark the annotations with 1 or 2 depending if it is adata1 or adata2
     if reference_data is not None:
         # add a 1- in front of the annotation to differentiate it later from the reference data
@@ -2166,12 +2185,12 @@ def differential_gene_expression(
     # add the column to obs
     adata1.obs[comb_col_name] = col_with_id
 
-    # check if there is reference data
     if reference_data is not None:
+        # process reference_data if it is not None
         if reference_tuple is None:
             reference_tuple = annotation_tuple
 
-        _check_annotations_assignment(data=reference_data, annotation_key=reference_key)
+        _check_assignment(data=reference_data, key=reference_key, force_assignment=force_assignment, modality="annotations")
 
         # extract reference anndata
         adata2 = reference_data.cells.matrix.copy()
@@ -2179,14 +2198,17 @@ def differential_gene_expression(
         col_with_id_ref = adata2.obsm["annotations"].apply(
             func=lambda row: _substitution_func(
                 row=row,
-                annotation_key=annotation_key,
+                annotation_key=reference_key,
                 annotation_name=reference_name,
                 reference_name=None,
-                check_reference=check_reference,
+                check_reference=check_reference_during_substitution,
                 ignore_duplicate_assignments=ignore_duplicate_assignments
                 ), axis=1
             )
         col_with_id_ref = col_with_id_ref.apply(func=lambda x: f"2-{x}")
+
+        # check that the reference_name exists inside the column
+        assert np.any(col_with_id_ref == reference_name), f"reference_name '{reference_name}' not found under reference_key '{reference_key}'."
 
         # add column to obs
         adata2.obs[comb_col_name] = col_with_id_ref

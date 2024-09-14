@@ -1,3 +1,5 @@
+from typing import Literal
+
 import anndata
 import numpy as np
 from scipy.sparse import issparse
@@ -126,24 +128,28 @@ def check_rgb_column(df, column_name):
     return df[column_name].apply(is_valid_rgb_tuple).all()
 
 
-def _check_annotations_assignment(
-    data, annotation_key, force_assignment
+def _check_assignment(
+    data, key, force_assignment, modality: Literal["annotations", "regions"]
 ):
     try:
-        annotation_columns = data.cells.matrix.obsm["annotations"].columns
+        column = data.cells.matrix.obsm[modality].columns
     except KeyError:
         do_assignment = True
     else:
-        if annotation_key in annotation_columns:
+        if key in column:
             do_assignment = False
         else:
             do_assignment = True
 
     if do_assignment or force_assignment:
-        # assign annotations
-        data.assign_annotations(keys=annotation_key)
+        if modality == "annotations":
+            # assign annotations
+            data.assign_annotations(keys=key)
+        elif modality == "regions":
+            # assign regions
+            data.assign_regions(keys=key)
     else:
-        print(f"Annotations with key '{annotation_key} have already been assigned to `data`.")
+        print(f"{modality.capitalize()} with key '{key} have already been assigned to `data`.")
 
 
 def _substitution_func(
