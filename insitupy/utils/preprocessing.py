@@ -8,7 +8,7 @@ from scipy.sparse import csr_matrix
 from insitupy import __version__
 from insitupy.utils._scanorama import scanorama
 
-from .._core._checks import check_raw
+from .._core._checks import check_integer_counts
 
 
 def normalize_anndata(adata,
@@ -16,7 +16,7 @@ def normalize_anndata(adata,
               verbose: bool = True
               ) -> None:
     # check if the matrix consists of raw integer counts
-    check_raw(adata.X)
+    check_integer_counts(adata.X)
 
     # store raw counts in layer
     print("Store raw counts in anndata.layers['counts']...") if verbose else None
