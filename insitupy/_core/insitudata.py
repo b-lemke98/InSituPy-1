@@ -912,6 +912,7 @@ class InSituData:
     def reduce_dimensions(self,
                         umap: bool = True,
                         tsne: bool = True,
+                        layer: Optional[str] = None,
                         batch_correction_key: Optional[str] = None,
                         perform_clustering: bool = True,
                         verbose: bool = True,
@@ -927,6 +928,8 @@ class InSituData:
                 If True, perform UMAP dimensionality reduction. Default is True.
             tsne (bool, optional):
                 If True, perform t-SNE dimensionality reduction. Default is True.
+            layer (str, optional): 
+                Specifies the layer of the AnnData object to operate on. Default is None (uses adata.X).
             batch_correction_key (str, optional):
                 Batch key for performing batch correction using scanorama. Default is None, indicating no batch correction.
             verbose (bool, optional):
@@ -950,14 +953,13 @@ class InSituData:
         except AttributeError:
             raise ModalityNotFoundError(modality="cells")
 
-        reduce_dimensions_anndata(
-            adata=cells.matrix,
-            umap=umap, tsne=tsne,
-            batch_correction_key=batch_correction_key,
-            perform_clustering=perform_clustering,
-            verbose=verbose,
-            tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
-            )
+        reduce_dimensions_anndata(adata=cells.matrix,
+                                  umap=umap, tsne=tsne, layer=layer, 
+                                  batch_correction_key=batch_correction_key,
+                                  perform_clustering=perform_clustering,
+                                  verbose=verbose,
+                                  tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
+                                  )
 
         try:
             alt = self.alt
@@ -967,15 +969,14 @@ class InSituData:
             print("Found `.alt` modality.")
             for k, cells in alt.items():
                 print(f"\tReducing dimensions in `.alt['{k}']...")
-                reduce_dimensions_anndata(
-                    adata=cells.matrix,
-                    umap=umap, tsne=tsne,
-                    batch_correction_key=batch_correction_key,
-                    perform_clustering=perform_clustering,
-                    verbose=verbose,
-                    tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
-                    )
 
+                reduce_dimensions_anndata(adata=cells.matrix,
+                                        umap=umap, tsne=tsne, layer=layer,
+                                        batch_correction_key=batch_correction_key,
+                                        perform_clustering=perform_clustering,
+                                        verbose=verbose,
+                                        tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
+                                        )
 
     def saveas(self,
             path: Union[str, os.PathLike, Path],
