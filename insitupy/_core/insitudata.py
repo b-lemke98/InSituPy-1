@@ -928,7 +928,7 @@ class InSituData:
                 If True, perform UMAP dimensionality reduction. Default is True.
             tsne (bool, optional):
                 If True, perform t-SNE dimensionality reduction. Default is True.
-            layer (str, optional): 
+            layer (str, optional):
                 Specifies the layer of the AnnData object to operate on. Default is None (uses adata.X).
             batch_correction_key (str, optional):
                 Batch key for performing batch correction using scanorama. Default is None, indicating no batch correction.
@@ -954,7 +954,7 @@ class InSituData:
             raise ModalityNotFoundError(modality="cells")
 
         reduce_dimensions_anndata(adata=cells.matrix,
-                                  umap=umap, tsne=tsne, layer=layer, 
+                                  umap=umap, tsne=tsne, layer=layer,
                                   batch_correction_key=batch_correction_key,
                                   perform_clustering=perform_clustering,
                                   verbose=verbose,
