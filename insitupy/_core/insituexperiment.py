@@ -17,9 +17,10 @@ class InSituExperiment:
             age (int): Age of the patient.
             sex (str): Sex of the patient.
         """
-        self._metadata = pd.DataFrame(columns=['sample_id', 'slide_id'])
-        self._data = {}
-        self._key_pattern = "{slide_id}__{sample_id}"
+        self._metadata = pd.DataFrame(columns=['slide_id', 'sample_id'])
+        #self._data = {}
+        self._data = []
+        #self._key_pattern = "{slide_id}__{sample_id}"
 
     @property
     def data(self):
@@ -62,15 +63,16 @@ class InSituExperiment:
         assert isinstance(dataset, insitupy.InSituData), "Loaded dataset is not an InSituData object."
 
         # Use the combination of slide_id and sample_id as the key
-        key = self._key_pattern.format(slide_id=dataset.slide_id, sample_id=dataset.sample_id)
+        #key = self._key_pattern.format(slide_id=dataset.slide_id, sample_id=dataset.sample_id)
 
-        # Add the dataset to the data dictionary
-        self._data[key] = dataset
+        # Add the dataset to the data collection
+        #self._data[key] = dataset
+        self._data.append(dataset)
 
         # Create a new DataFrame for the new metadata
         new_metadata = {
-            'sample_id': dataset.sample_id,
-            'slide_id': dataset.slide_id
+            'slide_id': dataset.slide_id,
+            'sample_id': dataset.sample_id
         }
 
         if metadata is not None:
@@ -98,11 +100,25 @@ class InSituExperiment:
         Raises:
             KeyError: If the key does not exist in the data dictionary.
         """
-        key = self._key_pattern.format(slide_id=slide_id, sample_id=sample_id)
+        # key = self._key_pattern.format(slide_id=slide_id, sample_id=sample_id)
 
-        if key not in self._data:
-            raise KeyError(f"Dataset with key '{key}' not found.")
-        return self._data[key]
+        # if key not in self._data:
+        #     raise KeyError(f"Dataset with key '{key}' not found.")
+        # return self._data[key]
+
+        slide_mask = self._metadata["slide_id"] == slide_id
+        sample_mask = self._metadata["sample_id"] == sample_id
+        query_result = self._metadata[slide_mask & sample_mask]
+
+        if len(query_result) == 1:
+            index = query_result.index[0]
+            return self.iget(index)
+        elif len(query_result) == 0:
+            print(f"No dataset with slide_id '{slide_id}' and sample_id '{sample_id}' found.")
+        else:
+            print("More than one possible dataset found. Query result:")
+            print(query_result)
+
 
     def iget(self,
              index: int
@@ -118,7 +134,8 @@ class InSituExperiment:
         Raises:
             IndexError: If the index is out of bounds.
         """
-        if index < 0 or index >= len(self._metadata):
-            raise IndexError("Index out of bounds.")
-        slide_id, sample_id = self._metadata.iloc[0][["slide_id", "sample_id"]]
-        return self.get(slide_id=slide_id, sample_id=sample_id)
+        # if index < 0 or index >= len(self._metadata):
+        #     raise IndexError("Index out of bounds.")
+        # slide_id, sample_id = self._metadata.iloc[index][["slide_id", "sample_id"]]
+        # return self.get(slide_id=slide_id, sample_id=sample_id)
+        return self._data[index]

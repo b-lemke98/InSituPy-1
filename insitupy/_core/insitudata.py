@@ -829,6 +829,8 @@ class InSituData:
             else:
                 img_names = convert_to_list(names)
 
+            print(img_names)
+
             # get file paths and names
             img_files = [v for k,v in self.metadata["data"]["images"].items() if k in img_names]
             img_names = [k for k,v in self.metadata["data"]["images"].items() if k in img_names]
