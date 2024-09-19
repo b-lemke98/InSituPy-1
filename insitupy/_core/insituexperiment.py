@@ -1,9 +1,12 @@
+import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import pandas as pd
 
 import insitupy
+from insitupy._constants import LOAD_FUNCS
+from insitupy.utils.utils import textformat as tf
 
 
 class InSituExperiment:
@@ -11,16 +14,20 @@ class InSituExperiment:
         """
         Initialize an InSituExperiment object.
 
-        Args:
-            patient_id (str): Unique identifier for the patient.
-            disease (str): Disease associated with the experiment.
-            age (int): Age of the patient.
-            sex (str): Sex of the patient.
         """
         self._metadata = pd.DataFrame(columns=['slide_id', 'sample_id'])
-        #self._data = {}
         self._data = []
-        #self._key_pattern = "{slide_id}__{sample_id}"
+
+    def __repr__(self):
+        """Provide a string representation of the InSituExperiment object.
+
+        Returns:
+            str: A string summarizing the InSituExperiment object.
+        """
+        num_samples = len(self._metadata)
+        sample_summary = self._metadata.to_string(index=True, col_space=4)
+        return (f"{tf.Bold}InSituExperiment{tf.ResetAll} with {num_samples} samples:\n"
+                f"{sample_summary}")
 
     @property
     def data(self):
@@ -41,13 +48,13 @@ class InSituExperiment:
         return self._metadata
 
     def add(self,
-            data: insitupy.InSituData,
+            data: Union[str, os.PathLike, Path, insitupy.InSituData],
             metadata: Optional[dict] = None
             ):
         """Add a dataset to the experiment and update metadata.
 
         Args:
-            dataset (Dataset): A dataset object to be added.
+            dataset (InSituData): A InSituData object to be added.
 
         Raises:
             TypeError: If the dataset is not an instance of the Dataset class.
@@ -139,3 +146,37 @@ class InSituExperiment:
         # slide_id, sample_id = self._metadata.iloc[index][["slide_id", "sample_id"]]
         # return self.get(slide_id=slide_id, sample_id=sample_id)
         return self._data[index]
+
+    def load_all(self,
+                 skip: Optional[str] = None,
+                 ):
+        for f in LOAD_FUNCS:
+            if skip is None or skip not in f:
+                func = getattr(self, f)
+                try:
+                    func()
+                except ModalityNotFoundError as err:
+                    print(err)
+
+    def save(self, path: Union[str, os.PathLike, Path], overwrite: bool = False):
+        """Save all datasets to a specified folder.
+
+        Args:
+            path (Union[str, os.PathLike, Path]): The path to the folder where datasets will be saved.
+        """
+        # Create the main directory if it doesn't exist
+        path = Path(path)
+        path.mkdir(exist_ok=True)
+
+        # check overwrite
+        check_overwrite_and_remove_if_true(path=path, overwrite=overwrite)
+
+        # Iterate over the datasets and save each one in a numbered subfolder
+        for index, dataset in enumerate(self._data):
+            subfolder_path = path / str(index)
+            dataset.saveas(subfolder_path)
+
+        # Optionally, save the metadata as a CSV file
+        metadata_path = os.path.join(path, "metadata.csv")
+        self._metadata.to_csv(metadata_path, index=True)
+

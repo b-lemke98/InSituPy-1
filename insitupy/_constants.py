@@ -15,6 +15,13 @@ CACHE = Path.home() / ".cache/InSituPy/"
 
 # modalities
 MODALITIES = ["annotations", "cells", "images", "regions", "transcripts"]
+LOAD_FUNCS = [
+    'load_annotations',
+    'load_cells',
+    'load_images',
+    'load_regions',
+    'load_transcripts'
+    ]
 
 # naming
 ISPY_METADATA_FILE = ".ispy"

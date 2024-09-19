@@ -28,7 +28,7 @@ from shapely.affinity import scale as scale_func
 from tqdm import tqdm
 
 from insitupy import WITH_NAPARI, __version__
-from insitupy._constants import ISPY_METADATA_FILE, REGIONS_SYMBOL
+from insitupy._constants import ISPY_METADATA_FILE, LOAD_FUNCS, REGIONS_SYMBOL
 from insitupy._core._checks import _check_assignment, _substitution_func
 from insitupy._core._save import _save_images
 from insitupy._core._xenium import (_read_binned_expression,
@@ -683,11 +683,11 @@ class InSituData:
     def load_all(self,
                  skip: Optional[str] = None,
                  ):
-        # extract read functions
-        read_funcs = [elem for elem in dir(self) if elem.startswith("load_")]
-        read_funcs = [elem for elem in read_funcs if elem not in ["load_all", "load_quicksave"]]
+        # # extract read functions
+        # read_funcs = [elem for elem in dir(self) if elem.startswith("load_")]
+        # read_funcs = [elem for elem in read_funcs if elem not in ["load_all", "load_quicksave"]]
 
-        for f in read_funcs:
+        for f in LOAD_FUNCS:
             if skip is None or skip not in f:
                 func = getattr(self, f)
                 try:
@@ -1865,7 +1865,7 @@ def register_images(
         image = image[0]
 
     # read images in XeniumData object
-    data.load_images(names=template_image_name)
+    data.load_images(names=template_image_name, load_cell_segmentation_images=False)
     template = data.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
 
     # extract OME metadata
