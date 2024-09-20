@@ -985,7 +985,8 @@ class InSituData:
             overwrite: bool = False,
             zip_output: bool = False,
             images_as_zarr: bool = True,
-            zarr_zipped: bool = False
+            zarr_zipped: bool = False,
+            verbose: bool = True
             ):
         '''
         Function to save the XeniumData object.
@@ -1003,7 +1004,7 @@ class InSituData:
             zippath = path / (path.stem + ".zip")
             check_overwrite_and_remove_if_true(path=zippath, overwrite=overwrite)
 
-        print(f"Saving data to {str(path)}")
+        print(f"Saving data to {str(path)}") if verbose else None
 
         # create output directory if it does not exist yet
         path.mkdir(parents=True, exist_ok=True)
@@ -1106,7 +1107,7 @@ class InSituData:
             shutil.make_archive(path, 'zip', path, verbose=False)
             shutil.rmtree(path) # delete directory
 
-        print("Saved.")
+        print("Saved.") if verbose else None
 
     def save(self,
              path: Optional[Union[str, os.PathLike, Path]] = None,
