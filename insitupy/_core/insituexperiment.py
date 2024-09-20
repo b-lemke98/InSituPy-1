@@ -1,11 +1,14 @@
 import os
 from pathlib import Path
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 import pandas as pd
 
 import insitupy
 from insitupy._constants import LOAD_FUNCS
+from insitupy._exceptions import ModalityNotFoundError
+from insitupy.io.files import check_overwrite_and_remove_if_true
+from insitupy.utils.utils import convert_to_list
 from insitupy.utils.utils import textformat as tf
 
 
@@ -28,6 +31,37 @@ class InSituExperiment:
         sample_summary = self._metadata.to_string(index=True, col_space=4)
         return (f"{tf.Bold}InSituExperiment{tf.ResetAll} with {num_samples} samples:\n"
                 f"{sample_summary}")
+
+    def __getitem__(self, key):
+        """Retrieve a subset of the experiment.
+
+        Args:
+            key (int, slice, list, pd.Series): The index, slice, list, or boolean Series to retrieve.
+
+        Returns:
+            InSituExperiment: A new InSituExperiment object with the selected subset.
+        """
+        if isinstance(key, int):
+            key = slice(key, key + 1)
+        elif isinstance(key, list) and all(isinstance(i, bool) for i in key):
+            key = pd.Series(key)
+        if isinstance(key, pd.Series) and key.dtype == bool:
+            new_experiment = InSituExperiment()
+            new_experiment._data = [d for d, k in zip(self._data, key) if k]
+            new_experiment._metadata = self._metadata[key].reset_index(drop=True)
+        else:
+            new_experiment = InSituExperiment()
+            new_experiment._data = self._data[key]
+            new_experiment._metadata = self._metadata.iloc[key].reset_index(drop=True)
+        return new_experiment
+
+    def __len__(self):
+        """Return the number of datasets in the experiment.
+
+        Returns:
+            int: The number of datasets.
+        """
+        return len(self._data)
 
     @property
     def data(self):
@@ -150,15 +184,103 @@ class InSituExperiment:
     def load_all(self,
                  skip: Optional[str] = None,
                  ):
-        for f in LOAD_FUNCS:
-            if skip is None or skip not in f:
-                func = getattr(self, f)
-                try:
-                    func()
-                except ModalityNotFoundError as err:
-                    print(err)
+        for xd in self._data:
+            print(xd.sample_id)
+            for f in LOAD_FUNCS:
+                if skip is None or skip not in f:
+                    func = getattr(xd, f)
+                    try:
+                        func()
+                    except ModalityNotFoundError as err:
+                        print(err)
 
-    def save(self, path: Union[str, os.PathLike, Path], overwrite: bool = False):
+    def load_annotations(self):
+        for xd in self._data:
+            print(xd.sample_id)
+            xd.load_annotations()
+
+    def load_cells(self):
+        for xd in self._data:
+            print(xd.sample_id)
+            xd.load_cells()
+
+    def load_images(self,
+                    names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
+                    nuclei_type: Literal["focus", "mip", ""] = "mip",
+                    load_cell_segmentation_images: bool = True
+                    ):
+
+        for xd in self._data:
+            print(xd.sample_id)
+            xd.load_images(names=names,
+                           nuclei_type=nuclei_type,
+                           load_cell_segmentation_images=load_cell_segmentation_images)
+
+    def load_regions(self):
+        for xd in self._data:
+            print(xd.sample_id)
+            xd.load_regions()
+
+    def load_transcripts(self,
+                        transcript_filename: str = "transcripts.parquet"
+                        ):
+        for xd in self._data:
+            print(xd.sample_id)
+            xd.load_transcripts()
+
+    def query(self, criteria: dict):
+        """Query the experiment based on metadata criteria.
+
+        Args:
+            criteria (dict): A dictionary where keys are column names and values are lists of categories to select.
+
+        Returns:
+            InSituExperiment: A new InSituExperiment object with the selected subset.
+        """
+        mask = pd.Series([True] * len(self._metadata))
+        for column, values in criteria.items():
+            values = convert_to_list(values)
+            if column in self._metadata.columns:
+                mask &= self._metadata[column].isin(values)
+            else:
+                raise KeyError(f"Column '{column}' not found in metadata.")
+
+        return self[mask]
+
+    @classmethod
+    def read(cls, path: Union[str, os.PathLike, Path]):
+        """Read an InSituExperiment object from a specified folder.
+
+        Args:
+            path (Union[str, os.PathLike, Path]): The path to the folder where datasets are saved.
+
+        Returns:
+            InSituExperiment: A new InSituExperiment object with the loaded data.
+        """
+        path = Path(path)
+
+        # Load metadata
+        metadata_path = path / "metadata.csv"
+        metadata = pd.read_csv(metadata_path, index_col=0)
+
+        # Load each dataset
+        data = []
+        for i in range(len(metadata)):
+            dataset_path = path / f"{i}"
+            dataset = insitupy.read_xenium(dataset_path)
+            data.append(dataset)
+
+        # Create a new InSituExperiment object
+        experiment = cls()
+        experiment._metadata = metadata
+        experiment._data = data
+
+        return experiment
+
+
+    def saveas(self, path: Union[str, os.PathLike, Path],
+               overwrite: bool = False,
+               verbose: bool = False):
         """Save all datasets to a specified folder.
 
         Args:
@@ -166,17 +288,20 @@ class InSituExperiment:
         """
         # Create the main directory if it doesn't exist
         path = Path(path)
-        path.mkdir(exist_ok=True)
 
         # check overwrite
         check_overwrite_and_remove_if_true(path=path, overwrite=overwrite)
 
+        print(f"Saving InSituExperiment to {str(path)}") if verbose else None
+
         # Iterate over the datasets and save each one in a numbered subfolder
         for index, dataset in enumerate(self._data):
             subfolder_path = path / str(index)
-            dataset.saveas(subfolder_path)
+            dataset.saveas(subfolder_path, verbose=False)
 
         # Optionally, save the metadata as a CSV file
         metadata_path = os.path.join(path, "metadata.csv")
         self._metadata.to_csv(metadata_path, index=True)
+
+        print("Saved.") if verbose else None
 
