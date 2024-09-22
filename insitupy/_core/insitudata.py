@@ -44,7 +44,7 @@ from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting import volcano_plot
 from insitupy.utils import create_deg_dataframe
 from insitupy.utils.deg import create_deg_dataframe
-from insitupy.utils.preprocessing import (normalize_anndata,
+from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
                                           reduce_dimensions_anndata)
 from insitupy.utils.utils import convert_to_list, get_nrows_maxcols
 
@@ -554,8 +554,9 @@ class InSituData:
         sc.pp.highly_variable_genes(self.cells.matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
 
 
-    def normalize(self,
+    def normalize_and_transform(self,
                 transformation_method: Literal["log1p", "sqrt"] = "log1p",
+                target_sum: int = 250,
                 normalize_alt: bool = True,
                 verbose: bool = True
                 ) -> None:
@@ -583,7 +584,11 @@ class InSituData:
         except AttributeError:
             raise ModalityNotFoundError(modality="cells")
 
-        normalize_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
+        normalize_and_transform_anndata(
+            adata=cells.matrix,
+            transformation_method=transformation_method,
+            target_sum=target_sum,
+            verbose=verbose)
 
         try:
             alt = self.alt
@@ -593,7 +598,7 @@ class InSituData:
             print("Found `.alt` modality.")
             for k, cells in alt.items():
                 print(f"\tNormalizing {k}...")
-                normalize_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
+                normalize_and_transform_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
 
     def add_alt(self,
                 celldata_to_add: CellData,

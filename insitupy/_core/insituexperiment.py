@@ -1,6 +1,8 @@
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Literal, Optional, Union
+from uuid import uuid4
 
 import pandas as pd
 
@@ -18,8 +20,9 @@ class InSituExperiment:
         Initialize an InSituExperiment object.
 
         """
-        self._metadata = pd.DataFrame(columns=['slide_id', 'sample_id'])
+        self._metadata = pd.DataFrame(columns=['uid', 'slide_id', 'sample_id'])
         self._data = []
+        self._path = None
 
     def __repr__(self):
         """Provide a string representation of the InSituExperiment object.
@@ -42,6 +45,8 @@ class InSituExperiment:
             InSituExperiment: A new InSituExperiment object with the selected subset.
         """
         if isinstance(key, int):
+            if key > (len(self)-1):
+                raise IndexError(f"Index ({key}) is out of range {len(self)}.")
             key = slice(key, key + 1)
         elif isinstance(key, list) and all(isinstance(i, bool) for i in key):
             key = pd.Series(key)
@@ -53,6 +58,9 @@ class InSituExperiment:
             new_experiment = InSituExperiment()
             new_experiment._data = self._data[key]
             new_experiment._metadata = self._metadata.iloc[key].reset_index(drop=True)
+
+        # Disconnect object from save path
+        new_experiment._path = None
         return new_experiment
 
     def __len__(self):
@@ -79,7 +87,16 @@ class InSituExperiment:
         Returns:
             pd.DataFrame: A DataFrame containing metadata.
         """
-        return self._metadata
+        return self._metadata.copy() # the copy prevents the metadata from being modified
+
+    @property
+    def path(self):
+        """Return save path of the InSituExperiment object.
+
+        Returns:
+            str: Save path.
+        """
+        return self._path
 
     def add(self,
             data: Union[str, os.PathLike, Path, insitupy.InSituData],
@@ -103,15 +120,15 @@ class InSituExperiment:
 
         assert isinstance(dataset, insitupy.InSituData), "Loaded dataset is not an InSituData object."
 
-        # Use the combination of slide_id and sample_id as the key
-        #key = self._key_pattern.format(slide_id=dataset.slide_id, sample_id=dataset.sample_id)
+        # # set a unique ID
+        # dataset._set_uid()
 
         # Add the dataset to the data collection
-        #self._data[key] = dataset
         self._data.append(dataset)
 
         # Create a new DataFrame for the new metadata
         new_metadata = {
+            'uid': str(uuid4()).split("-")[0],
             'slide_id': dataset.slide_id,
             'sample_id': dataset.sample_id
         }
@@ -125,6 +142,14 @@ class InSituExperiment:
 
         # Concatenate the new metadata with the existing metadata
         self._metadata = pd.concat([self._metadata, new_metadata], axis=0, ignore_index=True)
+
+    def copy(self):
+        """Create a deep copy of the InSituExperiment object.
+
+        Returns:
+            InSituExperiment: A new InSituExperiment object that is a deep copy of the current object.
+        """
+        return deepcopy(self)
 
     def get(self,
             slide_id: str,
@@ -141,11 +166,6 @@ class InSituExperiment:
         Raises:
             KeyError: If the key does not exist in the data dictionary.
         """
-        # key = self._key_pattern.format(slide_id=slide_id, sample_id=sample_id)
-
-        # if key not in self._data:
-        #     raise KeyError(f"Dataset with key '{key}' not found.")
-        # return self._data[key]
 
         slide_mask = self._metadata["slide_id"] == slide_id
         sample_mask = self._metadata["sample_id"] == sample_id
@@ -175,10 +195,7 @@ class InSituExperiment:
         Raises:
             IndexError: If the index is out of bounds.
         """
-        # if index < 0 or index >= len(self._metadata):
-        #     raise IndexError("Index out of bounds.")
-        # slide_id, sample_id = self._metadata.iloc[index][["slide_id", "sample_id"]]
-        # return self.get(slide_id=slide_id, sample_id=sample_id)
+
         return self._data[index]
 
     def load_all(self,
@@ -265,8 +282,10 @@ class InSituExperiment:
 
         # Load each dataset
         data = []
-        for i in range(len(metadata)):
-            dataset_path = path / f"{i}"
+        dataset_paths = sorted([elem for elem in Path("test").glob("*") if elem.is_dir()])
+        #for i in range(len(metadata)):
+        for dataset_path in dataset_paths:
+            #dataset_path = path / f"{i}"
             dataset = insitupy.read_xenium(dataset_path)
             data.append(dataset)
 
@@ -274,8 +293,14 @@ class InSituExperiment:
         experiment = cls()
         experiment._metadata = metadata
         experiment._data = data
+        experiment._path = path
 
         return experiment
+
+    def save(self):
+        for xd in self._data:
+            print(xd.sample_id)
+            xd.save()
 
 
     def saveas(self, path: Union[str, os.PathLike, Path],
@@ -296,7 +321,7 @@ class InSituExperiment:
 
         # Iterate over the datasets and save each one in a numbered subfolder
         for index, dataset in enumerate(self._data):
-            subfolder_path = path / str(index)
+            subfolder_path = path / f"{str(index).zfill(3)}"
             dataset.saveas(subfolder_path, verbose=False)
 
         # Optionally, save the metadata as a CSV file

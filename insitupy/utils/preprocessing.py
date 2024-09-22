@@ -11,8 +11,9 @@ from insitupy.utils._scanorama import scanorama
 from .._core._checks import check_integer_counts
 
 
-def normalize_anndata(adata,
+def normalize_and_transform_anndata(adata,
               transformation_method: Literal["log1p", "sqrt"] = "log1p",
+              target_sum: int = 250,
               verbose: bool = True
               ) -> None:
     # check if the matrix consists of raw integer counts
@@ -24,7 +25,7 @@ def normalize_anndata(adata,
 
     # preprocessing according to napari tutorial in squidpy
     print(f"Normalization, {transformation_method}-transformation...") if verbose else None
-    sc.pp.normalize_total(adata)
+    sc.pp.normalize_total(adata, target_sum=target_sum)
     adata.layers['norm_counts'] = adata.X.copy()
 
     # transform either using log transformation or square root transformation
@@ -57,7 +58,7 @@ def reduce_dimensions_anndata(adata,
             If True, perform UMAP dimensionality reduction. Default is True.
         tsne (bool, optional):
             If True, perform t-SNE dimensionality reduction. Default is True.
-        layer (str, optional): 
+        layer (str, optional):
             Specifies the layer of the AnnData object to operate on. Default is None (uses adata.X).
         batch_correction_key (str, optional):
             Batch key for performing batch correction using scanorama. Default is None, indicating no batch correction.
@@ -77,7 +78,7 @@ def reduce_dimensions_anndata(adata,
         None: This method modifies the input matrix in place, reducing its dimensionality using specified techniques and
             batch correction if applicable. It does not return any value.
     """
-    
+
     # Determine the prefix for the data
     data_prefix = layer if layer else "X"
 
@@ -98,21 +99,21 @@ def reduce_dimensions_anndata(adata,
 
         adata.uns[f'{data_prefix}_pca'] = adata.uns['pca']
         del adata.uns['pca']
-        
+
         if umap:
             # Perform neighbors analysis with the specified prefix
             sc.pp.neighbors(adata, use_rep=f'{data_prefix}_pca', key_added=f'{data_prefix}_neighbors')
 
             # Perform UMAP using the custom neighbors key
             sc.tl.umap(adata, neighbors_key=f'{data_prefix}_neighbors')
-            
+
             # Rename and store UMAP results with the appropriate prefix
             adata.obsm[f'{data_prefix}_umap'] = adata.obsm['X_umap']
             del adata.obsm['X_umap']
 
             adata.uns[f'{data_prefix}_umap'] = adata.uns['umap']
             del adata.uns['umap']
-        
+
         if tsne:
             # Perform t-SNE using the PCA results with the specified prefix
             sc.tl.tsne(adata, n_jobs=tsne_jobs, learning_rate=tsne_lr, use_rep=f'{data_prefix}_pca', key_added=f'{data_prefix}_tsne')
