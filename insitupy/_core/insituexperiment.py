@@ -1,10 +1,15 @@
 import os
 from copy import deepcopy
 from pathlib import Path
-from typing import Literal, Optional, Union
+from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+import scanpy as sc
+from matplotlib.axes._axes import Axes
+from matplotlib.figure import Figure
 
 import insitupy
 from insitupy._constants import LOAD_FUNCS
@@ -12,6 +17,9 @@ from insitupy._exceptions import ModalityNotFoundError
 from insitupy.io.files import check_overwrite_and_remove_if_true
 from insitupy.utils.utils import convert_to_list
 from insitupy.utils.utils import textformat as tf
+
+from ..io.plots import save_and_show_figure
+from ..utils.utils import get_nrows_maxcols
 
 
 class InSituExperiment:
@@ -151,52 +159,14 @@ class InSituExperiment:
         """
         return deepcopy(self)
 
-    def get(self,
-            slide_id: str,
-            sample_id: str
-            ):
-        """Retrieve a dataset by the combined key of slide_id and sample_id.
+    def iterdata(self):
+        """Iterate over the metadata rows and corresponding data.
 
-        Args:
-            key (str): The combined key of slide_id and sample_id of the dataset to retrieve.
-
-        Returns:
-            Dataset: The dataset associated with the given key.
-
-        Raises:
-            KeyError: If the key does not exist in the data dictionary.
+        Yields:
+            tuple: A tuple containing the index, metadata row as a Series, and the corresponding data.
         """
-
-        slide_mask = self._metadata["slide_id"] == slide_id
-        sample_mask = self._metadata["sample_id"] == sample_id
-        query_result = self._metadata[slide_mask & sample_mask]
-
-        if len(query_result) == 1:
-            index = query_result.index[0]
-            return self.iget(index)
-        elif len(query_result) == 0:
-            print(f"No dataset with slide_id '{slide_id}' and sample_id '{sample_id}' found.")
-        else:
-            print("More than one possible dataset found. Query result:")
-            print(query_result)
-
-
-    def iget(self,
-             index: int
-             ):
-        """Retrieve a dataset by its row position in the metadata DataFrame.
-
-        Args:
-            index (int): The row position of the dataset to retrieve.
-
-        Returns:
-            Dataset: The dataset associated with the given row position.
-
-        Raises:
-            IndexError: If the index is out of bounds.
-        """
-
-        return self._data[index]
+        for idx, row in self._metadata.iterrows():
+            yield row, self._data[idx]
 
     def load_all(self,
                  skip: Optional[str] = None,
@@ -245,6 +215,66 @@ class InSituExperiment:
             print(xd.sample_id)
             xd.load_transcripts()
 
+    def plot_umaps(self,
+                   color: str = None,
+                   title_columns: Optional[Union[List, str]] = None,
+                   max_cols: int = 4,
+                   figsize: Tuple[int, int] = (8,6),
+                   savepath: Optional[os.PathLike] = None,
+                   save_only: bool = False,
+                   show: bool = True,
+                   fig: Optional[Figure] = None,
+                   axis: Optional[Axes] = None,
+                   dpi_save: int = 300,
+                   **kwargs):
+        """Create a plot with UMAPs of all datasets as subplots using scanpy's pl.umap function.
+
+        Args:
+            color (str or list of str, optional): Keys for annotations of observations/cells or variables/genes to color the plot. Defaults to None.
+            title_columns (str or list of str, optional): List of column names from metadata to use for subplot titles. Defaults to None.
+            max_cols (int, optional): Maximum number of columns for subplots. Defaults to 4.
+            **kwargs: Additional keyword arguments to pass to sc.pl.umap.
+            figsize (tuple, optional): Figure size. Defaults to (8, 6).
+            savepath (optional): Path to save the plot.
+            save_only (bool, optional): Whether to only save the plot without showing. Defaults to False.
+            show (bool, optional): Whether to show the plot. Defaults to True.
+            axis (optional): Axis to plot on.
+            fig (optional): Figure to plot on.
+            dpi_save (int, optional): DPI for saving the plot. Defaults to 300.
+        """
+        num_datasets = len(self._data)
+        n_plots, n_rows, max_cols = get_nrows_maxcols(self._data, max_cols)
+        fig, axes = plt.subplots(n_rows, max_cols, figsize=(figsize[0]*max_cols, figsize[1]*n_rows))
+
+        # make sure color is a list
+        color = convert_to_list(color)
+
+        for idx, (metadata_row, dataset) in enumerate(self.iterdata()):
+            ax = axes[idx] if num_datasets > 1 else axes
+            # Assuming each dataset has an AnnData object or can be converted to one
+            adata = dataset.cells.matrix
+            sc.pl.umap(adata, ax=ax, color=color, show=False, **kwargs)
+
+            if title_columns:
+                title = "-".join(str(metadata_row[col]) for col in title_columns if col in metadata_row)
+                ax.set_title(title)
+            else:
+                ax.set_title(f"Dataset {idx + 1}")
+
+        if n_plots > 1:
+
+            # check if there are empty plots remaining
+            i = n_plots
+            while i < n_rows * max_cols:
+                i+=1
+                # remove empty plots
+                axes[i].set_axis_off()
+        if show:
+            #fig.tight_layout()
+            save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=True)
+        else:
+            return fig, axes
+
     def query(self, criteria: dict):
         """Query the experiment based on metadata criteria.
 
@@ -282,7 +312,7 @@ class InSituExperiment:
 
         # Load each dataset
         data = []
-        dataset_paths = sorted([elem for elem in Path("test").glob("*") if elem.is_dir()])
+        dataset_paths = sorted([elem for elem in path.glob("data-*") if elem.is_dir()])
         #for i in range(len(metadata)):
         for dataset_path in dataset_paths:
             #dataset_path = path / f"{i}"
@@ -298,9 +328,17 @@ class InSituExperiment:
         return experiment
 
     def save(self):
-        for xd in self._data:
-            print(xd.sample_id)
-            xd.save()
+        if self.path is None:
+            print("No save path found in '.self'. First save the InSituExperiment using '.saveas()'.")
+            return
+        else:
+            parent_path_identical = [d.path.parent == self.path for d in self.data]
+            if not np.all(parent_path_identical):
+                print(f"Saving process failed. Save path of some InSituData objects did not lie inside the InSituExperiment save path: {self.metadata['uid'][parent_path_identical].values}")
+            else:
+                for xd in self._data:
+                    print(xd.sample_id)
+                    xd.save()
 
 
     def saveas(self, path: Union[str, os.PathLike, Path],
@@ -321,7 +359,7 @@ class InSituExperiment:
 
         # Iterate over the datasets and save each one in a numbered subfolder
         for index, dataset in enumerate(self._data):
-            subfolder_path = path / f"{str(index).zfill(3)}"
+            subfolder_path = path / f"data-{str(index).zfill(3)}"
             dataset.saveas(subfolder_path, verbose=False)
 
         # Optionally, save the metadata as a CSV file
@@ -329,4 +367,20 @@ class InSituExperiment:
         self._metadata.to_csv(metadata_path, index=True)
 
         print("Saved.") if verbose else None
+
+    def show(self, index: int, return_viewer: bool = True):
+        """
+        Displays the dataset at the specified index.
+
+        Args:
+            index (int): The index of the dataset to display.
+            return_viewer (bool, optional): If True, returns the viewer object of the dataset. Defaults to True.
+
+        Returns:
+            Viewer: The viewer object of the dataset if return_viewer is True.
+        """
+        dataset = self.data[index]
+        dataset.show()
+        if return_viewer:
+            return dataset.viewer
 
