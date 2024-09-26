@@ -13,7 +13,7 @@ from .._core._checks import check_integer_counts
 
 def normalize_and_transform_anndata(adata,
               transformation_method: Literal["log1p", "sqrt"] = "log1p",
-              target_sum: int = 250,
+              target_sum: int = None, # defaults to median of total counts of cells
               verbose: bool = True
               ) -> None:
     # check if the matrix consists of raw integer counts
