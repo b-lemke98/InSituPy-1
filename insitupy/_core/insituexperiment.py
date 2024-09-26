@@ -216,15 +216,15 @@ class InSituExperiment:
             xd.load_transcripts()
 
     def plot_umaps(self,
-                   color: str = None,
-                   title_columns: Optional[Union[List, str]] = None,
+                   color: Optional[str] = None,
+                   title_columns: Optional[Union[List[str], str]] = None,
+                   title_size: int = 20,
                    max_cols: int = 4,
                    figsize: Tuple[int, int] = (8,6),
                    savepath: Optional[os.PathLike] = None,
                    save_only: bool = False,
                    show: bool = True,
                    fig: Optional[Figure] = None,
-                   axis: Optional[Axes] = None,
                    dpi_save: int = 300,
                    **kwargs):
         """Create a plot with UMAPs of all datasets as subplots using scanpy's pl.umap function.
@@ -238,7 +238,6 @@ class InSituExperiment:
             savepath (optional): Path to save the plot.
             save_only (bool, optional): Whether to only save the plot without showing. Defaults to False.
             show (bool, optional): Whether to show the plot. Defaults to True.
-            axis (optional): Axis to plot on.
             fig (optional): Figure to plot on.
             dpi_save (int, optional): DPI for saving the plot. Defaults to 300.
         """
@@ -246,8 +245,9 @@ class InSituExperiment:
         n_plots, n_rows, max_cols = get_nrows_maxcols(self._data, max_cols)
         fig, axes = plt.subplots(n_rows, max_cols, figsize=(figsize[0]*max_cols, figsize[1]*n_rows))
 
-        # make sure color is a list
-        color = convert_to_list(color)
+        # make sure title_columns is a list
+        if title_columns is not None:
+            title_columns = convert_to_list(title_columns)
 
         for idx, (metadata_row, dataset) in enumerate(self.iterdata()):
             ax = axes[idx] if num_datasets > 1 else axes
@@ -256,10 +256,10 @@ class InSituExperiment:
             sc.pl.umap(adata, ax=ax, color=color, show=False, **kwargs)
 
             if title_columns:
-                title = "-".join(str(metadata_row[col]) for col in title_columns if col in metadata_row)
-                ax.set_title(title)
+                title = " - ".join(str(metadata_row[col]) for col in title_columns if col in metadata_row)
+                ax.set_title(title, fontdict={"fontsize": title_size})
             else:
-                ax.set_title(f"Dataset {idx + 1}")
+                ax.set_title(f"Dataset {idx + 1}", fontdict={"fontsize": title_size})
 
         if n_plots > 1:
 
@@ -326,6 +326,11 @@ class InSituExperiment:
         experiment._path = path
 
         return experiment
+
+    def remove_history(self):
+        for xd in self._data:
+            print(xd.sample_id)
+            xd.remove_history()
 
     def save(self):
         if self.path is None:
