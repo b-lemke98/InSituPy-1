@@ -327,6 +327,52 @@ class InSituExperiment:
 
         return experiment
 
+    @classmethod
+    def from_config(cls, config_path: Union[str, os.PathLike, Path]):
+        """Create an InSituExperiment object from a configuration file.
+
+        Args:
+            config_path (Union[str, os.PathLike, Path]): The path to the configuration CSV or Excel file.
+
+        Returns:
+            InSituExperiment: A new InSituExperiment object with the loaded data and metadata.
+        """
+        config_path = Path(config_path)
+
+        # Determine file type and read the configuration file
+        if config_path.suffix in ['.csv']:
+            config = pd.read_csv(config_path)
+        elif config_path.suffix in ['.xlsx', '.xls']:
+            config = pd.read_excel(config_path)
+        else:
+            raise ValueError("Unsupported file type. Please provide a CSV or Excel file.")
+
+        # Ensure the 'directory' column exists
+        if 'directory' not in config.columns:
+            raise ValueError("The configuration file must contain a 'directory' column.")
+
+        # Initialize a new InSituExperiment object
+        experiment = cls()
+
+        # Iterate over each row in the configuration file
+        for _, row in config.iterrows():
+            dataset_path = Path(row['directory'])
+            dataset = insitupy.read_xenium(dataset_path)
+            experiment._data.append(dataset)
+
+            # Extract metadata from the row, excluding the 'directory' column
+            metadata = row.drop(labels=['directory']).to_dict()
+            metadata['uid'] = str(uuid4()).split("-")[0]
+            metadata['slide_id'] = dataset.slide_id
+            metadata['sample_id'] = dataset.sample_id
+
+            # Append the metadata to the experiment's metadata DataFrame
+            experiment._metadata = pd.concat([experiment._metadata, pd.DataFrame([metadata])], ignore_index=True)
+
+        return experiment
+
+
+
     def remove_history(self):
         for xd in self._data:
             print(xd.sample_id)
