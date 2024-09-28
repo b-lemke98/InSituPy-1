@@ -329,10 +329,23 @@ class InSituExperiment:
 
     @classmethod
     def from_config(cls, config_path: Union[str, os.PathLike, Path]):
-        """Create an InSituExperiment object from a configuration file.
+        """
+        Create an InSituExperiment object from a configuration file.
 
         Args:
             config_path (Union[str, os.PathLike, Path]): The path to the configuration CSV or Excel file.
+
+        The configuration file should be either a CSV or Excel file (.csv, .xlsx, .xls) and must contain the following columns:
+
+        - **directory**: This column is mandatory and should contain the paths to the directories where the datasets are stored. Each path should be a valid directory path.
+        - **Other columns**: These columns can contain any additional metadata you want to associate with each dataset. The metadata will be extracted from these columns and stored in the InSituExperiment object.
+
+        Example of a valid configuration file:
+
+        | directory         | experiment_name | date       | patient    |
+        |-------------------|-----------------|------------|------------|
+        | /path/to/dataset1 | Experiment 1    | 2023-09-01 | Patient A  |
+        | /path/to/dataset2 | Experiment 2    | 2023-09-02 | Patient B  |
 
         Returns:
             InSituExperiment: A new InSituExperiment object with the loaded data and metadata.
@@ -351,12 +364,24 @@ class InSituExperiment:
         if 'directory' not in config.columns:
             raise ValueError("The configuration file must contain a 'directory' column.")
 
+        # Get the current working directory
+        current_path = Path.cwd()
+
         # Initialize a new InSituExperiment object
         experiment = cls()
 
         # Iterate over each row in the configuration file
         for _, row in config.iterrows():
             dataset_path = Path(row['directory'])
+
+            # Check if the path is relative and if so, append the current path
+            if not dataset_path.is_absolute():
+                dataset_path = current_path / dataset_path
+
+            # Check if the directory exists
+            if not dataset_path.exists():
+                raise FileNotFoundError(f"No such directory found: {str(dataset_path)}")
+
             dataset = insitupy.read_xenium(dataset_path)
             experiment._data.append(dataset)
 
@@ -371,7 +396,38 @@ class InSituExperiment:
 
         return experiment
 
+    @classmethod
+    def from_region(cls,
+                    data: insitupy.InSituData,
+                    region_key: str,
+                    region_names: Optional[Union[List[str], str]] = None
+                    ):
 
+        # Retrieve the regions dataframe
+        region_df = data.regions.get(region_key)
+
+        # check which region names are allowed
+        if region_names is None:
+            region_names = region_df["name"].tolist()
+        else:
+            # make sure region_names is a list
+            region_names = convert_to_list(region_names)
+
+        # Initialize a new InSituExperiment object
+        experiment = cls()
+
+        for n in sorted(region_df["name"].tolist()):
+            if n in region_names:
+                # crop data by region
+                cropped_data = data.crop(region_tuple=(region_key, n))
+
+                # create metadata
+                metadata = {"region_key": region_key, "region_name": n}
+
+                # add to InSituExperiment
+                experiment.add(data=cropped_data, metadata=metadata)
+
+        return experiment
 
     def remove_history(self):
         for xd in self._data:
