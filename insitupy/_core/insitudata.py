@@ -346,50 +346,90 @@ class InSituData:
         return self_copy
 
     def crop(self,
-            shape_layer: Optional[str] = None,
-            xlim: Optional[Tuple[int, int]] = None,
-            ylim: Optional[Tuple[int, int]] = None,
-            inplace: bool = False
+             region_tuple: Optional[Tuple[str, str]] = None,
+             layer_name: Optional[str] = None,
+             xlim: Optional[Tuple[int, int]] = None,
+             ylim: Optional[Tuple[int, int]] = None,
+             inplace: bool = False
             ):
-        '''
-        Function to crop the XeniumData object.
-        '''
-        if shape_layer is not None:
-            try:
-                # extract shape layer for cropping from napari viewer
-                crop_shape = self.viewer.layers[shape_layer]
-            except KeyError:
-                raise KeyError(f"Shape layer selected for cropping ('{shape_layer}') was not found in layers.")
+        """
+        Crop the data based on the provided parameters.
 
-            # check the type of the element
-            if not isinstance(crop_shape, napari.layers.Shapes):
-                raise WrongNapariLayerTypeError(found=type(crop_shape), wanted=napari.layers.Shapes)
+        Args:
+            region_tuple (Optional[Tuple[str, str]]): A tuple specifying the region to crop.
+            layer_name (Optional[str]): The name of the layer to use for cropping.
+            xlim (Optional[Tuple[int, int]]): The x-axis limits for cropping.
+            ylim (Optional[Tuple[int, int]]): The y-axis limits for cropping.
+            inplace (bool): If True, modify the data in place. Otherwise, return a new cropped data.
+
+        Raises:
+            ValueError: If none of region_tuple, layer_name, or xlim/ylim are provided.
+        """
+        if layer_name is None and region_tuple is None and (xlim is None or ylim is None):
+            raise ValueError("At least one of shape_layer, region_tuple, or xlim/ylim must be provided.")
+
+        # retrieve pixel size of data
+        pixel_size = self.metadata["xenium"]["pixel_size"]
+
+        if region_tuple is not None:
+
+            # extract regions dataframe
+            region_key = region_tuple[0]
+            region_name = region_tuple[1]
+            region_df = self.regions.get(region_key)
+
+            # extract geometry
+            geometry = region_df[region_df["name"] == region_name]["geometry"].item()
 
             use_shape = True
+
+        elif layer_name is not None:
+            try:
+                # extract shape layer for cropping from napari viewer
+                layer = self.viewer.layers[layer_name]
+            except KeyError:
+                raise KeyError(f"Shape layer selected for cropping ('{layer_name}') was not found in layers.")
+
+            # check the type of the element
+            if not isinstance(layer, napari.layers.Shapes):
+                raise WrongNapariLayerTypeError(found=type(layer), wanted=napari.layers.Shapes)
+
+            # make sure the layer contains only one element
+            if len(layer.data) != 1:
+                raise NotOneElementError(layer.data)
+
+            # select the shape from list
+            crop_window = layer.data[0].copy()
+            # crop_window *= pixel_size
+            shape_type = layer.shape_type[0]
+
+            geometry = convert_napari_shape_to_polygon_or_line(
+                napari_shape_data=crop_window,
+                shape_type=shape_type
+                )
+
+            use_shape = True
+
         else:
             # if xlim or ylim is not none, assert that both are not None
             if xlim is not None or ylim is not None:
                 assert np.all([elem is not None for elem in [xlim, ylim]])
                 use_shape = False
 
-        # assert that either shape_layer is given or xlim/ylim
-        assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
+        # # assert that either shape_layer is given or xlim/ylim
+        # assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
 
         if use_shape:
-            # extract shape layer for cropping from napari viewer
-            crop_shape = self.viewer.layers[shape_layer]
+            # convert to metric unit (normally µm)
+            geometry = scale_func(geometry, xfact=pixel_size, yfact=pixel_size, origin=(0,0))
 
-            # check the structure of the shape object
-            if len(crop_shape.data) != 1:
-                raise NotOneElementError(crop_shape.data)
+            # extract x and y limits from the geometry
+            bounding_box = geometry.bounds # (minx, miny, maxx, maxy)
+            xlim = (bounding_box[0], bounding_box[2])
+            ylim = (bounding_box[1], bounding_box[3])
 
-            # select the shape from list
-            crop_window = crop_shape.data[0].copy()
-            crop_window *= self.metadata["xenium"]["pixel_size"] # convert to metric unit (normally µm)
-
-            # extract x and y limits from the shape (assuming a rectangle)
-            xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
-            ylim = (crop_window[:, 0].min(), crop_window[:, 0].max())
+            # xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
+            # ylim = (crop_window[:, 0].min(), crop_window[:, 0].max())
 
         # make sure there are no negative values in the limits
         xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
@@ -468,10 +508,17 @@ class InSituData:
             _self.images.crop(xlim=xlim, ylim=ylim)
 
         if hasattr(_self, "annotations"):
-            _self.annotations.crop(xlim=xlim, ylim=ylim)
+
+            _self.annotations.crop(
+                xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
+                ylim=tuple([elem / pixel_size for elem in ylim])
+                )
 
         if hasattr(_self, "regions"):
-            _self.regions.crop(xlim=xlim, ylim=ylim)
+            _self.regions.crop(
+                xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
+                ylim=tuple([elem / pixel_size for elem in ylim])
+            )
 
         # add information about cropping to metadata
         if "cropping_history" not in _self.metadata:
