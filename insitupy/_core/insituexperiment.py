@@ -372,6 +372,51 @@ class InSituExperiment:
         return self[mask]
 
     @classmethod
+    def concat(cls, objs, new_col_name=None):
+        """
+        Concatenate multiple InSituExperiment objects.
+
+        Args:
+            objs (Union[List[InSituExperiment], Dict[str, InSituExperiment]]):
+                A list of InSituExperiment objects or a dictionary where keys are added as a new column.
+            new_col_name (str, optional):
+                The name of the new column to add when objs is a dictionary. Defaults to None.
+
+        Returns:
+            InSituExperiment: A new InSituExperiment object containing the concatenated data.
+        """
+        if isinstance(objs, dict):
+            if new_col_name is None:
+                raise ValueError("new_col_name must be provided when objs is a dictionary.")
+            keys, objs = zip(*objs.items())
+        else:
+            keys = [None] * len(objs)
+
+        # Initialize a new InSituExperiment object
+        new_experiment = cls()
+
+        # Concatenate data and metadata
+        new_data = []
+        new_metadata = []
+
+        for key, obj in zip(keys, objs):
+            if not isinstance(obj, cls):
+                raise TypeError("All objects must be instances of InSituExperiment.")
+            new_data.extend(obj._data)
+            metadata = obj._metadata.copy()
+            if key is not None:
+                metadata[new_col_name] = key
+            new_metadata.append(metadata)
+
+        new_experiment._data = new_data
+        new_experiment._metadata = pd.concat(new_metadata, ignore_index=True)
+
+        # Disconnect object from save path
+        new_experiment._path = None
+
+        return new_experiment
+
+    @classmethod
     def read(cls, path: Union[str, os.PathLike, Path]):
         """Read an InSituExperiment object from a specified folder.
 
