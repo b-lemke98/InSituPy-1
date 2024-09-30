@@ -9,12 +9,17 @@ try:
 except ImportError:
     WITH_NAPARI = False
 
-from ._core._deprecated import XeniumData
-from . import image as im
+from . import images as im
+from . import io
+from . import plotting as pl
 from . import utils
+from ._core._deprecated import XeniumData
 from ._core.dataclasses import AnnotationsData, BoundariesData, ImageData
-from ._core.insitudata import InSituData, read_xenium
-from ._core.io import read_celldata
+from ._core.insitudata import (InSituData, calc_distance_of_cells_from,
+                               differential_gene_expression, register_images)
+from ._core.insituexperiment import InSituExperiment
+from ._core.xenium import read_xenium
+from .palettes import CustomPalettes
 
 __all__ = [
     "InSituData",

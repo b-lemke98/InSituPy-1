@@ -2,7 +2,7 @@ import os
 import warnings
 from numbers import Number
 from pathlib import Path
-from typing import List, Literal, Optional, Union
+from typing import List, Literal, Union
 
 import dask.array as da
 import pandas as pd
@@ -10,113 +10,12 @@ import scanpy as sc
 import zarr
 from anndata import AnnData
 from pandas.api.types import is_numeric_dtype
-from parse import *
 from scipy.sparse import csr_matrix
 from zarr.errors import ArrayNotFoundError
 
-from insitupy import __version__
-from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
-                                        CellData, RegionsData)
+from insitupy._core.dataclasses import BoundariesData
 from insitupy._exceptions import InvalidFileTypeError
-from insitupy.utils.io import read_json
 from insitupy.utils.utils import decode_robust_series
-
-from ..utils.io import read_json
-from ..utils.utils import decode_robust_series
-from .dataclasses import AnnotationsData, BoundariesData, CellData, RegionsData
-
-
-def read_celldata(
-    path: Union[str, os.PathLike, Path],
-    pixel_size: Number
-    ) -> CellData:
-    # read metadata
-    path = Path(path)
-    celldata_metadata = read_json(path / ".celldata")
-
-    # read matrix data
-    matrix = sc.read_h5ad(path / celldata_metadata["matrix"])
-
-    # get path of boundaries data
-    bound_path = path / celldata_metadata["boundaries"]
-
-    # check whether it is zipped or not
-    suffix = bound_path.name.split(".", maxsplit=1)[-1]
-
-    # read cell ids and seg_mask_values
-    cell_ids = da.from_zarr(bound_path, component="cell_id")
-
-    try:
-        # in older datasets sometimes seg_mask_value is missing
-        seg_mask_value = da.from_zarr(bound_path, component="seg_mask_value")
-    except ArrayNotFoundError:
-        seg_mask_value = None
-
-    # create boundaries data object
-    boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
-
-    # retrieve the boundaries data
-    bound_data = {}
-    meta = {}
-    with zarr.ZipStore(bound_path, mode='w') if suffix == "zarr.zip" else zarr.DirectoryStore(bound_path) as dirstore:
-    #with zarr.ZipStore(bound_path, mode="r") as zipstore:
-        for k in dirstore.listdir("masks"):
-            if not k.startswith("."):
-                # iterate through subresolutions
-                subresolutions = dirstore.listdir(f"masks/{k}")
-
-                if ".zarray" in subresolutions:
-                    bound_data[k] = da.from_zarr(dirstore).persist()
-                else:
-                    # it is stored as pyramid -> initialize a list for the pyramid
-                    bound_data[k] = []
-                    for subres in subresolutions:
-                        if not subres.startswith("."):
-                            # append the pyramid to the list
-                            bound_data[k].append(
-                                da.from_zarr(dirstore, component=f"masks/{k}/{subres}")#.persist()
-                                )
-
-                # retrieve boundaries metadata
-                store = zarr.open(dirstore)
-                meta[k] = store[f"masks/{k}"].attrs.asdict()
-
-    # add boundaries
-    boundaries.add_boundaries(data=bound_data,
-                              pixel_size=meta[k]["pixel_size"]
-                              )
-
-    # create CellData object
-    celldata = CellData(matrix=matrix, boundaries=boundaries)
-
-    return celldata
-
-
-def read_regionsdata(
-    path: Union[str, os.PathLike, Path],
-):
-    metadata = read_json(path / "metadata.json")
-    keys = metadata.keys()
-    files = [path / f"{k}.geojson" for k in keys]
-    data = RegionsData(files, keys)
-
-    # overwrite metadata
-    data.metadata = metadata
-    return data
-
-
-def read_annotationsdata(
-    path: Union[str, os.PathLike, Path],
-):
-    path = Path(path)
-    metadata = read_json(path / "metadata.json")
-    keys = metadata.keys()
-    files = [path / f"{k}.geojson" for k in keys]
-    data = AnnotationsData(files, keys)
-
-    # overwrite metadata
-    data.metadata = metadata
-    return data
 
 
 def _read_matrix_from_xenium(path) -> AnnData:
@@ -250,3 +149,38 @@ def _read_binned_expression(
     return arr
 
 
+def _restructure_transcripts_dataframe(dataframe):
+
+    # decode columns
+    dataframe = dataframe.apply(lambda x: decode_robust_series(x), axis=0)
+    # set index and rename columns
+    dataframe = dataframe.set_index("transcript_id")
+    dataframe = dataframe.rename({
+        "cell_id": "xenium_cell_id",
+        "x_location": "x",
+        "y_location": "y",
+        "z_location": "z",
+        "feature_name": "gene"
+    }, axis=1)
+
+    # reorder dataframe
+    column_names_ordered = ["x", "y", "z", "gene", "qv", "overlaps_nucleus", "fov_name", "nucleus_distance", "xenium_cell_id"]
+    in_df = [elem in dataframe.columns for elem in column_names_ordered]
+    column_names_ordered = [elem for i, elem in zip(in_df, column_names_ordered) if i]
+    dataframe = dataframe.loc[:, column_names_ordered]
+
+    # group column names into MultiIndices
+    grouped_column_names = [
+        ("coordinates", "x"),
+        ("coordinates", "y"),
+        ("coordinates", "z"),
+        ("properties", "gene"),
+        ("properties", "qv"),
+        ("properties", "overlaps_nucleus"),
+        ("properties", "fov_name"),
+        ("properties", "nucleus_distance"),
+        ("cell_id", "xenium")
+    ]
+    grouped_column_names = [elem for i, elem in zip(in_df, grouped_column_names) if i]
+    dataframe.columns = pd.MultiIndex.from_tuples(grouped_column_names)
+    return dataframe

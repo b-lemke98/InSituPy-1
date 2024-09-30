@@ -4,52 +4,73 @@ from copy import deepcopy
 from numbers import Number
 from os.path import relpath
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
-import dask
 import dask.array as da
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-import xmltodict
 import zarr
 from anndata import AnnData
 from parse import *
-from shapely import Polygon, affinity
-from shapely.geometry.multipolygon import MultiPolygon
-from tifffile import TiffFile
+from shapely import MultiPoint, MultiPolygon, Point, Polygon, affinity
 
 from insitupy import __version__
-from insitupy.utils.utils import (convert_int_to_xenium_hex,
-                                  convert_xenium_hex_to_int)
+from insitupy._constants import FORBIDDEN_ANNOTATION_NAMES
+from insitupy.utils.utils import convert_int_to_xenium_hex
 
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
-from ..image.io import read_ome_tiff, write_ome_tiff
-from ..image.utils import create_img_pyramid, crop_dask_array_or_pyramid
-from ..utils.geo import parse_geopandas, write_qupath_geojson
-from ..utils.io import check_overwrite_and_remove_if_true, write_dict_to_json
+from ..images.io import read_image, write_ome_tiff, write_zarr
+from ..images.utils import create_img_pyramid, crop_dask_array_or_pyramid
+from ..io.files import check_overwrite_and_remove_if_true, write_dict_to_json
+from ..io.geo import parse_geopandas, write_qupath_geojson
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
-from ._mixins import DeepCopyMixin
+from ._mixins import DeepCopyMixin, GetMixin
 
 
-class ShapesData(DeepCopyMixin):
+class ShapesData(DeepCopyMixin, GetMixin):
     '''
     Object to store annotations.
     '''
     default_assert_uniqueness = False
+    # default_skip_multipolygons = False
+    default_polygons_only = False
     shape_name = "shapes"
     repr_color = tf.Cyan
+    default_forbidden_names = None
     def __init__(self,
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None,
                  keys: Optional[List[str]] = None,
                  pixel_size: float = 1,
                  assert_uniqueness: Optional[bool] = None,
+                #  skip_multipolygons: Optional[bool] = None,
+                 polygons_only: Optional[bool] = None,
+                 forbidden_names: Optional[List[str]] = None
                  # shape_name: Optional[str] = None
                  ) -> None:
 
         # create dictionary for metadata
         self.metadata = {}
+
+        # set configuration of ShapesData
+        if assert_uniqueness is None:
+            self.assert_uniqueness = self.default_assert_uniqueness
+        else:
+            self.assert_uniqueness = assert_uniqueness
+
+        # if skip_multipolygons is None:
+        #     self.skip_multipolygons = self.default_skip_multipolygons
+
+        if polygons_only is None:
+            self.polygons_only = self.default_polygons_only
+        else:
+            self.polygons_only = polygons_only
+
+        if forbidden_names is None:
+            self.forbidden_names = self.default_forbidden_names
+        else:
+            self.forbidden_names = forbidden_names
 
         if files is not None:
             # make sure files and keys are a list
@@ -57,16 +78,12 @@ class ShapesData(DeepCopyMixin):
             keys = convert_to_list(keys)
             assert len(files) == len(keys), "Number of files does not match number of keys."
 
-            if assert_uniqueness is None:
-                assert_uniqueness = self.default_assert_uniqueness
-
             if files is not None:
                 for key, file in zip(keys, files):
                     # read annotation and store in dictionary
-                    self.add_shapes(data=file,
+                    self.add_data(data=file,
                                         key=key,
-                                        pixel_size=pixel_size,
-                                        assert_uniqueness=assert_uniqueness
+                                        scale_factor=(pixel_size, pixel_size),
                                         )
 
     def __repr__(self):
@@ -109,7 +126,13 @@ class ShapesData(DeepCopyMixin):
             annot_df = dataframe
 
         if len(annot_df.index.unique()) != len(annot_df.name.unique()):
-            warnings.warn(message=f"Names of {self.shape_name} for key '{key}' were not unique. Key was skipped.")
+            warnings.warn(
+                message=
+                (
+                    f"The names of the {self.shape_name} for key '{key}' were not unique and thus "
+                    f"the key was skipped. In regions only one geometry per class is allowed."
+                    )
+                )
             return False
         else:
             if verbose:
@@ -117,36 +140,70 @@ class ShapesData(DeepCopyMixin):
             return True
 
     def _update_metadata(self,
-                         key: str,
-                         analyzed: bool
+                         keys: Union[str, Literal["all"]] = "all",
+                         analyzed: bool = False,
+                         verbose: bool = False
                          ):
-        # retrieve dataframe
-        annot_df = getattr(self, key)
 
-        # record metadata information
-        self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
+        if keys == "all":
+            keys = list(self.metadata.keys())
 
-        try:
-            self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
-        except KeyError:
-            self.metadata[key]["classes"] = ["unnamed"]
+        keys = convert_to_list(keys)
+        keys_to_remove = []
+        for key in keys:
+            try:
+                # retrieve dataframe
+                annot_df = getattr(self, key)
+            except AttributeError:
+                self.metadata.pop(key)
+                if verbose:
+                    print(f'Removed {key}', flush=True)
+            else:
+                # record metadata information
+                self.metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
 
-        self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
+                try:
+                    self.metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
+                except KeyError:
+                    self.metadata[key]["classes"] = ["unnamed"]
 
+                self.metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
 
-    def add_shapes(self,
-                   data: Union[gpd.GeoDataFrame, pd.DataFrame, dict,
+    def add_data(self,
+                    data: Union[gpd.GeoDataFrame, pd.DataFrame, dict,
                                 str, os.PathLike, Path],
-                   key: str,
-                   pixel_size: Optional[float] = 1,
-                   verbose: bool = False,
-                   assert_uniqueness: bool = False
+                    key: str,
+                    scale_factor: Optional[Tuple[float, float]] = None,
+                    verbose: bool = False,
                    ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
 
-        # convert pixel coordinates to metric units
-        new_df["geometry"] = new_df.geometry.scale(origin=(0,0), xfact=pixel_size, yfact=pixel_size)
+        if self.forbidden_names is not None:
+            new_names = new_df["name"].tolist()
+            if np.any([elem in new_names for elem in self.forbidden_names]):
+                raise ValueError(f"One of the forbidden names for annotations ({self.forbidden_names}) has been used in the imported dataset. Please change the respective change to prevent interference with downstream functions.")
+
+        if "scale" not in new_df.columns:
+            # add scale factor to data
+            if scale_factor is None:
+                warnings.warn("No `scale_factor` added to data.")
+            new_df["scale"] = [scale_factor] * len(new_df)
+        else:
+            if verbose:
+                print("Scale inferred from file.", flush=True)
+
+        # determine the type of layer that needs to be used in napari later
+        layer_types = []
+        for geom in new_df["geometry"]:
+            if isinstance(geom, Point) or isinstance(geom, MultiPoint):
+                layer_types.append("Points")
+            else:
+                layer_types.append("Shapes")
+        new_df["layer_type"] = layer_types
+
+        # # convert pixel coordinates to metric units
+        # new_df["geometry"] = new_df.geometry.scale(origin=(0,0), xfact=pixel_size, yfact=pixel_size)
 
         if not hasattr(self, key):
             # if key does not exist yet, the new df is the whole annotation dataframe
@@ -173,28 +230,26 @@ class ShapesData(DeepCopyMixin):
 
         if new_annotations_added:
             add = True
-            if assert_uniqueness:
-                # if len(annot_df.index.unique()) != len(annot_df.name.unique()):
-                #     warnings.warn(message=f"Names of {self.shape_name} for key '{key}' were not unique. Key was skipped.")
-                #     add = False
-                # else:
-                #     if verbose:
-                #         print(f"Names of {self.shape_name} for key '{key}' are unique.")
-
+            if self.assert_uniqueness:
                 # check if the shapes data for this key is unique (same number of names than indices)
-                is_unique = self._check_uniqueness(dataframe=annot_df, key=key, verbose=verbose)
+                is_unique = self._check_uniqueness(dataframe=annot_df, key=key, verbose=False)
 
                 if not is_unique:
                     add = False
 
-            # check if any of the shapes are shapely MultiPolygons
-            is_not_multipolygon = [not isinstance(p, MultiPolygon) for p in annot_df.geometry]
-            if not np.all(is_not_multipolygon):
-                annot_df = annot_df.loc[is_not_multipolygon]
-                warnings.warn(
-                    f"Some {self.shape_name} were a shapely 'MultiPolygon' objects and skipped.",
-                    stacklevel=2
-                    )
+            if self.polygons_only:
+                # check if any of the shapes are shapely MultiPolygons
+                is_not_polygon = [not isinstance(p, Polygon) for p in annot_df.geometry]
+                if np.any(is_not_polygon):
+                    annot_df = annot_df.loc[is_not_polygon]
+                    warnings.warn(
+                        f"Some {self.shape_name} were not pure Polygon objects and skipped.",
+                        stacklevel=2
+                        )
+
+            # check that the dataframe is not empty
+            if len(annot_df) == 0:
+                add = False
 
             if add:
                 # add dataframe to AnnotationData object
@@ -204,7 +259,7 @@ class ShapesData(DeepCopyMixin):
                 self.metadata[key] = {}
 
                 # update metadata
-                self._update_metadata(key=key, analyzed=False)
+                self._update_metadata(keys=key, analyzed=False)
 
                 if verbose:
                     # report
@@ -242,6 +297,21 @@ class ShapesData(DeepCopyMixin):
                 delattr(self, n)
 
         self.metadata = new_metadata
+
+        self._update_metadata()
+
+    def remove_data(self,
+                   key_to_remove: str,
+                   classes_to_remove: Union[Literal["all"], List[str], str] = "all"
+                   ):
+        if classes_to_remove == "all":
+            delattr(self, key_to_remove)
+        else:
+            classes_to_remove = convert_to_list(classes_to_remove)
+            geom_df = self.get(key_to_remove)
+            setattr(self, key_to_remove, geom_df[~geom_df.name.isin(classes_to_remove)])
+
+        self._update_metadata()
 
     def save(self,
              path: Union[str, os.PathLike, Path],
@@ -282,8 +352,11 @@ class AnnotationsData(ShapesData):
                  pixel_size: float = 1
                  ) -> None:
         self.default_assert_uniqueness = False
+        # self.default_skip_multipolygons = False
+        self.default_polygons_only = False
         self.shape_name = "annotations"
         self.repr_color = tf.Cyan
+        self.default_forbidden_names = FORBIDDEN_ANNOTATION_NAMES
 
         ShapesData.__init__(self, files, keys, pixel_size)
 
@@ -294,20 +367,29 @@ class RegionsData(ShapesData):
                  pixel_size: float = 1
                  ) -> None:
         self.default_assert_uniqueness = True
+        # self.default_skip_multipolygons = True # MultiPolygons are not allowed in regions
+        self.default_polygons_only = True
         self.shape_name = "regions"
         self.repr_color = tf.Yellow
 
         ShapesData.__init__(self, files, keys, pixel_size)
 
-class BoundariesData(DeepCopyMixin):
+class BoundariesData(DeepCopyMixin, GetMixin):
     '''
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self,
-                 cell_ids: Optional[da.core.Array] = None,
-                 seg_mask_value: Optional[da.core.Array] = None,
+                 cell_ids: Optional[da.core.Array],
+                 seg_mask_value: Optional[da.core.Array],
                  #pixel_size: Number = 1, # required for boundaries that are saved as masks
                  ):
+        """_summary_
+        For details on `cell_ids` and `seg_mask_value` see: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/1.9/tutorials/outputs/xoa-output-zarr
+
+        Args:
+            cell_ids (Optional[da.core.Array]): _description_
+            seg_mask_value (Optional[da.core.Array]): _description_
+        """
         self.metadata = {}
 
         # store cell ids
@@ -469,15 +551,17 @@ class BoundariesData(DeepCopyMixin):
         # # save metadata
         # write_dict_to_json(dictionary=metadata_to_save, file=path / ".boundariesdata")
 
-class CellData(DeepCopyMixin):
+class CellData(DeepCopyMixin, GetMixin):
     '''
     Data object containing an AnnData object and a boundary object which are kept in sync.
     '''
     def __init__(self,
                matrix: AnnData,
                boundaries: Optional[BoundariesData],
+               config: dict = {}
                ):
         self.matrix = matrix
+        self.config = config
 
         if boundaries is not None:
             self.boundaries = boundaries
@@ -550,6 +634,12 @@ class CellData(DeepCopyMixin):
 
         # add version to metadata
         celldata_metadata["version"] = __version__
+
+        # add configurations
+        try:
+            celldata_metadata["config"] = self.config
+        except AttributeError:
+            pass
 
         # save metadata
         write_dict_to_json(dictionary=celldata_metadata, file=path / ".celldata")
@@ -660,112 +750,115 @@ class CellData(DeepCopyMixin):
                     setattr(self.boundaries, n, df)
 
 
-class ImageData(DeepCopyMixin):
+class ImageData(DeepCopyMixin, GetMixin):
     '''
     Object to read and load images.
     '''
     def __init__(self,
-                 path: Union[str, os.PathLike, Path],
-                 img_files: List[str],
-                 img_names: List[str],
-                 pixel_size: float,
+                 #path: Union[str, os.PathLike, Path] = None,
+                 img_files: List[str] = None,
+                 img_names: List[str] = None,
+                 pixel_size: float = None,
                  ):
-        # convert arguments to lists
-        img_files = convert_to_list(img_files)
-        img_names = convert_to_list(img_names)
+        # # add path to object
+        # self.path = path
 
         # iterate through files and load them
         self.names = []
         self.metadata = {}
-        for n, f in zip(img_names, img_files):
 
-            # generate full path for image
-            impath = path / f
-            impath = impath.resolve() # resolve relative path
-            suffix = impath.name.split(".", maxsplit=1)[-1]
+        if img_files is not None:
+            # convert arguments to lists
+            img_files = convert_to_list(img_files)
+            img_names = convert_to_list(img_names)
 
-            if "zarr" in suffix:
-            #if suffix == "zarr.zip":
-            # load image from .zarr.zip
-                with zarr.ZipStore(impath, mode="r") if suffix == "zarr.zip" else zarr.DirectoryStore(impath) as dirstore:
-                    # get components of zip store
-                    components = dirstore.listdir()
-
-                    if ".zarray" in components:
-                        # the store is an array which can be opened
-                        img = da.from_zarr(dirstore)#.persist()
-                    else:
-                        subres = [elem for elem in components if not elem.startswith(".")]
-                        img = []
-                        for s in subres:
-                            img.append(
-                                da.from_zarr(dirstore, component=s)#.persist()
-                                        )
-
-                    # retrieve OME metadata
-                    store = zarr.open(dirstore)
-                    meta = store.attrs.asdict()
-                    ome_meta = meta["OME"]
-                    axes = meta["axes"]
-                    # except KeyError:
-                    #     warnings.warn("No OME metadata in `zarr.zip` file. Skipped collection of metadata.")
-
-            elif suffix in ["ome.tif", "ome.tiff"]:
-                # load image from .ome.tiff
-                #img = read_ome_tiff(path=impath, levels=0)
-                img = read_ome_tiff(path=impath, levels=None)
-                # read ome metadata
-                with TiffFile(path / f) as tif:
-                    axes = tif.series[0].axes # get axes
-                    ome_meta = tif.ome_metadata # read OME metadata
-                    ome_meta = xmltodict.parse(ome_meta, attr_prefix="")["OME"] # convert XML to dict
-
-            else:
-                raise InvalidFileTypeError(
-                    allowed_types=["zarr", "zarr.zip", "ome.tif", "ome.tiff"],
-                    received_type=suffix
+            for n, f in zip(img_names, img_files):
+                #impath = path / f
+                self.add_image(
+                    image=f,
+                    name=n,
+                    axes=None,
+                    pixel_size=pixel_size,
+                    ome_meta=None
                     )
 
-            # set attribute and add names to object
-            setattr(self, n, img)
-            self.names.append(n)
-
-            # retrieve metadata
-            img_shape = img[0].shape if isinstance(img, list) else img.shape
-            img_max = img[0].max() if isinstance(img, list) else img.max()
-            img_max = int(img_max)
-
-            # save metadata
-            self.metadata[n] = {}
-            self.metadata[n]["file"] = f # store file information
-            self.metadata[n]["shape"] = img_shape  # store shape
-            #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
-            self.metadata[n]["axes"] = axes
-            self.metadata[n]["OME"] = ome_meta
-
-            # check whether the image is RGB or not
-            if len(img_shape) == 3:
-                self.metadata[n]["rgb"] = True
-            elif len(img_shape) == 2:
-                self.metadata[n]["rgb"] = False
-            else:
-                raise ValueError(f"Unknown image shape: {img_shape}")
-
-            # get image contrast limits
-            if self.metadata[n]["rgb"]:
-                self.metadata[n]["contrast_limits"] = (0, 255)
-            else:
-                self.metadata[n]["contrast_limits"] = (0, img_max)
-
-            # add universal pixel size to metadata
-            self.metadata[n]['pixel_size'] = pixel_size
-
-
     def __repr__(self):
-        repr_strings = [f"{tf.Bold}{n}:{tf.ResetAll}\t{metadata['shape']}" for n,metadata in self.metadata.items()]
-        s = "\n".join(repr_strings)
+        if len(self.metadata) > 0:
+            repr_strings = [f"{tf.Bold}{n}:{tf.ResetAll}\t{metadata['shape']}" for n,metadata in self.metadata.items()]
+            s = "\n".join(repr_strings)
+        else:
+            s = "empty"
         repr = f"{tf.Blue+tf.Bold}images{tf.ResetAll}\n{s}"
         return repr
+
+    def add_image(
+        self,
+        image: Union[da.core.Array, str, os.PathLike, Path],
+        name: str,
+        axes: Optional[str] = None, # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
+        pixel_size: Optional[Number] = None,
+        ome_meta: Optional[dict] = None
+        ):
+
+        # check if image is a path or a data array
+        if Path(str(image)).exists():
+            # read path
+            image = Path(image)
+            image = image.resolve() # resolve relative path
+            filename = image.name
+            img, ome_meta, axes = read_image(image)
+
+        elif isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
+            assert axes is not None, "If `image` is numpy or dask array, `axes` needs to be set."
+            assert pixel_size is not None, "If `image` is numpy or dask array, `pixel_size` needs to be set."
+
+            try:
+                # convert to dask array before addition
+                img = da.from_array(image)
+            except ValueError:
+                # in this case the array was already a dask array
+                img = image
+            filename = None
+
+        else:
+            raise ValueError(f"`image` is neither a dask array nor an existing path.")
+
+        # set attribute and add names to object
+        setattr(self, name, img)
+        self.names.append(name)
+
+        # retrieve metadata
+        img_shape = img[0].shape if isinstance(img, list) else img.shape
+        img_max = img[0].max() if isinstance(img, list) else img.max()
+        img_max = int(img_max)
+
+        # save metadata
+        self.metadata[name] = {}
+        self.metadata[name]["filename"] = filename
+        #self.metadata[n]["file"] = Path(relpath(impath, self.path)).as_posix() # store file information
+        #self.metadata[n]["file"] = f # store file information
+        self.metadata[name]["shape"] = img_shape  # store shape
+        #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
+        self.metadata[name]["axes"] = axes
+        self.metadata[name]["OME"] = ome_meta
+
+        # check whether the image is RGB or not
+        if len(img_shape) == 3:
+            self.metadata[name]["rgb"] = True
+        elif len(img_shape) == 2:
+            self.metadata[name]["rgb"] = False
+        else:
+            raise ValueError(f"Unknown image shape: {img_shape}")
+
+        # get image contrast limits
+        if self.metadata[name]["rgb"]:
+            self.metadata[name]["contrast_limits"] = (0, 255)
+        else:
+            self.metadata[name]["contrast_limits"] = (0, img_max)
+
+        # add universal pixel size to metadata
+        self.metadata[name]['pixel_size'] = pixel_size
+
 
     def load(self,
              which: Union[List[str], str] = "all"
@@ -783,8 +876,8 @@ class ImageData(DeepCopyMixin):
             setattr(self, n, img_loaded)
 
     def crop(self,
-             xlim: Tuple[int, int],
-             ylim: Tuple[int, int]
+             xlim: Optional[Tuple[int, int]],
+             ylim: Optional[Tuple[int, int]]
              ):
         # extract names from metadata
         names = list(self.metadata.keys())
@@ -815,15 +908,16 @@ class ImageData(DeepCopyMixin):
             setattr(self, n, cropped_img_data)
 
     def save(self,
-             path: Union[str, os.PathLike, Path],
+             output_folder: Union[str, os.PathLike, Path],
              keys_to_save: Optional[str] = None,
              as_zarr: bool = True,
              zipped: bool = False,
              save_pyramid: bool = True,
+             compression: Literal['jpeg', 'LZW', 'jpeg2000', 'ZLIB', None] = 'ZLIB', # jpeg2000 or ZLIB are recommended in the Xenium documentation - ZLIB is faster
              return_savepaths: bool = False,
              overwrite: bool = False
              ):
-        path = Path(path)
+        output_folder = Path(output_folder)
 
         if keys_to_save is None:
             keys_to_save = list(self.metadata.keys())
@@ -831,10 +925,10 @@ class ImageData(DeepCopyMixin):
             keys_to_save = convert_to_list(keys_to_save)
 
         # check overwrite
-        check_overwrite_and_remove_if_true(path=path, overwrite=overwrite)
+        check_overwrite_and_remove_if_true(path=output_folder, overwrite=overwrite)
 
         # create output directory
-        path.mkdir(parents=True, exist_ok=True)
+        output_folder.mkdir(parents=True, exist_ok=True)
 
         if return_savepaths:
             savepaths = {}
@@ -847,55 +941,45 @@ class ImageData(DeepCopyMixin):
                 if as_zarr:
                     # generate filename
                     if zipped:
-                        filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
+                        #filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
+                        filename = n + ".zarr.zip"
                     else:
-                        filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr"
+                        # filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr"
+                        filename = n + ".zarr"
 
-                    # decide whether to save as pyramid or not
-                    if isinstance(img, list):
-                        if not save_pyramid:
-                            img = img[0]
-                    else:
-                        if save_pyramid:
-                            # create img pyramid
-                            img = create_img_pyramid(img=img, nsubres=6)
-
-                    img_path = path / filename
-                    with zarr.ZipStore(img_path, mode="w") if zipped else zarr.DirectoryStore(img_path) as dirstore:
-                        # check whether to save the image as pyramid or not
-                        if save_pyramid:
-                            for i, im in enumerate(img):
-                                im.to_zarr(dirstore, component=str(i))
-                        else:
-                            # save image data in zipstore without pyramid
-                            img.to_zarr(dirstore)
-
-                        # open zarr store save metadata in zarr store
-                        store = zarr.open(dirstore, mode="a")
-                        store.attrs.put(img_metadata)
-                        # for k,v in img_metadata.items():
-                        #     store.attrs[k] = v
+                    # write to zarr
+                    img_path = output_folder / filename
+                    write_zarr(image=img, file=img_path,
+                               img_metadata=img_metadata,
+                               save_pyramid=save_pyramid)
 
                 else:
                     # get file name for saving
-                    filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
+                    #filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
+                    filename = n + ".ome.tif"
                     # retrieve image metadata for saving
                     photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
                     axes = img_metadata['axes']
 
                     # retrieve OME metadata
                     ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY", "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
-                    pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
+
+                    try:
+                        pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
+                    except KeyError:
+                        pixel_meta = img_metadata["OME"]
+
                     selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
 
                     # write images as OME-TIFF
-                    write_ome_tiff(path / filename, img,
+                    write_ome_tiff(image=img, file=output_folder / filename,
                                 photometric=photometric, axes=axes,
+                                compression=compression,
                                 metadata=selected_metadata, overwrite=False)
 
                 if return_savepaths:
                     # collect savepaths
-                    savepaths[n] = path / filename
+                    savepaths[n] = output_folder / filename
 
         if return_savepaths:
             return savepaths
