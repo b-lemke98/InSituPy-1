@@ -28,7 +28,7 @@ from shapely.affinity import scale as scale_func
 from tqdm import tqdm
 
 from insitupy import WITH_NAPARI, __version__
-from insitupy._constants import ISPY_METADATA_FILE, REGIONS_SYMBOL
+from insitupy._constants import ISPY_METADATA_FILE, LOAD_FUNCS, REGIONS_SYMBOL
 from insitupy._core._checks import _check_assignment, _substitution_func
 from insitupy._core._save import _save_images
 from insitupy._core._xenium import (_read_binned_expression,
@@ -44,7 +44,7 @@ from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting import volcano_plot
 from insitupy.utils import create_deg_dataframe
 from insitupy.utils.deg import create_deg_dataframe
-from insitupy.utils.preprocessing import (normalize_anndata,
+from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
                                           reduce_dimensions_anndata)
 from insitupy.utils.utils import convert_to_list, get_nrows_maxcols
 
@@ -346,50 +346,90 @@ class InSituData:
         return self_copy
 
     def crop(self,
-            shape_layer: Optional[str] = None,
-            xlim: Optional[Tuple[int, int]] = None,
-            ylim: Optional[Tuple[int, int]] = None,
-            inplace: bool = False
+             region_tuple: Optional[Tuple[str, str]] = None,
+             layer_name: Optional[str] = None,
+             xlim: Optional[Tuple[int, int]] = None,
+             ylim: Optional[Tuple[int, int]] = None,
+             inplace: bool = False
             ):
-        '''
-        Function to crop the XeniumData object.
-        '''
-        if shape_layer is not None:
-            try:
-                # extract shape layer for cropping from napari viewer
-                crop_shape = self.viewer.layers[shape_layer]
-            except KeyError:
-                raise KeyError(f"Shape layer selected for cropping ('{shape_layer}') was not found in layers.")
+        """
+        Crop the data based on the provided parameters.
 
-            # check the type of the element
-            if not isinstance(crop_shape, napari.layers.Shapes):
-                raise WrongNapariLayerTypeError(found=type(crop_shape), wanted=napari.layers.Shapes)
+        Args:
+            region_tuple (Optional[Tuple[str, str]]): A tuple specifying the region to crop.
+            layer_name (Optional[str]): The name of the layer to use for cropping.
+            xlim (Optional[Tuple[int, int]]): The x-axis limits for cropping.
+            ylim (Optional[Tuple[int, int]]): The y-axis limits for cropping.
+            inplace (bool): If True, modify the data in place. Otherwise, return a new cropped data.
+
+        Raises:
+            ValueError: If none of region_tuple, layer_name, or xlim/ylim are provided.
+        """
+        if layer_name is None and region_tuple is None and (xlim is None or ylim is None):
+            raise ValueError("At least one of shape_layer, region_tuple, or xlim/ylim must be provided.")
+
+        # retrieve pixel size of data
+        pixel_size = self.metadata["xenium"]["pixel_size"]
+
+        if region_tuple is not None:
+
+            # extract regions dataframe
+            region_key = region_tuple[0]
+            region_name = region_tuple[1]
+            region_df = self.regions.get(region_key)
+
+            # extract geometry
+            geometry = region_df[region_df["name"] == region_name]["geometry"].item()
 
             use_shape = True
+
+        elif layer_name is not None:
+            try:
+                # extract shape layer for cropping from napari viewer
+                layer = self.viewer.layers[layer_name]
+            except KeyError:
+                raise KeyError(f"Shape layer selected for cropping ('{layer_name}') was not found in layers.")
+
+            # check the type of the element
+            if not isinstance(layer, napari.layers.Shapes):
+                raise WrongNapariLayerTypeError(found=type(layer), wanted=napari.layers.Shapes)
+
+            # make sure the layer contains only one element
+            if len(layer.data) != 1:
+                raise NotOneElementError(layer.data)
+
+            # select the shape from list
+            crop_window = layer.data[0].copy()
+            # crop_window *= pixel_size
+            shape_type = layer.shape_type[0]
+
+            geometry = convert_napari_shape_to_polygon_or_line(
+                napari_shape_data=crop_window,
+                shape_type=shape_type
+                )
+
+            use_shape = True
+
         else:
             # if xlim or ylim is not none, assert that both are not None
             if xlim is not None or ylim is not None:
                 assert np.all([elem is not None for elem in [xlim, ylim]])
                 use_shape = False
 
-        # assert that either shape_layer is given or xlim/ylim
-        assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
+        # # assert that either shape_layer is given or xlim/ylim
+        # assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
 
         if use_shape:
-            # extract shape layer for cropping from napari viewer
-            crop_shape = self.viewer.layers[shape_layer]
+            # convert to metric unit (normally µm)
+            geometry = scale_func(geometry, xfact=pixel_size, yfact=pixel_size, origin=(0,0))
 
-            # check the structure of the shape object
-            if len(crop_shape.data) != 1:
-                raise NotOneElementError(crop_shape.data)
+            # extract x and y limits from the geometry
+            bounding_box = geometry.bounds # (minx, miny, maxx, maxy)
+            xlim = (bounding_box[0], bounding_box[2])
+            ylim = (bounding_box[1], bounding_box[3])
 
-            # select the shape from list
-            crop_window = crop_shape.data[0].copy()
-            crop_window *= self.metadata["xenium"]["pixel_size"] # convert to metric unit (normally µm)
-
-            # extract x and y limits from the shape (assuming a rectangle)
-            xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
-            ylim = (crop_window[:, 0].min(), crop_window[:, 0].max())
+            # xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
+            # ylim = (crop_window[:, 0].min(), crop_window[:, 0].max())
 
         # make sure there are no negative values in the limits
         xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
@@ -468,10 +508,17 @@ class InSituData:
             _self.images.crop(xlim=xlim, ylim=ylim)
 
         if hasattr(_self, "annotations"):
-            _self.annotations.crop(xlim=xlim, ylim=ylim)
+
+            _self.annotations.crop(
+                xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
+                ylim=tuple([elem / pixel_size for elem in ylim])
+                )
 
         if hasattr(_self, "regions"):
-            _self.regions.crop(xlim=xlim, ylim=ylim)
+            _self.regions.crop(
+                xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
+                ylim=tuple([elem / pixel_size for elem in ylim])
+            )
 
         # add information about cropping to metadata
         if "cropping_history" not in _self.metadata:
@@ -554,8 +601,9 @@ class InSituData:
         sc.pp.highly_variable_genes(self.cells.matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
 
 
-    def normalize(self,
+    def normalize_and_transform(self,
                 transformation_method: Literal["log1p", "sqrt"] = "log1p",
+                target_sum: int = 250,
                 normalize_alt: bool = True,
                 verbose: bool = True
                 ) -> None:
@@ -583,7 +631,11 @@ class InSituData:
         except AttributeError:
             raise ModalityNotFoundError(modality="cells")
 
-        normalize_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
+        normalize_and_transform_anndata(
+            adata=cells.matrix,
+            transformation_method=transformation_method,
+            target_sum=target_sum,
+            verbose=verbose)
 
         try:
             alt = self.alt
@@ -593,7 +645,7 @@ class InSituData:
             print("Found `.alt` modality.")
             for k, cells in alt.items():
                 print(f"\tNormalizing {k}...")
-                normalize_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
+                normalize_and_transform_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
 
     def add_alt(self,
                 celldata_to_add: CellData,
@@ -683,11 +735,11 @@ class InSituData:
     def load_all(self,
                  skip: Optional[str] = None,
                  ):
-        # extract read functions
-        read_funcs = [elem for elem in dir(self) if elem.startswith("load_")]
-        read_funcs = [elem for elem in read_funcs if elem not in ["load_all", "load_quicksave"]]
+        # # extract read functions
+        # read_funcs = [elem for elem in dir(self) if elem.startswith("load_")]
+        # read_funcs = [elem for elem in read_funcs if elem not in ["load_all", "load_quicksave"]]
 
-        for f in read_funcs:
+        for f in LOAD_FUNCS:
             if skip is None or skip not in f:
                 func = getattr(self, f)
                 try:
@@ -829,6 +881,8 @@ class InSituData:
             else:
                 img_names = convert_to_list(names)
 
+            print(img_names)
+
             # get file paths and names
             img_files = [v for k,v in self.metadata["data"]["images"].items() if k in img_names]
             img_names = [k for k,v in self.metadata["data"]["images"].items() if k in img_names]
@@ -928,7 +982,7 @@ class InSituData:
                 If True, perform UMAP dimensionality reduction. Default is True.
             tsne (bool, optional):
                 If True, perform t-SNE dimensionality reduction. Default is True.
-            layer (str, optional): 
+            layer (str, optional):
                 Specifies the layer of the AnnData object to operate on. Default is None (uses adata.X).
             batch_correction_key (str, optional):
                 Batch key for performing batch correction using scanorama. Default is None, indicating no batch correction.
@@ -954,7 +1008,7 @@ class InSituData:
             raise ModalityNotFoundError(modality="cells")
 
         reduce_dimensions_anndata(adata=cells.matrix,
-                                  umap=umap, tsne=tsne, layer=layer, 
+                                  umap=umap, tsne=tsne, layer=layer,
                                   batch_correction_key=batch_correction_key,
                                   perform_clustering=perform_clustering,
                                   verbose=verbose,
@@ -983,7 +1037,8 @@ class InSituData:
             overwrite: bool = False,
             zip_output: bool = False,
             images_as_zarr: bool = True,
-            zarr_zipped: bool = False
+            zarr_zipped: bool = False,
+            verbose: bool = True
             ):
         '''
         Function to save the XeniumData object.
@@ -1001,7 +1056,7 @@ class InSituData:
             zippath = path / (path.stem + ".zip")
             check_overwrite_and_remove_if_true(path=zippath, overwrite=overwrite)
 
-        print(f"Saving data to {str(path)}")
+        print(f"Saving data to {str(path)}") if verbose else None
 
         # create output directory if it does not exist yet
         path.mkdir(parents=True, exist_ok=True)
@@ -1104,7 +1159,7 @@ class InSituData:
             shutil.make_archive(path, 'zip', path, verbose=False)
             shutil.rmtree(path) # delete directory
 
-        print("Saved.")
+        print("Saved.") if verbose else None
 
     def save(self,
              path: Optional[Union[str, os.PathLike, Path]] = None,
@@ -1863,7 +1918,7 @@ def register_images(
         image = image[0]
 
     # read images in XeniumData object
-    data.load_images(names=template_image_name)
+    data.load_images(names=template_image_name, load_cell_segmentation_images=False)
     template = data.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
 
     # extract OME metadata
