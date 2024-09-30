@@ -234,6 +234,9 @@ class InSituExperiment:
         Returns:
             InSituExperiment: A new InSituExperiment object that is a deep copy of the current object.
         """
+        for xd in self._data:
+            if hasattr(xd, "viewer"):
+                del xd.viewer
         return deepcopy(self)
 
     def iterdata(self):
@@ -400,7 +403,7 @@ class InSituExperiment:
         new_metadata = []
 
         for key, obj in zip(keys, objs):
-            if not isinstance(obj, cls):
+            if not isinstance(obj, InSituExperiment):
                 raise TypeError("All objects must be instances of InSituExperiment.")
             new_data.extend(obj._data)
             metadata = obj._metadata.copy()
