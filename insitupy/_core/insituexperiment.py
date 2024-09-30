@@ -1,4 +1,5 @@
 import os
+import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
@@ -151,6 +152,80 @@ class InSituExperiment:
         # Concatenate the new metadata with the existing metadata
         self._metadata = pd.concat([self._metadata, new_metadata], axis=0, ignore_index=True)
 
+
+    def append_metadata(self,
+                        new_metadata: Union[pd.DataFrame, dict, str, os.PathLike, Path],
+                        by: Optional[str] = None,
+                        overwrite: bool = False
+                        ):
+        """
+        Append metadata to the existing InSituExperiment object.
+
+        Args:
+            new_metadata (Union[pd.DataFrame, dict, str, os.PathLike, Path]): The new metadata to be added. Can be a DataFrame, a dictionary, or a path to a CSV/Excel file.
+            by (str, optional): The column name to use for pairing metadata. If None, metadata is paired by order.
+            overwrite (bool, optional): Whether to overwrite existing columns in the metadata. Defaults to False.
+
+        Raises:
+            ValueError: If the 'by' column is not unique in either the existing or new metadata.
+        """
+        # Convert new_metadata to a DataFrame if it is not already one
+        if isinstance(new_metadata, dict):
+            new_metadata = pd.DataFrame(new_metadata)
+        elif isinstance(new_metadata, (str, os.PathLike, Path)):
+            new_metadata = Path(new_metadata)
+            if new_metadata.suffix == '.csv':
+                new_metadata = pd.read_csv(new_metadata)
+            elif new_metadata.suffix in ['.xlsx', '.xls']:
+                new_metadata = pd.read_excel(new_metadata)
+            else:
+                raise ValueError("Unsupported file format. Please provide a path to a CSV or Excel file.")
+
+        # Create a copy of the existing metadata
+        old_metadata = self._metadata.copy()
+
+        if overwrite:
+            # preserve only the columns of the old metadata that are not in the new metadata
+            cols_to_use = list(old_metadata.columns.difference(new_metadata.columns))
+
+            if by is not None:
+                cols_to_use = [by] + cols_to_use
+
+                # sort them by the original order
+                cols_to_use = [elem for elem in old_metadata.columns if elem in cols_to_use]
+
+            old_metadata = old_metadata[cols_to_use]
+        else:
+            # preserve only such columns of the new metadata that are not yet in the old metadata
+            cols_to_use = list(new_metadata.columns.difference(old_metadata.columns))
+
+            if by is not None:
+                cols_to_use = [by] + cols_to_use
+
+            new_metadata = new_metadata[cols_to_use]
+
+        if by is None:
+            if len(new_metadata) != len(updated_metadata):
+                raise ValueError("Length of new metadata does not match the existing metadata.")
+            warnings.warn("No 'by' column provided. Metadata will be paired by order.")
+            #updated_metadata = pd.concat([updated_metadata.reset_index(drop=True), new_metadata.reset_index(drop=True)], axis=1)
+            updated_metadata = pd.merge(left=old_metadata, right=new_metadata, left_index=True, right_index=True)
+        else:
+            if by not in old_metadata.columns or by not in new_metadata.columns:
+                raise ValueError(f"Column '{by}' must be present in both existing and new metadata.")
+
+            if not old_metadata[by].is_unique or not new_metadata[by].is_unique:
+                raise ValueError(f"Column '{by}' must be unique in both existing and new metadata.")
+
+            updated_metadata = pd.merge(left=old_metadata, right=new_metadata, on=by)
+
+        # Ensure the metadata is paired with the correct data
+        if len(updated_metadata) != len(self._data):
+            raise ValueError("The number of metadata entries does not match the number of data entries.")
+
+        # Update the object's metadata only if the check passes
+        self._metadata = updated_metadata
+
     def copy(self):
         """Create a deep copy of the InSituExperiment object.
 
@@ -221,7 +296,7 @@ class InSituExperiment:
                    title_size: int = 20,
                    max_cols: int = 4,
                    figsize: Tuple[int, int] = (8,6),
-                   savepath: Optional[os.PathLike] = None,
+                   savepath: Optional[Union[str, os.PathLike, Path]] = None,
                    save_only: bool = False,
                    show: bool = True,
                    fig: Optional[Figure] = None,
