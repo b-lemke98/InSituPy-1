@@ -6,7 +6,6 @@ import matplotlib
 import numpy as np
 import pandas as pd
 from matplotlib.colors import rgb2hex
-from napari.types import LayerDataTuple
 from pandas.api.types import is_numeric_dtype
 from shapely import (LinearRing, LineString, MultiPoint, MultiPolygon, Point,
                      Polygon)
@@ -21,6 +20,7 @@ from ._checks import check_rgb_column
 
 if WITH_NAPARI:
     import napari
+    from napari.types import LayerDataTuple
 
     def _add_annotations_as_layer(
         dataframe: pd.DataFrame,
