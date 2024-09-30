@@ -209,7 +209,8 @@ class InSituExperiment:
                 raise ValueError("Length of new metadata does not match the existing metadata.")
             warnings.warn("No 'by' column provided. Metadata will be paired by order.")
             #updated_metadata = pd.concat([updated_metadata.reset_index(drop=True), new_metadata.reset_index(drop=True)], axis=1)
-            updated_metadata = pd.merge(left=old_metadata, right=new_metadata, left_index=True, right_index=True)
+            updated_metadata = pd.merge(left=old_metadata, right=new_metadata,
+                                        left_index=True, right_index=True, how="left")
         else:
             if by not in old_metadata.columns or by not in new_metadata.columns:
                 raise ValueError(f"Column '{by}' must be present in both existing and new metadata.")
@@ -217,7 +218,8 @@ class InSituExperiment:
             if not old_metadata[by].is_unique or not new_metadata[by].is_unique:
                 raise ValueError(f"Column '{by}' must be unique in both existing and new metadata.")
 
-            updated_metadata = pd.merge(left=old_metadata, right=new_metadata, on=by)
+            updated_metadata = pd.merge(left=old_metadata, right=new_metadata,
+                                        on=by, how="left")
 
         # Ensure the metadata is paired with the correct data
         if len(updated_metadata) != len(self._data):
