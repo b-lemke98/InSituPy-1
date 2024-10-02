@@ -2303,7 +2303,7 @@ def differential_gene_expression(
 
     if plot_volcano:
         volcano_plot(
-            data=df[rgg_groups[0]],
+            data=df,
             title=plot_title,
             **kwargs
             )
