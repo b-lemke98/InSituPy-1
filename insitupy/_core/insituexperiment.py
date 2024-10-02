@@ -127,7 +127,7 @@ class InSituExperiment:
         else:
             dataset = insitupy.read_xenium(data)
 
-        assert isinstance(dataset, insitupy.InSituData), "Loaded dataset is not an InSituData object."
+        assert isinstance(dataset, insitupy._core.insitudata.InSituData), "Loaded dataset is not an InSituData object."
 
         # # set a unique ID
         # dataset._set_uid()

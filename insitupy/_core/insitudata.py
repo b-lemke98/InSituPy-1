@@ -2193,7 +2193,7 @@ def differential_gene_expression(
     check_reference_during_substitution = True if reference_data is None else False
 
     if region_tuple is not None:
-        assert reference_data is None, "If `reference_data` is not None, `region_tuple` must be None."
+        assert reference_data is None, "If `region_tuple` is given, `reference_data` must be None."
 
         region_key = region_tuple[0]
         region_name = region_tuple[1]
@@ -2207,9 +2207,11 @@ def differential_gene_expression(
     if region_tuple is not None:
         # select only one region
         region_mask = [region_name in elem for elem in adata1.obsm["regions"][region_key]]
+        assert np.any(region_mask), f"Region '{region_name}' not found in key '{region_key}'."
 
-        print(f"Select only region '{region_name}' from key '{region_key}'.", flush=True)
+        print(f"Restrict analysis to region '{region_name}' from key '{region_key}'.", flush=True)
         adata1 = adata1[region_mask].copy()
+
 
     col_with_id = adata1.obsm["annotations"].apply(
         func=lambda row: _substitution_func(
@@ -2256,7 +2258,7 @@ def differential_gene_expression(
         col_with_id_ref = col_with_id_ref.apply(func=lambda x: f"2-{x}")
 
         # check that the reference_name exists inside the column
-        assert np.any(col_with_id_ref == reference_name), f"reference_name '{reference_name}' not found under reference_key '{reference_key}'."
+        assert np.any(col_with_id_ref == f"2-{reference_name}"), f"reference_name '{reference_name}' not found under reference_key '{reference_key}'."
 
         # add column to obs
         adata2.obs[comb_col_name] = col_with_id_ref
@@ -2294,9 +2296,10 @@ def differential_gene_expression(
                             )
 
     # create dataframe from results
-    df = create_deg_dataframe(
+    res_dict = create_deg_dataframe(
         adata=adata_combined, groups=None,
     )
+    df = res_dict[rgg_groups[0]]
 
     if plot_volcano:
         volcano_plot(
@@ -2305,4 +2308,7 @@ def differential_gene_expression(
             **kwargs
             )
     else:
-        return df
+        return {
+            "results": df,
+            "params": adata_combined.uns["rank_genes_groups"]["params"]
+        }
