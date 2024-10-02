@@ -812,14 +812,6 @@ class InSituData:
                                 scale_factor=(pixel_size, pixel_size),
                                 )
 
-        # self.regions = RegionsData(files=files,
-        #                            keys=keys,
-        #                            pixel_size=self.metadata["xenium"]['pixel_size'])
-
-        # # check if anything really added to regions and if not, remove it again
-        # if len(self.regions.metadata) == 0:
-        #     self.remove_modality("regions")
-
         self._remove_empty_modalities()
 
 
