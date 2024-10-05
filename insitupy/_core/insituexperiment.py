@@ -522,7 +522,7 @@ class InSituExperiment:
         return experiment
 
     @classmethod
-    def from_region(cls,
+    def from_regions(cls,
                     data: insitupy.InSituData,
                     region_key: str,
                     region_names: Optional[Union[List[str], str]] = None
