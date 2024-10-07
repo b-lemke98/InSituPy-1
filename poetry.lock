@@ -1104,6 +1104,17 @@ numpy = ">=1.12.0"
 scikit-learn = ">=0.24"
 
 [[package]]
+name = "get-annotations"
+version = "0.1.2"
+description = "A backport of Python 3.10's inspect.get_annotation() function"
+optional = false
+python-versions = ">=3.6,<4.0"
+files = [
+    {file = "get-annotations-0.1.2.tar.gz", hash = "sha256:da7b69b8043237cc7f7ce5919e9cc59bd18fc4e2704b43eb34e3ba4fa9374bab"},
+    {file = "get_annotations-0.1.2-py3-none-any.whl", hash = "sha256:788ba8aa2434ee34ffb985c4aea2f9e575204c884c0e0dd0f969be846470e527"},
+]
+
+[[package]]
 name = "h5py"
 version = "3.9.0"
 description = "Read and write HDF5 files from Python"
@@ -1733,6 +1744,20 @@ files = [
 [package.extras]
 lint = ["pre-commit (>=3.3)"]
 test = ["pytest (>=7.4)", "pytest-cov (>=4.1)"]
+
+[[package]]
+name = "legacy-api-wrap"
+version = "1.4"
+description = ""
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "legacy_api_wrap-1.4-py3-none-any.whl", hash = "sha256:bf81b8ee432d80e7203aa079c26fc3a0f228d158db808868f10c2e36a8f64dbd"},
+    {file = "legacy_api_wrap-1.4.tar.gz", hash = "sha256:92dfa274cedb26d6e6f70fac85c856fbdcc05058066656d76a665fb4bf11b785"},
+]
+
+[package.extras]
+test = ["coverage", "coverage-rich", "pytest", "toml"]
 
 [[package]]
 name = "leidenalg"
@@ -3732,52 +3757,56 @@ scipy = ">=1.0.0"
 
 [[package]]
 name = "scanpy"
-version = "1.9.5"
+version = "1.10.3"
 description = "Single-Cell Analysis in Python."
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.9"
 files = [
-    {file = "scanpy-1.9.5-py3-none-any.whl", hash = "sha256:0795625d5aaf4b2e88b5328cf8cbefe2f5ebc26d45de44acf49ad9763382a301"},
-    {file = "scanpy-1.9.5.tar.gz", hash = "sha256:1d90f95cd5e103c9e0cc41fd84c1f2d81d86d6337cbe294316578ed071d39d82"},
+    {file = "scanpy-1.10.3-py3-none-any.whl", hash = "sha256:d8fa60a6b7f8ab994fe70d2e5106d9b0b9980bf2f65d40f66a12a49db3dbc249"},
+    {file = "scanpy-1.10.3.tar.gz", hash = "sha256:0a644d8fa173ac1c62aed4255de7031bf7501c7ad4441cf6ce99cd638b32f880"},
 ]
 
 [package.dependencies]
-anndata = ">=0.7.4"
-h5py = ">=3"
+anndata = ">=0.8"
+get-annotations = {version = "*", markers = "python_version < \"3.10\""}
+h5py = ">=3.1"
 joblib = "*"
-matplotlib = ">=3.4"
+legacy-api-wrap = ">=1.4"
+matplotlib = ">=3.6"
 natsort = "*"
-networkx = ">=2.3"
-numba = ">=0.41.0"
-numpy = ">=1.17.0"
-packaging = "*"
-pandas = ">=1.0"
+networkx = ">=2.7"
+numba = ">=0.56"
+numpy = ">=1.23"
+packaging = ">=21.3"
+pandas = ">=1.5"
 patsy = "*"
+pynndescent = ">=0.5"
 scikit-learn = ">=0.24"
-scipy = ">=1.4"
-seaborn = "*"
+scipy = ">=1.8"
+seaborn = ">=0.13"
 session-info = "*"
-statsmodels = ">=0.10.0rc2"
+statsmodels = ">=0.13"
 tqdm = "*"
-umap-learn = ">=0.3.10"
+umap-learn = ">0.5.0"
 
 [package.extras]
 bbknn = ["bbknn"]
-dask = ["dask[array] (!=2.17.0)"]
-dev = ["black (>=20.8b1)", "docutils", "setuptools_scm"]
-doc = ["matplotlib (!=3.6.1)", "myst-parser", "scanpy[paga]", "scanpydoc[typehints] (>=0.7.7,<0.8)", "sphinx (>=4.4)", "sphinx-rtd-theme (>=1.0)"]
+dask = ["dask[array] (>=2022.09.2,<2024.8.0)"]
+dask-ml = ["dask-ml", "dask[array] (>=2022.09.2,<2024.8.0)"]
+dev = ["pre-commit", "setuptools-scm", "towncrier"]
+doc = ["dask", "igraph", "ipython (>=7.20)", "matplotlib (!=3.6.1)", "myst-nb (>=1)", "myst-parser (>=2)", "nbsphinx (>=0.9)", "readthedocs-sphinx-search", "sam-algorithm", "scanpydoc (>=0.14.1)", "setuptools", "sphinx (>=7)", "sphinx-autodoc-typehints (>=1.25.2)", "sphinx-book-theme (>=1.1.0)", "sphinx-copybutton", "sphinx-design", "sphinx-tabs", "sphinxcontrib-bibtex", "sphinxext-opengraph"]
 harmony = ["harmonypy"]
-leiden = ["igraph (>=0.10)", "leidenalg (>=0.9)"]
-louvain = ["igraph", "louvain (>=0.6,!=0.6.2)"]
+leiden = ["igraph (>=0.10)", "leidenalg (>=0.9.0)"]
+louvain = ["igraph", "louvain (>=0.6.0,!=0.6.2)"]
 magic = ["magic-impute (>=2.0)"]
 paga = ["igraph"]
 rapids = ["cudf (>=0.9)", "cugraph (>=0.9)", "cuml (>=0.9)"]
 scanorama = ["scanorama"]
-scrublet = ["scrublet"]
+scrublet = ["scikit-image"]
 skmisc = ["scikit-misc (>=0.1.3)"]
-test = ["scanpy[dask]", "scanpy[leiden]", "scanpy[test-min]", "zarr"]
-test-full = ["scanpy[harmony]", "scanpy[leiden]", "scanpy[magic]", "scanpy[scanorama]", "scanpy[scrublet]", "scanpy[skmisc]", "scanpy[test]"]
-test-min = ["profimp", "pytest (>=4.4)", "pytest-nunit"]
+test = ["dask[array] (>=2022.09.2,<2024.8.0)", "igraph (>=0.10)", "leidenalg (>=0.9.0)", "profimp", "pytest (>=8.2)", "pytest-cov", "pytest-mock", "pytest-nunit", "scikit-image", "zarr"]
+test-full = ["dask-ml", "dask[array] (>=2022.09.2,<2024.8.0)", "harmonypy", "igraph", "igraph (>=0.10)", "leidenalg (>=0.9.0)", "louvain (>=0.6.0,!=0.6.2)", "magic-impute (>=2.0)", "profimp", "pytest (>=8.2)", "pytest-cov", "pytest-mock", "pytest-nunit", "scanorama", "scikit-image", "scikit-misc (>=0.1.3)", "zappy", "zarr"]
+test-min = ["profimp", "pytest (>=8.2)", "pytest-cov", "pytest-mock", "pytest-nunit"]
 
 [[package]]
 name = "scikit-image"
@@ -3953,24 +3982,24 @@ test = ["array-api-strict", "asv", "gmpy2", "hypothesis (>=6.30)", "mpmath", "po
 
 [[package]]
 name = "seaborn"
-version = "0.12.2"
+version = "0.13.2"
 description = "Statistical data visualization"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "seaborn-0.12.2-py3-none-any.whl", hash = "sha256:ebf15355a4dba46037dfd65b7350f014ceb1f13c05e814eda2c9f5fd731afc08"},
-    {file = "seaborn-0.12.2.tar.gz", hash = "sha256:374645f36509d0dcab895cba5b47daf0586f77bfe3b36c97c607db7da5be0139"},
+    {file = "seaborn-0.13.2-py3-none-any.whl", hash = "sha256:636f8336facf092165e27924f223d3c62ca560b1f2bb5dff7ab7fad265361987"},
+    {file = "seaborn-0.13.2.tar.gz", hash = "sha256:93e60a40988f4d65e9f4885df477e2fdaff6b73a9ded434c1ab356dd57eefff7"},
 ]
 
 [package.dependencies]
-matplotlib = ">=3.1,<3.6.1 || >3.6.1"
-numpy = ">=1.17,<1.24.0 || >1.24.0"
-pandas = ">=0.25"
+matplotlib = ">=3.4,<3.6.1 || >3.6.1"
+numpy = ">=1.20,<1.24.0 || >1.24.0"
+pandas = ">=1.2"
 
 [package.extras]
 dev = ["flake8", "flit", "mypy", "pandas-stubs", "pre-commit", "pytest", "pytest-cov", "pytest-xdist"]
-docs = ["ipykernel", "nbconvert", "numpydoc", "pydata_sphinx_theme (==0.10.0rc2)", "pyyaml", "sphinx-copybutton", "sphinx-design", "sphinx-issues"]
-stats = ["scipy (>=1.3)", "statsmodels (>=0.10)"]
+docs = ["ipykernel", "nbconvert", "numpydoc", "pydata_sphinx_theme (==0.10.0rc2)", "pyyaml", "sphinx (<6.0.0)", "sphinx-copybutton", "sphinx-design", "sphinx-issues"]
+stats = ["scipy (>=1.7)", "statsmodels (>=0.12)"]
 
 [[package]]
 name = "session-info"
@@ -4419,6 +4448,17 @@ numpy = "*"
 all = ["defusedxml", "fsspec", "imagecodecs (>=2023.8.12)", "lxml", "matplotlib", "zarr"]
 
 [[package]]
+name = "toml"
+version = "0.10.2"
+description = "Python Library for Tom's Obvious, Minimal Language"
+optional = false
+python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
+files = [
+    {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
+    {file = "toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f"},
+]
+
+[[package]]
 name = "tomli"
 version = "2.0.1"
 description = "A lil' TOML parser"
@@ -4798,4 +4838,4 @@ napari = ["napari"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9.18"
-content-hash = "867611b0c25897cffd3b8b70342fe13c2b528387728eb4b949e3fc1ed3114837"
+content-hash = "e2f24878ae948efdfbadccf71a64846765feb0cd1131bf93c59ebc5a0365cd34"
