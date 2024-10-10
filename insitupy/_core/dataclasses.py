@@ -793,7 +793,7 @@ class ImageData(DeepCopyMixin, GetMixin):
 
     def add_image(
         self,
-        image: Union[da.core.Array, str, os.PathLike, Path],
+        image: Union[da.core.Array, np.ndarray, str, os.PathLike, Path],
         name: str,
         axes: Optional[str] = None, # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
         pixel_size: Optional[Number] = None,
@@ -801,14 +801,7 @@ class ImageData(DeepCopyMixin, GetMixin):
         ):
 
         # check if image is a path or a data array
-        if Path(str(image)).exists():
-            # read path
-            image = Path(image)
-            image = image.resolve() # resolve relative path
-            filename = image.name
-            img, ome_meta, axes = read_image(image)
-
-        elif isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
+        if isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
             assert axes is not None, "If `image` is numpy or dask array, `axes` needs to be set."
             assert pixel_size is not None, "If `image` is numpy or dask array, `pixel_size` needs to be set."
 
@@ -819,6 +812,13 @@ class ImageData(DeepCopyMixin, GetMixin):
                 # in this case the array was already a dask array
                 img = image
             filename = None
+
+        elif Path(str(image)).exists():
+            # read path
+            image = Path(image)
+            image = image.resolve() # resolve relative path
+            filename = image.name
+            img, ome_meta, axes = read_image(image)
 
         else:
             raise ValueError(f"`image` is neither a dask array nor an existing path.")
