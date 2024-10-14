@@ -1,6 +1,6 @@
 import os
 from numbers import Number
-from typing import Literal, Optional, Tuple
+from typing import Literal, Optional, Tuple, Union
 
 import pandas as pd
 import seaborn as sns
@@ -22,7 +22,7 @@ from ..utils.utils import get_nrows_maxcols
 def expr_along_obs_val(
     adata: AnnData,
     keys: str,
-    obs_val: str,
+    obs_val: Union[str, Tuple[str, str]],
     groupby: Optional[str] = None,
     splitby: str = None,
     hue: str = None,
@@ -40,13 +40,18 @@ def expr_along_obs_val(
     show_progress=False,
     use_raw=False,
     max_cols=4,
-    xlabel=None,ylabel=None,
-    vline=None, hline=None, vlinewidth=4,
-    #values_into_title=None, title_suffix='',
+    xlabel=None,
+    ylabel=None,
+    vline=None,
+    hline=None,
+    vlinewidth=4,
     custom_titles=None,
     legend_fontsize=24,
     plot_legend=True,
-    xlabel_fontsize=28, ylabel_fontsize=28, title_fontsize=20, tick_fontsize=24,
+    xlabel_fontsize=28,
+    ylabel_fontsize=28,
+    title_fontsize=20,
+    tick_fontsize=24,
     figsize=(8,6),
     savepath: Optional[os.PathLike] = None,
     save_only: bool = False,
@@ -64,7 +69,9 @@ def expr_along_obs_val(
     Args:
         adata (AnnData): Annotated data matrix.
         keys (str): Keys for the gene expression values to be plotted.
-        obs_val (str): Observation category to be plotted on the x-axis.
+        obs_val (Union[str, Tuple[str, str]]): Observation category to be plotted on the x-axis.
+            Can be a string representing a column in `adata.obs` or a tuple (obsm_key, obsm_col)
+            where `obsm_key` is a key in `adata.obsm` and `obsm_col` is a column in the corresponding DataFrame.
         groupby (Optional[str]): Observation category to group by.
         splitby (str, optional): Observation category to split by.
         hue (str, optional): Observation category to color by.
@@ -121,8 +128,16 @@ def expr_along_obs_val(
     # make inputs to lists
     keys = [keys] if isinstance(keys, str) else list(keys)
 
-    # remove NaNs `obs_val` column
+
     adata_obs = adata.obs.copy()
+    if isinstance(obs_val, tuple):
+        print("Retrieve `obs_val` from .obsm.")
+        obsm_key = obs_val[0]
+        obsm_col = obs_val[1]
+        obs_val = f"distance_from_{obsm_col}"
+        adata_obs[obs_val] = adata.obsm[obsm_key][obsm_col]
+
+    # remove NaNs `obs_val` column
     not_na_and_not_zero_mask = adata_obs[obs_val].notna() & adata_obs[obs_val] > 0
     adata_obs = adata_obs[not_na_and_not_zero_mask]
 
@@ -376,8 +391,6 @@ def expr_along_obs_val(
             else:
                 pass
 
-
-
     if return_data:
         # close plot
         plt.close()
@@ -403,7 +416,7 @@ def expr_along_obs_val(
 
 def cell_abundance_along_obs_val(
     adata: AnnData,
-    obs_val: str,
+    obs_val: Union[str, Tuple[str, str]],
     groupby: Optional[str] = None,
     xmin: Number = 0,
     savepath: Optional[os.PathLike] = None,
@@ -413,8 +426,39 @@ def cell_abundance_along_obs_val(
     histplot_multiple: str = "stack",
     histplot_element: str = "bars"
     ):
+
+    """
+    Plot cell abundance along a specified observation value.
+
+    Args:
+        adata (AnnData): Annotated data matrix.
+        obs_val (Union[str, Tuple[str, str]]): Observation category to be plotted on the x-axis.
+            Can be a string representing a column in `adata.obs` or a tuple (obsm_key, obsm_col)
+            where `obsm_key` is a key in `adata.obsm` and `obsm_col` is a column in the corresponding DataFrame.
+        groupby (Optional[str], optional): Column in `adata.obs` to group by. Defaults to None.
+        xmin (Number, optional): Minimum value of `obs_val` to include in the plot. Defaults to 0.
+        savepath (Optional[os.PathLike], optional): Path to save the figure. Defaults to None.
+        figsize (Tuple, optional): Size of the figure. Defaults to (8, 6).
+        save_only (bool, optional): If True, only save the figure without displaying it. Defaults to False.
+        dpi_save (int, optional): Dots per inch for saving the figure. Defaults to 300.
+        histplot_multiple (str, optional): How to plot multiple histograms. Options are "layer", "dodge", "stack", "fill". Defaults to "stack".
+        histplot_element (str, optional): Plotting element. Options are "bars", "step", "poly". Defaults to "bars".
+
+    Returns:
+        None
+    """
+
+    # check type of obs_val
+    adata_obs = adata.obs.copy()
+    if isinstance(obs_val, tuple):
+        print("Retrieve `obs_val` from .obsm.")
+        obsm_key = obs_val[0]
+        obsm_col = obs_val[1]
+        obs_val = f"distance_from_{obsm_col}"
+        adata_obs[obs_val] = adata.obsm[obsm_key][obsm_col]
+
     # get data for plotting
-    data = adata.obs[[obs_val, groupby]].dropna()
+    data = adata_obs[[obs_val, groupby]].dropna()
 
     # remove zeros
     data = data[data[obs_val] > xmin].copy()
