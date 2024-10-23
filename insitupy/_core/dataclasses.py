@@ -174,15 +174,23 @@ class ShapesData(DeepCopyMixin, GetMixin):
                                 str, os.PathLike, Path],
                     key: str,
                     scale_factor: Optional[Tuple[float, float]] = None,
+                    default_name: str = "name",
                     verbose: bool = False,
                    ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
 
+        if "name" not in new_df.columns:
+            new_df["name"] = ["None"] * len(new_df)
+
         if self.forbidden_names is not None:
-            new_names = new_df["name"].tolist()
-            if np.any([elem in new_names for elem in self.forbidden_names]):
-                raise ValueError(f"One of the forbidden names for annotations ({self.forbidden_names}) has been used in the imported dataset. Please change the respective change to prevent interference with downstream functions.")
+            try:
+                new_names = new_df["name"].tolist()
+            except KeyError:
+                pass
+            else:
+                if np.any([elem in new_names for elem in self.forbidden_names]):
+                    raise ValueError(f"One of the forbidden names for annotations ({self.forbidden_names}) has been used in the imported dataset. Please change the respective change to prevent interference with downstream functions.")
 
         if "scale" not in new_df.columns:
             # add scale factor to data

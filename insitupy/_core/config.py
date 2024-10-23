@@ -42,10 +42,10 @@ if WITH_NAPARI:
             data = adata.obsm[k]
             if isinstance(data, pd.DataFrame):
                 for col in data.columns:
-                    obsm_cats.append(f"{k}-{col}")
+                    obsm_cats.append(f"{k}#{col}")
             elif isinstance(data, np.ndarray):
                 for i in range(data.shape[1]):
-                    obsm_cats.append(f"{k}-{i+1}")
+                    obsm_cats.append(f"{k}#{i+1}")
             else:
                 pass
 

@@ -139,14 +139,14 @@ if WITH_NAPARI:
                         color_value = config.adata.obs[value]
                     elif key == "obsm":
                         #TODO: Implement it for obsm
-                        obsm_key = value.split("-", maxsplit=1)[0]
-                        obsm_col = value.split("-", maxsplit=1)[1]
+                        obsm_key = value.split("#", maxsplit=1)[0]
+                        obsm_col = value.split("#", maxsplit=1)[1]
                         data = config.adata.obsm[obsm_key]
 
                         if isinstance(data, pd.DataFrame):
-                            color_value = data[obsm_col]
+                            color_value = data[obsm_col].values
                         elif isinstance(data, np.ndarray):
-                            color_value = data[:, int(obsm_col)-1]
+                            color_value = data[:, int(obsm_col)-1].values
                         else:
                             warn("Data in `obsm` needs to be either pandas DataFrame or numpy array to be parsed.")
                         pass
