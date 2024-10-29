@@ -4,6 +4,7 @@ import pandas as pd
 from scipy.sparse import issparse
 
 from insitupy import WITH_NAPARI
+from insitupy._constants import POINTS_SYMBOL
 
 if WITH_NAPARI:
     import napari
@@ -94,10 +95,16 @@ if WITH_NAPARI:
         points_widget.recent.choices = sorted(recent_selections)
         points_widget.recent.value = None
 
-        # set only the last layer visible
-        point_layers = [elem for elem in xdata.viewer.layers if isinstance(elem, napari.layers.points.points.Points)]
-        n_point_layers = len(point_layers)
+        # set only the last cell layer visible
+        cell_layers = []
+        for elem in xdata.viewer.layers:
+            if isinstance(elem, napari.layers.points.points.Points):
+                if not elem.name.startswith(POINTS_SYMBOL):
+                    # only if the layer is not a point annotation layer, it is added
+                    cell_layers.append(elem)
+        #point_layers = [elem for elem in xdata.viewer.layers if isinstance(elem, napari.layers.points.points.Points)]
+        n_cell_layers = len(cell_layers)
 
-        for i, l in enumerate(point_layers):
-            if i < n_point_layers-1:
+        for i, l in enumerate(cell_layers):
+            if i < n_cell_layers-1:
                 l.visible = False

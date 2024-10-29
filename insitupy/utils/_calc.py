@@ -60,8 +60,8 @@ def _calc_kernel_density(
 def calc_grouped_log_density(
     adata,
     groupby: str,
-    log_density_key: str = "log_density",
-    clipped_log_density_key: str = "log_density_clipped",
+    log_density_key: str = "density",
+    clipped_log_density_key: str = "density_clipped",
     mode: Literal["gauss", "mellon"] = "gauss",
     inplace: bool = False
 ):
@@ -108,11 +108,22 @@ def calc_grouped_log_density(
             name=group
             )
 
+
+
         # Store results in dataframes
         log_density_df[group] = density_series
 
+    # clip the data
+    quantiles_df = log_density_df.quantile([0.05, 1])
+    log_density_df_clipped = log_density_df.clip(
+        lower=quantiles_df.iloc[0],
+        upper=quantiles_df.iloc[1],
+        axis=1
+        )
+
     # Sort the dataframes and add them to adata
     _adata.obsm[f"{log_density_key}-{mode}"] = log_density_df
+    _adata.obsm[f"{clipped_log_density_key}-{mode}"] = log_density_df_clipped
 
     if not inplace:
         return _adata

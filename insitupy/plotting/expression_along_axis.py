@@ -1,7 +1,8 @@
 import os
 from numbers import Number
-from typing import Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
+import numpy as np
 import pandas as pd
 import seaborn as sns
 from anndata import AnnData
@@ -12,11 +13,10 @@ from scipy.stats import zscore
 from tqdm import tqdm
 
 from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
-
-from .._core._checks import check_raw, has_valid_labels
-from ..io.plots import save_and_show_figure
-from ..utils._regression import smooth_fit
-from ..utils.utils import get_nrows_maxcols
+from insitupy._core._checks import check_raw, has_valid_labels
+from insitupy.io.plots import save_and_show_figure
+from insitupy.utils._regression import smooth_fit
+from insitupy.utils.utils import convert_to_list, get_nrows_maxcols
 
 
 def expr_along_obs_val(
@@ -414,17 +414,218 @@ def expr_along_obs_val(
         else:
             return fig, axs
 
+def cell_expression_along_axis(
+    adata,
+    obs_val,
+    genes,
+    cell_type_column,
+    cell_type,
+    xlim: Tuple[Number, Number] = (0, np.inf),
+    min_expression: Number = 0,
+    xlabel: Optional[str] = None,
+    fit_reg: bool = False,
+    lowess: bool = False,
+    robust: bool = False
+    ):
+    genes = convert_to_list(genes)
+
+    if len(genes) == 1:
+        _single_cell_expression_along_axis(
+            adata=adata, obs_val=obs_val, gene=genes[0],
+            cell_type_column=cell_type_column, cell_type=cell_type,
+            xlim=xlim, min_expression=min_expression, xlabel=xlabel,
+            fit_reg=fit_reg, lowess=lowess, robust=robust
+        )
+    elif len(genes) > 1:
+        _multi_cell_expression_along_axis(
+            adata=adata, obs_val=obs_val, genes=genes,
+            cell_type_column=cell_type_column, cell_type=cell_type,
+            xlim=xlim, min_expression=min_expression, xlabel=xlabel
+        )
+    else:
+        raise ValueError("`genes` must have length > 0.")
+
+def _single_cell_expression_along_axis(
+    adata,
+    obs_val,
+    gene,
+    cell_type_column,
+    cell_type,
+    xlim: Tuple[Number, Number] = (0, np.inf),
+    min_expression: Number = 0,
+    xlabel: Optional[str] = None,
+    fit_reg: bool = False,
+    lowess: bool = False,
+    robust: bool = False
+    ):
+
+    data_of_one_celltype = _select_data(
+        adata=adata,
+        obs_val=obs_val,
+        cell_type_column=cell_type_column,
+        cell_type=cell_type,
+        genes=gene,
+        xlim=xlim,
+    )
+
+    # Filter for minimum gene expression
+    data_of_one_celltype = data_of_one_celltype[data_of_one_celltype[gene] >= min_expression]
+
+    # Plot
+    g = sns.jointplot(data=data_of_one_celltype,
+                    x="axis", y=gene,
+                    color="firebrick", kind="kde", levels=8,
+                    marginal_kws={"fill": True},
+                    )
+    #g.plot_joint(sns.scatterplot, color="k", s=12)
+    g.plot_joint(sns.regplot, color="k",
+                 #lowess=True,
+                 fit_reg=fit_reg,
+                 lowess=lowess,
+                 robust=robust,
+                 scatter_kws={"s": 8},
+                 line_kws={"color": "orange"}
+                 )
+    g.ax_joint.set_ylabel(f"{gene} in '{cell_type}'")
+
+    # Set common x-label
+    if xlabel is None:
+        g.ax_joint.set_xlabel("_".join(convert_to_list(obs_val)))
+    else:
+        g.ax_joint.set_xlabel(xlabel)
+
+    # g = sns.jointplot(data=data_of_one_celltype,
+    #             x=axis_label, y=gene,
+    #             color="k", kind="reg", #levels=8,
+    #             marginal_kws={"fill": True},
+    #             )
+    # g.plot_marginals(sns.kdeplot, color="firebrick", #s=12
+    #                  )
+    plt.show()
+
+def _multi_cell_expression_along_axis(
+    adata,
+    obs_val,
+    genes: List[str],
+    cell_type_column,
+    cell_type,
+    xlim: Tuple[Union[int, float], Union[int, float]] = (0, np.inf),
+    min_expression: Union[int, float] = 0,
+    xlabel: Optional[str] = None,
+    fit_reg: bool = False,
+    lowess: bool = False,
+    robust: bool = False
+):
+
+    data_of_one_celltype = _select_data(
+        adata=adata,
+        obs_val=obs_val,
+        cell_type_column=cell_type_column,
+        cell_type=cell_type,
+        genes=genes,
+        xlim=xlim,
+    )
+
+    # Prepare a figure with subplots
+    num_genes = len(genes)
+    fig, axes = plt.subplots(num_genes + 1, 1, figsize=(5, 5 * (num_genes) + 1),
+                             sharex=True, height_ratios=[1] + [5]*num_genes)
+
+    # Histogram for the x-axis density
+    #sns.histplot(data=data_of_one_celltype, x=axis_label, ax=axes[0], bins=30, kde=True, color='lightgray')
+    sns.kdeplot(data=data_of_one_celltype, x="axis", ax=axes[0], color='lightgray')
+    axes[0].get_yaxis().set_visible(False)
+    axes[0].spines['left'].set_visible(False)
+
+    for i, gene in enumerate(genes):
+
+        data_for_one_gene = data_of_one_celltype[["axis", cell_type_column, gene]].copy()
+
+        # Apply limits
+        data_filtered = data_for_one_gene[data_for_one_gene[gene] >= min_expression]
+
+        # KDE plot
+        sns.kdeplot(data=data_filtered, x="axis", y=gene, ax=axes[i + 1], fill=True, cmap="Reds", levels=8)
+
+        # Scatter plot
+        sns.regplot(data=data_filtered,
+                    x="axis", y=gene, ax=axes[i + 1],
+                    color="k", #s=8
+                    scatter_kws={"s": 8},
+                    fit_reg=fit_reg,
+                    lowess=lowess,
+                    robust=robust,
+                    line_kws={"color": "orange"}
+                    )
+
+        # Set labels
+        axes[i + 1].set_ylabel(f"{gene} in '{cell_type}'")
+        axes[i + 1].set_title(f"KDE and Scatter Plot for {gene}")
+
+    # Set common x-label
+    if xlabel is None:
+        axes[-1].set_xlabel("_".join(convert_to_list(obs_val)))
+    else:
+        axes[-1].set_xlabel(xlabel)
+
+    plt.tight_layout()
+    plt.show()
+
+def _select_data(
+    adata,
+    obs_val,
+    genes: List[str],
+    cell_type_column,
+    cell_type,
+    xlim: Tuple[Union[int, float], Union[int, float]] = (0, np.inf),
+):
+    # make sure genes is a list
+    genes = convert_to_list(genes)
+
+    # Check type of obs_val
+    adata_obs = adata.obs.copy()
+    if isinstance(obs_val, tuple):
+        print("Retrieve `obs_val` from .obsm.")
+        obsm_key = obs_val[0]
+        obsm_col = obs_val[1]
+        #obs_val = f"distance_from_{obsm_col}"
+        adata_obs["axis"] = adata.obsm[obsm_key][obsm_col]
+
+    # Get data for plotting
+    data = adata_obs[["axis", cell_type_column]].dropna()
+
+    # Filter data for the specified cell type
+    data_of_one_celltype = data[data[cell_type_column] == cell_type].copy()
+
+    # Apply limits
+    data_of_one_celltype = data_of_one_celltype[
+        (data_of_one_celltype["axis"] >= xlim[0]) &
+        (data_of_one_celltype["axis"] <= xlim[1])
+        ]
+
+    for i, gene in enumerate(genes):
+        # Add gene expression information
+        gene_loc = adata.var_names.get_loc(gene)
+        expr = adata.X[:, gene_loc]
+        expr = pd.Series(expr.toarray().flatten(), index=adata.obs_names)
+
+        # add gene expression to dataframe
+        data_of_one_celltype[gene] = expr
+
+    return data_of_one_celltype
+
 def cell_abundance_along_obs_val(
     adata: AnnData,
     obs_val: Union[str, Tuple[str, str]],
     groupby: Optional[str] = None,
-    xmin: Number = 0,
+    xlim: Tuple = (0, np.inf),
     savepath: Optional[os.PathLike] = None,
     figsize: Tuple = (8,6),
     save_only: bool = False,
     dpi_save: int = 300,
-    histplot_multiple: str = "stack",
-    histplot_element: str = "bars"
+    multiple: Literal["layer", "dodge", "stack", "fill"] = "stack",
+    histplot_element: Literal["bars", "step", "poly"] = "bars",
+    kde: bool = False
     ):
 
     """
@@ -461,15 +662,24 @@ def cell_abundance_along_obs_val(
     data = adata_obs[[obs_val, groupby]].dropna()
 
     # remove zeros
-    data = data[data[obs_val] > xmin].copy()
+    xlim_mask = (data[obs_val] > xlim[0]) & (data[obs_val] <= xlim[1])
+    data = data[xlim_mask].copy()
 
     # Create the histogram
     fig, ax = plt.subplots(1,1, figsize=(figsize[0], figsize[1]))
-    h = sns.histplot(data=data, x=obs_val,
-                hue=groupby, palette=DEFAULT_CATEGORICAL_CMAP.colors,
-                multiple=histplot_multiple, element=histplot_element,
-                alpha=1, ax=ax
-                )
+
+    if not kde:
+        h = sns.histplot(data=data, x=obs_val,
+                    hue=groupby, palette=DEFAULT_CATEGORICAL_CMAP.colors,
+                    multiple=multiple, element=histplot_element,
+                    alpha=1, ax=ax
+                    )
+    else:
+        h = sns.kdeplot(data=data, x=obs_val,
+                    hue=groupby, palette=DEFAULT_CATEGORICAL_CMAP.colors,
+                    alpha=1, ax=ax, multiple=multiple
+                    )
+        plt.xlim(0, data[obs_val].max())
 
     # Move the legend outside of the plot
     sns.move_legend(h, "upper left", bbox_to_anchor=(1, 1))
