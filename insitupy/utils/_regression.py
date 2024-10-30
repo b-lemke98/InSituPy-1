@@ -199,7 +199,7 @@ class bootstrap_loess:
 def smooth_fit(xs: np.ndarray, ys: np.ndarray,
                xmin: Optional[float] = None,
                xmax: Optional[float] = None,
-               nsteps: Optional[float] = None,
+               nsteps: int = 100,
                method: Literal["lowess", "loess"] = "loess",
                stderr: bool = True,
                loess_bootstrap: bool = True,

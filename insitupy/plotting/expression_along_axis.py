@@ -474,6 +474,7 @@ def _single_cell_expression_along_axis(
     # Plot
     g = sns.jointplot(data=data_of_one_celltype,
                     x="axis", y=gene,
+                    height=4,
                     color="firebrick", kind="kde", levels=8,
                     marginal_kws={"fill": True},
                     )
@@ -483,7 +484,7 @@ def _single_cell_expression_along_axis(
                  fit_reg=fit_reg,
                  lowess=lowess,
                  robust=robust,
-                 scatter_kws={"s": 8},
+                 scatter_kws={"s": 1},
                  line_kws={"color": "orange"}
                  )
     g.ax_joint.set_ylabel(f"{gene} in '{cell_type}'")
@@ -514,7 +515,9 @@ def _multi_cell_expression_along_axis(
     xlabel: Optional[str] = None,
     fit_reg: bool = False,
     lowess: bool = False,
-    robust: bool = False
+    robust: bool = False,
+    fig_height: Number = 4,
+    fig_ratio: Number = 0.2
 ):
 
     data_of_one_celltype = _select_data(
@@ -528,14 +531,22 @@ def _multi_cell_expression_along_axis(
 
     # Prepare a figure with subplots
     num_genes = len(genes)
-    fig, axes = plt.subplots(num_genes + 1, 1, figsize=(5, 5 * (num_genes) + 1),
-                             sharex=True, height_ratios=[1] + [5]*num_genes)
+    marg_height = fig_height * fig_ratio
+    fig, axes = plt.subplots(num_genes + 1, 2,
+                             figsize=(fig_height + marg_height, fig_height * (num_genes) + marg_height),
+                             #sharex=True, sharey=True,
+                             sharey='row', sharex='col',
+                             height_ratios=[marg_height] + [fig_height]*num_genes,
+                             width_ratios=[fig_height, marg_height]
+                             )
 
     # Histogram for the x-axis density
     #sns.histplot(data=data_of_one_celltype, x=axis_label, ax=axes[0], bins=30, kde=True, color='lightgray')
-    sns.kdeplot(data=data_of_one_celltype, x="axis", ax=axes[0], color='lightgray')
-    axes[0].get_yaxis().set_visible(False)
-    axes[0].spines['left'].set_visible(False)
+    sns.kdeplot(data=data_of_one_celltype, x="axis", ax=axes[0, 0], color='lightgray', fill=True)
+
+    # remove values axis from histogram
+    axes[0, 0].get_yaxis().set_visible(False)
+    axes[0, 0].spines['left'].set_visible(False)
 
     for i, gene in enumerate(genes):
 
@@ -545,28 +556,39 @@ def _multi_cell_expression_along_axis(
         data_filtered = data_for_one_gene[data_for_one_gene[gene] >= min_expression]
 
         # KDE plot
-        sns.kdeplot(data=data_filtered, x="axis", y=gene, ax=axes[i + 1], fill=True, cmap="Reds", levels=8)
+        sns.kdeplot(data=data_filtered, x="axis", y=gene, ax=axes[i + 1, 0], fill=True, cmap="Reds", levels=8)
 
         # Scatter plot
         sns.regplot(data=data_filtered,
-                    x="axis", y=gene, ax=axes[i + 1],
+                    x="axis", y=gene, ax=axes[i + 1, 0],
                     color="k", #s=8
-                    scatter_kws={"s": 8},
+                    scatter_kws={"s": 1},
                     fit_reg=fit_reg,
                     lowess=lowess,
                     robust=robust,
                     line_kws={"color": "orange"}
                     )
 
+        # Histogram for the gene expression
+        sns.kdeplot(
+            data=data_filtered, y=gene, ax=axes[i + 1, 1], color='lightgray', fill=True
+        )
+
+        # remove values axis from histogram
+        axes[i + 1, 1].get_xaxis().set_visible(False)
+        axes[i + 1, 1].spines['bottom'].set_visible(False)
+
         # Set labels
-        axes[i + 1].set_ylabel(f"{gene} in '{cell_type}'")
-        axes[i + 1].set_title(f"KDE and Scatter Plot for {gene}")
+        axes[i + 1, 0].set_ylabel(f"{gene} in '{cell_type}'")
+        axes[i + 1, 0].set_title(f"KDE and Scatter Plot for {gene}")
 
     # Set common x-label
     if xlabel is None:
-        axes[-1].set_xlabel("_".join(convert_to_list(obs_val)))
+        axes[-1, 0].set_xlabel("_".join(convert_to_list(obs_val)))
     else:
-        axes[-1].set_xlabel(xlabel)
+        axes[-1, 0].set_xlabel(xlabel)
+
+    axes[0, 1].remove()
 
     plt.tight_layout()
     plt.show()
