@@ -226,6 +226,9 @@ def smooth_fit(xs: np.ndarray, ys: np.ndarray,
     Returns:
         pd.DataFrame: A DataFrame containing the predicted y values and associated standard errors and confidence intervals.
     """
+    # assure the input are numpy arrays
+    xs = np.array(xs)
+    ys = np.array(ys)
 
     # check method
     if method == "loess":

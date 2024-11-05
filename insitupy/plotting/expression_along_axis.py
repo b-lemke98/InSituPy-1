@@ -1,6 +1,7 @@
 import os
 from numbers import Number
 from typing import List, Literal, Optional, Tuple, Union
+from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -10,6 +11,7 @@ from matplotlib import pyplot as plt
 from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
 from scipy.stats import zscore
+from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
 from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
@@ -417,96 +419,6 @@ def expr_along_obs_val(
 def cell_expression_along_axis(
     adata,
     obs_val,
-    genes,
-    cell_type_column,
-    cell_type,
-    xlim: Tuple[Number, Number] = (0, np.inf),
-    min_expression: Number = 0,
-    xlabel: Optional[str] = None,
-    fit_reg: bool = False,
-    lowess: bool = False,
-    robust: bool = False
-    ):
-    genes = convert_to_list(genes)
-
-    if len(genes) == 1:
-        _single_cell_expression_along_axis(
-            adata=adata, obs_val=obs_val, gene=genes[0],
-            cell_type_column=cell_type_column, cell_type=cell_type,
-            xlim=xlim, min_expression=min_expression, xlabel=xlabel,
-            fit_reg=fit_reg, lowess=lowess, robust=robust
-        )
-    elif len(genes) > 1:
-        _multi_cell_expression_along_axis(
-            adata=adata, obs_val=obs_val, genes=genes,
-            cell_type_column=cell_type_column, cell_type=cell_type,
-            xlim=xlim, min_expression=min_expression, xlabel=xlabel
-        )
-    else:
-        raise ValueError("`genes` must have length > 0.")
-
-def _single_cell_expression_along_axis(
-    adata,
-    obs_val,
-    gene,
-    cell_type_column,
-    cell_type,
-    xlim: Tuple[Number, Number] = (0, np.inf),
-    min_expression: Number = 0,
-    xlabel: Optional[str] = None,
-    fit_reg: bool = False,
-    lowess: bool = False,
-    robust: bool = False
-    ):
-
-    data_of_one_celltype = _select_data(
-        adata=adata,
-        obs_val=obs_val,
-        cell_type_column=cell_type_column,
-        cell_type=cell_type,
-        genes=gene,
-        xlim=xlim,
-    )
-
-    # Filter for minimum gene expression
-    data_of_one_celltype = data_of_one_celltype[data_of_one_celltype[gene] >= min_expression]
-
-    # Plot
-    g = sns.jointplot(data=data_of_one_celltype,
-                    x="axis", y=gene,
-                    height=4,
-                    color="firebrick", kind="kde", levels=8,
-                    marginal_kws={"fill": True},
-                    )
-    #g.plot_joint(sns.scatterplot, color="k", s=12)
-    g.plot_joint(sns.regplot, color="k",
-                 #lowess=True,
-                 fit_reg=fit_reg,
-                 lowess=lowess,
-                 robust=robust,
-                 scatter_kws={"s": 1},
-                 line_kws={"color": "orange"}
-                 )
-    g.ax_joint.set_ylabel(f"{gene} in '{cell_type}'")
-
-    # Set common x-label
-    if xlabel is None:
-        g.ax_joint.set_xlabel("_".join(convert_to_list(obs_val)))
-    else:
-        g.ax_joint.set_xlabel(xlabel)
-
-    # g = sns.jointplot(data=data_of_one_celltype,
-    #             x=axis_label, y=gene,
-    #             color="k", kind="reg", #levels=8,
-    #             marginal_kws={"fill": True},
-    #             )
-    # g.plot_marginals(sns.kdeplot, color="firebrick", #s=12
-    #                  )
-    plt.show()
-
-def _multi_cell_expression_along_axis(
-    adata,
-    obs_val,
     genes: List[str],
     cell_type_column,
     cell_type,
@@ -517,10 +429,37 @@ def _multi_cell_expression_along_axis(
     lowess: bool = False,
     robust: bool = False,
     fig_height: Number = 4,
-    fig_ratio: Number = 0.2
+    fig_marginal_ratio: Number = 0.2,
+    scatter_size: Number = 1
 ):
 
-    data_of_one_celltype = _select_data(
+    """
+    Plot gene expression along a specified axis for a given cell type.
+
+    Args:
+        adata: AnnData object containing the single-cell data.
+        obs_val: Observation value to plot along the x-axis.
+        genes (List[str]): List of genes to plot.
+        cell_type_column: Column name in `adata.obs` that contains cell type information.
+        cell_type: Specific cell type to filter the data.
+        xlim (Tuple[Union[int, float], Union[int, float]], optional): Limits for the x-axis. Defaults to (0, np.inf).
+        min_expression (Union[int, float], optional): Minimum expression level to include in the plot. Defaults to 0.
+        xlabel (Optional[str], optional): Label for the x-axis. Defaults to None.
+        fit_reg (bool, optional): Whether to fit a regression line. Defaults to False.
+        lowess (bool, optional): Whether to use LOWESS for regression. Defaults to False.
+        robust (bool, optional): Whether to use a robust regression. Defaults to False.
+        fig_height (Number, optional): Height of the figure. Defaults to 4.
+        fig_marginal_ratio (Number, optional): Ratio of the marginal plot height to the main plot height. Defaults to 0.2.
+        scatter_size (Number, optional): Size of the scatter plot points. Defaults to 1.
+
+    Returns:
+        None: Displays the plot.
+    """
+    # make sure genes is a list
+    genes = convert_to_list(genes)
+
+    # select the data for plotting
+    data_for_one_celltype = _select_data(
         adata=adata,
         obs_val=obs_val,
         cell_type_column=cell_type_column,
@@ -529,9 +468,20 @@ def _multi_cell_expression_along_axis(
         xlim=xlim,
     )
 
+    # data_dict = {gene: _select_data(
+    #     adata=adata,
+    #     obs_val=obs_val,
+    #     cell_type_column=cell_type_column,
+    #     cell_type=cell_type,
+    #     gene=gene,
+    #     xlim=xlim,
+    # )
+    #  for gene in genes
+    #  }
+
     # Prepare a figure with subplots
     num_genes = len(genes)
-    marg_height = fig_height * fig_ratio
+    marg_height = fig_height * fig_marginal_ratio
     fig, axes = plt.subplots(num_genes + 1, 2,
                              figsize=(fig_height + marg_height, fig_height * (num_genes) + marg_height),
                              #sharex=True, sharey=True,
@@ -541,16 +491,17 @@ def _multi_cell_expression_along_axis(
                              )
 
     # Histogram for the x-axis density
-    #sns.histplot(data=data_of_one_celltype, x=axis_label, ax=axes[0], bins=30, kde=True, color='lightgray')
-    sns.kdeplot(data=data_of_one_celltype, x="axis", ax=axes[0, 0], color='lightgray', fill=True)
+    #data_for_axis_histogram = data_dict[list(data_dict.keys())[0]]
+    sns.kdeplot(data=data_for_one_celltype, x="axis", ax=axes[0, 0], color='darkgray', fill=True)
 
     # remove values axis from histogram
     axes[0, 0].get_yaxis().set_visible(False)
     axes[0, 0].spines['left'].set_visible(False)
 
     for i, gene in enumerate(genes):
+    #for i, (gene, data_of_one_celltype) in enumerate(data_dict.items()):
 
-        data_for_one_gene = data_of_one_celltype[["axis", cell_type_column, gene]].copy()
+        data_for_one_gene = data_for_one_celltype[["axis", gene]].copy()
 
         # Apply limits
         data_filtered = data_for_one_gene[data_for_one_gene[gene] >= min_expression]
@@ -562,7 +513,7 @@ def _multi_cell_expression_along_axis(
         sns.regplot(data=data_filtered,
                     x="axis", y=gene, ax=axes[i + 1, 0],
                     color="k", #s=8
-                    scatter_kws={"s": 1},
+                    scatter_kws={"s": scatter_size},
                     fit_reg=fit_reg,
                     lowess=lowess,
                     robust=robust,
@@ -571,7 +522,7 @@ def _multi_cell_expression_along_axis(
 
         # Histogram for the gene expression
         sns.kdeplot(
-            data=data_filtered, y=gene, ax=axes[i + 1, 1], color='lightgray', fill=True
+            data=data_filtered, y=gene, ax=axes[i + 1, 1], color='darkgray', fill=True
         )
 
         # remove values axis from histogram
@@ -580,7 +531,6 @@ def _multi_cell_expression_along_axis(
 
         # Set labels
         axes[i + 1, 0].set_ylabel(f"{gene} in '{cell_type}'")
-        axes[i + 1, 0].set_title(f"KDE and Scatter Plot for {gene}")
 
     # Set common x-label
     if xlabel is None:
@@ -600,6 +550,10 @@ def _select_data(
     cell_type_column,
     cell_type,
     xlim: Tuple[Union[int, float], Union[int, float]] = (0, np.inf),
+    min_expression: Number = None,
+    sort: bool = True,
+    minmax_scale: bool = True,
+    verbose: bool = True
 ):
     # make sure genes is a list
     genes = convert_to_list(genes)
@@ -607,7 +561,7 @@ def _select_data(
     # Check type of obs_val
     adata_obs = adata.obs.copy()
     if isinstance(obs_val, tuple):
-        print("Retrieve `obs_val` from .obsm.")
+        print("Retrieve `obs_val` from .obsm.") if verbose else None
         obsm_key = obs_val[0]
         obsm_col = obs_val[1]
         #obs_val = f"distance_from_{obsm_col}"
@@ -617,12 +571,12 @@ def _select_data(
     data = adata_obs[["axis", cell_type_column]].dropna()
 
     # Filter data for the specified cell type
-    data_of_one_celltype = data[data[cell_type_column] == cell_type].copy()
+    selected_data = data[data[cell_type_column] == cell_type].copy()
 
     # Apply limits
-    data_of_one_celltype = data_of_one_celltype[
-        (data_of_one_celltype["axis"] >= xlim[0]) &
-        (data_of_one_celltype["axis"] <= xlim[1])
+    selected_data = selected_data[
+        (selected_data["axis"] >= xlim[0]) &
+        (selected_data["axis"] <= xlim[1])
         ]
 
     for i, gene in enumerate(genes):
@@ -631,10 +585,141 @@ def _select_data(
         expr = adata.X[:, gene_loc]
         expr = pd.Series(expr.toarray().flatten(), index=adata.obs_names)
 
-        # add gene expression to dataframe
-        data_of_one_celltype[gene] = expr
+        if min_expression is not None:
+            # mask values below the threshold with NaN
+            expr = expr.mask(expr < min_expression)
 
-    return data_of_one_celltype
+        # add gene expression to dataframe
+        selected_data[gene] = expr
+
+        # if min_expression is not None:
+        #     # Apply limits
+        #     #data_for_one_celltype = data_for_one_celltype[data_for_one_celltype[gene] >= min_expression]
+
+    # drop the cell type column
+    #selected_data = selected_data.drop(cell_type_column, axis=1)
+
+    # add axis column to index
+    selected_data = selected_data.set_index(["axis", cell_type_column], append=True)
+    selected_data.index.names = ["cell_id", "axis", cell_type_column]
+
+    if sort:
+        #selected_data = selected_data.sort_values("axis")
+        selected_data = selected_data.sort_index(level='axis', ascending=True)
+
+    if minmax_scale:
+        scaler = MinMaxScaler()
+        selected_data = pd.DataFrame(scaler.fit_transform(selected_data),
+                    index=selected_data.index, columns=selected_data.columns
+                    )
+
+    return selected_data
+
+# binning function
+def _bin_data(data,
+              #expr, axis,
+              axis_name: str = "axis",
+              resolution=5,
+              #minmax_scale: bool = True,
+              plot: bool = False
+              ):
+
+    # make a copy of the data
+    data = data.copy()
+
+    # get values
+    axis = data.index.get_level_values(axis_name).values
+
+    # calculate number of bins from resolution
+    nbins = int((axis.max() - axis.min()) / resolution)
+    #nbins = int((data[axis_name].max() - data[axis_name].min()) / resolution)
+
+    # data = pd.DataFrame(
+    #     {"axis": axis,
+    #      "expr": expr}
+    # )
+
+    # get gene names
+    genes = [elem for elem in data.columns if elem != axis_name]
+
+    # bin data and calculate mean per bin
+    data["bin"] = pd.cut(data[axis_name], bins=nbins)
+
+    binned_mean = data.groupby("bin")[genes].mean()
+    #binned_mean = binned_mean.reset_index()
+
+    # remove empty bins
+    #binned_mean = binned_mean.dropna()
+
+    # if minmax_scale:
+    #     # scale values to 0-1
+    #     # scaler = MinMaxScaler()
+    #     # binned_mean["minmax"] = scaler.fit_transform(binned_mean[[expr_col]])
+    #     scaler = MinMaxScaler()
+    #     binned_mean = pd.DataFrame(scaler.fit_transform(binned_mean),
+    #                 index=binned_mean.index,
+    #                 columns=binned_mean.columns)
+
+    # extract the center of each bin
+    #binned_mean["bin_center"] = [elem.mid for elem in binned_mean["bin"]]
+    binned_mean.index = [elem.mid for elem in binned_mean.index]
+
+    if plot:
+        for gene in genes:
+            _bin_qc_plot(
+                raw_axis=data[axis_name].values,
+                raw_expr=data[gene].values,
+                bin_center=binned_mean.index.values,
+                expr=binned_mean[gene].values,
+                ylabel=gene
+            )
+
+    return binned_mean
+
+def _bin_qc_plot(
+    raw_axis, raw_expr, bin_center, expr, xlabel='x', ylabel='y'
+):
+    # bin_center = binned_data.index.values
+    # expr = binned_data["expr"].values
+
+    try:
+        # perform loess regression for the second half of the plot
+        res = smooth_fit(
+        xs=bin_center,
+        ys=expr,
+        loess_bootstrap=False, nsteps=100
+        )
+    except ValueError as e:
+        print(f"A ValueError occurred during loess regression: {e}")
+        res = None
+
+    fig, axs = plt.subplots(1,2, figsize=(8,4))
+    # Plot the original data
+    axs[0].scatter(
+        raw_axis, raw_expr, label='Original Data', alpha=0.5, color='k', s=1
+        )
+
+    # Plot the binned values
+    axs[0].plot(
+        bin_center, expr,
+        color='firebrick',
+        #marker='o',
+        linestyle='-', label='Binned Mean')
+
+    # Add labels and legend
+    axs[0].set_xlabel(xlabel)
+    axs[0].set_ylabel(ylabel)
+    axs[0].legend()
+
+    #axs[1].plot(binned_data["bin_center"], binned_data["minmax"])
+    axs[1].scatter(
+        x=bin_center, y=expr,s=1, color="k", label="Binned Mean")
+    if res is not None:
+        axs[1].plot(res["x"], res["y_pred"], label="Loess Regression")
+    axs[1].legend()
+
+    # Show plot
+    plt.show()
 
 def cell_abundance_along_obs_val(
     adata: AnnData,
@@ -713,3 +798,94 @@ def cell_abundance_along_obs_val(
                          dpi_save=dpi_save,
                          tight=True
                          )
+
+# def cell_expression_along_axis(
+#     adata,
+#     obs_val,
+#     genes,
+#     cell_type_column,
+#     cell_type,
+#     xlim: Tuple[Number, Number] = (0, np.inf),
+#     min_expression: Number = 0,
+#     xlabel: Optional[str] = None,
+#     fit_reg: bool = False,
+#     lowess: bool = False,
+#     robust: bool = False
+#     ):
+#     genes = convert_to_list(genes)
+
+#     # if len(genes) == 1:
+#     #     _single_cell_expression_along_axis(
+#     #         adata=adata, obs_val=obs_val, gene=genes[0],
+#     #         cell_type_column=cell_type_column, cell_type=cell_type,
+#     #         xlim=xlim, min_expression=min_expression, xlabel=xlabel,
+#     #         fit_reg=fit_reg, lowess=lowess, robust=robust
+#     #     )
+#     # elif len(genes) > 1:
+#     _multi_cell_expression_along_axis(
+#         adata=adata, obs_val=obs_val, genes=genes,
+#         cell_type_column=cell_type_column, cell_type=cell_type,
+#         xlim=xlim, min_expression=min_expression, xlabel=xlabel,
+#         fit_reg=fit_reg, lowess=lowess, robust=robust
+#     )
+#     # else:
+#     #     raise ValueError("`genes` must have length > 0.")
+
+# def _single_cell_expression_along_axis(
+#     adata,
+#     obs_val,
+#     gene,
+#     cell_type_column,
+#     cell_type,
+#     xlim: Tuple[Number, Number] = (0, np.inf),
+#     min_expression: Number = 0,
+#     xlabel: Optional[str] = None,
+#     fit_reg: bool = False,
+#     lowess: bool = False,
+#     robust: bool = False
+#     ):
+
+#     data_of_one_celltype = _select_data(
+#         adata=adata,
+#         obs_val=obs_val,
+#         cell_type_column=cell_type_column,
+#         cell_type=cell_type,
+#         genes=gene,
+#         xlim=xlim,
+#     )
+
+#     # Filter for minimum gene expression
+#     data_of_one_celltype = data_of_one_celltype[data_of_one_celltype[gene] >= min_expression]
+
+#     # Plot
+#     g = sns.jointplot(data=data_of_one_celltype,
+#                     x="axis", y=gene,
+#                     height=4,
+#                     color="firebrick", kind="kde", levels=8,
+#                     marginal_kws={"fill": True},
+#                     )
+#     #g.plot_joint(sns.scatterplot, color="k", s=12)
+#     g.plot_joint(sns.regplot, color="k",
+#                  #lowess=True,
+#                  fit_reg=fit_reg,
+#                  lowess=lowess,
+#                  robust=robust,
+#                  scatter_kws={"s": 1},
+#                  line_kws={"color": "orange"}
+#                  )
+#     g.ax_joint.set_ylabel(f"{gene} in '{cell_type}'")
+
+#     # Set common x-label
+#     if xlabel is None:
+#         g.ax_joint.set_xlabel("_".join(convert_to_list(obs_val)))
+#     else:
+#         g.ax_joint.set_xlabel(xlabel)
+
+#     # g = sns.jointplot(data=data_of_one_celltype,
+#     #             x=axis_label, y=gene,
+#     #             color="k", kind="reg", #levels=8,
+#     #             marginal_kws={"fill": True},
+#     #             )
+#     # g.plot_marginals(sns.kdeplot, color="firebrick", #s=12
+#     #                  )
+#     plt.show()
