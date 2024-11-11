@@ -615,4 +615,136 @@ class InSituExperiment:
         dataset.show()
         if return_viewer:
             return dataset.viewer
+        
+
+    def plot_overview(self, colums_to_plot: List[str] = [], index: bool = True, qc_width: float = 4.0):
+        """
+        Plots an overview table with metadata and quality control metrics.
+
+        Args:
+            columns_to_plot (List[str]): List of column names to include in the plot.
+            index (bool, optional): Whether to add extra index or not. Default is True.
+            custom_width (float, optional): Custom width for metadata columns. Default is 1.0.
+            qc_width (float, optional): Width for quality control metric columns. Default is 4.0.
+
+        Raises:
+            ImportError: If the 'plottable' framework is not installed.
+
+        Returns:
+            None: Displays a plot with the overview table.
+        """
+        
+        try:
+            from plottable import Table, ColumnDefinition
+        except ImportError:
+            raise ImportError("This function requires the 'plottable' framework. Please install it with 'pip install plottable'.")
+        
+        def calculate_max_cell_widths_and_sum(df, multiplier=0.2):
+            """
+            Calculate the maximum cell width for each column based on text length, including the column name in the calculation, and return the sum of them.
+
+            Parameters:
+            df (pd.DataFrame): The DataFrame containing the data.
+            multiplier (int): The multiplier to adjust the width based on text length.
+
+            Returns:
+            dict: A dictionary with column names as keys and maximum widths as values.
+            int: The sum of the maximum widths.
+            """
+            max_widths = {}
+            total_width = 0
+            for col in df.columns:
+                # Calculate the maximum width for each column based on the length of the text in the cells and the column name
+                max_width = max(df[col].apply(lambda x: len(str(x)) * multiplier).max(), len(col) * multiplier)
+                max_widths[col] = max_width
+                total_width += max_width
+            return max_widths, total_width
+
+        
+        def custom_bar(ax: Axes, val: float, max: float, color: str = None, rect_kw: dict = {}):
+            """
+            Custom function to create a horizontal bar plot.
+
+            Parameters:
+            ax (Axes): The axes on which to plot.
+            val (float): The value to plot.
+            max (float): The maximum value for the x-axis.
+            color (str, optional): The color of the bar.
+            rect_kw (dict, optional): Additional keyword arguments for the rectangle.
+
+            Returns:
+            bar: The bar plot.
+            """
+            # Create a horizontal bar plot with the specified value and maximum
+            bar = ax.barh(y=0.5, left=1, width=val + 1, height=0.8, fc=color, ec="None", zorder=0.05)
+            ax.set_xlim(0, max + 10)
+            ax.set_xticks(ax.get_xticks())
+            ax.set_xticklabels(['{:.0f}'.format(x) for x in ax.get_xticks()])
+            ax.set_ylim(0, 1)
+            ax.set_yticks([])
+            for r in bar:
+                r.set(**rect_kw)
+            for rect in bar:
+                width = rect.get_width()
+                ax.text(width + 1, rect.get_y() + rect.get_height() / 2, f'{width:.0f}', ha='left', va='center')
+            return bar
+        
+        # Copy the metadata, select the columns to plot, and add index if nessiccary
+        df = self.metadata.copy()[colums_to_plot]
+        colname_tmp = "ind_tmp"
+        if not index and df.shape[1] > 0:
+            # Set the first column as the index if index is False
+            col_id = df.columns[0]
+        else:
+            # Rename the index column and reset the index
+            df = df.rename_axis(colname_tmp).reset_index()
+            col_id = colname_tmp
+
+        # Calculate the maximum cell widths and the total width
+        width_dict, total_width = calculate_max_cell_widths_and_sum(df)
+        column_definition = []
+        # Add all desired columns from metadata
+        for column_name in df.columns:
+            border = None
+            if column_name == colname_tmp:
+                if index:
+                    border = "right"
+                column_definition.append(ColumnDefinition(name=column_name, textprops={"ha": "center"}, width=width_dict[column_name], title="", border=border))
+            else:
+                column_definition.append(ColumnDefinition(name=column_name, group="metadata", textprops={"ha": "center"}, width=width_dict[column_name]))
+        
+        #Calculate predefined QC metrics
+        list_gene_count = []
+        list_transcript_count = []
+        for exp in self:
+            if not hasattr(exp.data[0], "cells"):
+                warnings.warn("Counts were not loaded. Loading.")
+                exp.data[0].load_cells()
+            if not hasattr(exp.data[0], "cells") or not hasattr(exp.data[0].cells, "matrix"):
+                warnings.warn("Counts are not defined or loaded.")
+                list_gene_count.append(0)
+                list_transcript_count.append(0)
+            else:
+                df_cells, _ = sc.pp.calculate_qc_metrics(exp[0].data[0].cells.matrix, percent_top=None)
+                list_gene_count.append(df_cells["n_genes_by_counts"].median())
+                list_transcript_count.append(df_cells["total_counts"].median())
+        df["mean_transcript_counts"] = list_transcript_count
+        df["mean_gene_counts"] = list_gene_count
+        max_genes = df["mean_gene_counts"].max()
+        max_transcripts = df["mean_transcript_counts"].max()
+
+        # Add all columns with QC metrics
+        column_definition_bars = [
+            ColumnDefinition("mean_transcript_counts", group="qc_metrics", plot_fn=custom_bar, plot_kw={"max": max_transcripts}, title="Median Transcripts per Cell", textprops={"ha": "center"}, width=qc_width, border="left"),
+            ColumnDefinition("mean_gene_counts", group="qc_metrics", plot_fn=custom_bar, plot_kw={"max": max_genes}, title="Median Genes per Cell", textprops={"ha": "center"}, width=qc_width)
+        ]
+        # Create the plot
+        fig, ax = plt.subplots(figsize=(total_width + qc_width * 2, len(df) * 0.7 + 1))
+        plt.rcParams["font.family"] = ["DejaVu Sans"]
+        table = Table(df, column_definitions=(column_definition + column_definition_bars), row_dividers=True,
+                    footer_divider=True, ax=ax, row_divider_kw={"linewidth": 1, "linestyle": (0, (1, 5))},
+                    col_label_divider_kw={"linewidth": 1, "linestyle": "-"}, column_border_kw={"linewidth": 1, "linestyle": "-"},
+                    index_col=col_id,)
+        
+        plt.show()
 
