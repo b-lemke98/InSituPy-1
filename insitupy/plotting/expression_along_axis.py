@@ -1,4 +1,5 @@
 import os
+import textwrap
 import warnings
 from numbers import Number
 from typing import List, Literal, Optional, Tuple, Union
@@ -433,8 +434,8 @@ def cell_expression_along_axis(
     fig_height: Number = 4,
     fig_marginal_ratio: Number = 0.15,
     scatter_size: Number = 1,
-    wspace: Number = 0.4,
-    hspace: Number = 0.1,
+    wspace: Number = 0.15,
+    hspace: Number = 0.25,
     font_scale_factor: Number = 1
 ):
 
@@ -477,6 +478,13 @@ def cell_expression_along_axis(
         xlim=xlim,
     )
 
+    # create xlabel string
+    if xlabel is None:
+        xlabel_str = " ".join(convert_to_list(axis))
+        xlabel_str = textwrap.fill(xlabel_str, width=15)
+    else:
+        xlabel_str = xlabel
+
     # Prepare a figure with subplots
     num_genes = len(genes)
     num_cols = 4
@@ -494,8 +502,6 @@ def cell_expression_along_axis(
     # Adjust the space between subplots
     plt.subplots_adjust(wspace=wspace, hspace=hspace)
 
-
-
     for i, gene in enumerate(genes):
         row = i // num_cols + 1
         col = i % num_cols * 2
@@ -511,6 +517,14 @@ def cell_expression_along_axis(
             # remove values axis from histogram
             axes[0, col].get_yaxis().set_visible(False)
             axes[0, col].spines['left'].set_visible(False)
+
+        # set xlabel in the last row
+        if row == num_rows:
+            axes[row, col].set_xlabel(xlabel_str)
+
+        # set ylabel in the first column
+        if col == 0 and row != 0:
+            axes[row, col].set_ylabel("Gene expression")
 
         # select data for current gene
         data_for_one_gene = data_for_one_celltype[[gene]].copy()
@@ -578,7 +592,9 @@ def cell_expression_along_axis(
 
         # Set labels
         #axes[row, col].set_ylabel(f"{gene} in '{cell_type}'")
-        axes[row, col].set_ylabel(f"{gene}")
+        #axes[row, col].set_ylabel(f"{gene}")
+        axes[row, col].set_title(f"{gene}", y=0.95#pad=-2
+                                 )
 
     plt.suptitle(f"Gene expression in '{cell_type}'")
 
@@ -593,6 +609,9 @@ def cell_expression_along_axis(
         if row == 1:
             axes[0, col].set_axis_off()
             axes[0, col+1].set_axis_off()
+
+        # add the xlabel to the plot above
+        axes[row-1, col].set_xlabel(xlabel_str)
 
     #plt.tight_layout()
     plt.show()
