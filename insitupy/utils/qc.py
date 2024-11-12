@@ -56,7 +56,7 @@ def plot_qc(
     ):
     # plot
     plt.rcParams.update({'font.size': fontsize})
-    n_plots, nrows, ncols = get_nrows_maxcols(cats, max_cols=max_cols)
+    n_plots, nrows, ncols = get_nrows_maxcols(len(cats), max_cols=max_cols)
     fig, axs = plt.subplots(nrows, ncols, figsize=(9*ncols, 8*nrows))
 
     if n_plots > 1:

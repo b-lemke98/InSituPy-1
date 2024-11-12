@@ -1721,7 +1721,7 @@ class InSituData:
 
         genes = convert_to_list(genes)
 
-        nplots, nrows, ncols = get_nrows_maxcols(genes, max_cols=maxcols)
+        nplots, nrows, ncols = get_nrows_maxcols(len(genes), max_cols=maxcols)
 
         # setup figure
         fig, axs = plt.subplots(nrows, ncols, figsize=(figsize[0]*ncols, figsize[1]*nrows))

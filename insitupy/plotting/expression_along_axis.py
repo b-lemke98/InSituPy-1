@@ -1,4 +1,5 @@
 import os
+import warnings
 from numbers import Number
 from typing import List, Literal, Optional, Tuple, Union
 from warnings import warn
@@ -10,7 +11,7 @@ from anndata import AnnData
 from matplotlib import pyplot as plt
 from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
-from scipy.stats import zscore
+from scipy.stats import pearsonr, spearmanr, zscore
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
@@ -18,7 +19,8 @@ from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
 from insitupy._core._checks import check_raw, has_valid_labels
 from insitupy.io.plots import save_and_show_figure
 from insitupy.utils._regression import smooth_fit
-from insitupy.utils.utils import convert_to_list, get_nrows_maxcols
+from insitupy.utils.utils import (convert_to_list, get_nrows_maxcols,
+                                  remove_empty_subplots)
 
 
 def expr_along_obs_val(
@@ -163,7 +165,7 @@ def expr_along_obs_val(
     if not return_data:
         # prepare plotting
         if axis is None:
-            n_plots, n_rows, max_cols = get_nrows_maxcols(keys, max_cols)
+            n_plots, n_rows, max_cols = get_nrows_maxcols(len(keys), max_cols)
             fig, axs = plt.subplots(n_rows,max_cols, figsize=(figsize[0]*max_cols, figsize[1]*n_rows))
 
         else:
@@ -418,13 +420,14 @@ def expr_along_obs_val(
 
 def cell_expression_along_axis(
     adata,
-    obs_val,
+    axis,
     genes: List[str],
     cell_type_column,
     cell_type,
     xlim: Tuple[Union[int, float], Union[int, float]] = (0, np.inf),
     min_expression: Union[int, float] = 0,
     xlabel: Optional[str] = None,
+    kde: bool = True,
     fit_reg: bool = False,
     lowess: bool = False,
     robust: bool = False,
@@ -438,7 +441,7 @@ def cell_expression_along_axis(
 
     Args:
         adata: AnnData object containing the single-cell data.
-        obs_val: Observation value to plot along the x-axis.
+        axis: Observation value to plot along the x-axis.
         genes (List[str]): List of genes to plot.
         cell_type_column: Column name in `adata.obs` that contains cell type information.
         cell_type: Specific cell type to filter the data.
@@ -461,23 +464,13 @@ def cell_expression_along_axis(
     # select the data for plotting
     data_for_one_celltype = _select_data(
         adata=adata,
-        obs_val=obs_val,
+        obs_val=axis,
         cell_type_column=cell_type_column,
         cell_type=cell_type,
         genes=genes,
+        min_expression=min_expression,
         xlim=xlim,
     )
-
-    # data_dict = {gene: _select_data(
-    #     adata=adata,
-    #     obs_val=obs_val,
-    #     cell_type_column=cell_type_column,
-    #     cell_type=cell_type,
-    #     gene=gene,
-    #     xlim=xlim,
-    # )
-    #  for gene in genes
-    #  }
 
     # Prepare a figure with subplots
     num_genes = len(genes)
@@ -491,7 +484,6 @@ def cell_expression_along_axis(
                              )
 
     # Histogram for the x-axis density
-    #data_for_axis_histogram = data_dict[list(data_dict.keys())[0]]
     sns.kdeplot(data=data_for_one_celltype, x="axis", ax=axes[0, 0], color='darkgray', fill=True)
 
     # remove values axis from histogram
@@ -501,16 +493,18 @@ def cell_expression_along_axis(
     for i, gene in enumerate(genes):
     #for i, (gene, data_of_one_celltype) in enumerate(data_dict.items()):
 
-        data_for_one_gene = data_for_one_celltype[["axis", gene]].copy()
+        #data_for_one_gene = data_for_one_celltype[["axis", gene]].copy()
+        data_for_one_gene = data_for_one_celltype[[gene]].copy()
 
-        # Apply limits
-        data_filtered = data_for_one_gene[data_for_one_gene[gene] >= min_expression]
-
-        # KDE plot
-        sns.kdeplot(data=data_filtered, x="axis", y=gene, ax=axes[i + 1, 0], fill=True, cmap="Reds", levels=8)
+        if kde:
+            # KDE plot
+            sns.kdeplot(data=data_for_one_gene.reset_index("axis"),
+                        x="axis", y=gene,
+                        ax=axes[i + 1, 0],
+                        fill=True, cmap="Reds", levels=8)
 
         # Scatter plot
-        sns.regplot(data=data_filtered,
+        sns.regplot(data=data_for_one_gene.reset_index("axis"),
                     x="axis", y=gene, ax=axes[i + 1, 0],
                     color="k", #s=8
                     scatter_kws={"s": scatter_size},
@@ -522,7 +516,7 @@ def cell_expression_along_axis(
 
         # Histogram for the gene expression
         sns.kdeplot(
-            data=data_filtered, y=gene, ax=axes[i + 1, 1], color='darkgray', fill=True
+            data=data_for_one_gene, y=gene, ax=axes[i + 1, 1], color='darkgray', fill=True
         )
 
         # remove values axis from histogram
@@ -534,7 +528,7 @@ def cell_expression_along_axis(
 
     # Set common x-label
     if xlabel is None:
-        axes[-1, 0].set_xlabel("_".join(convert_to_list(obs_val)))
+        axes[-1, 0].set_xlabel("_".join(convert_to_list(axis)))
     else:
         axes[-1, 0].set_xlabel(xlabel)
 
@@ -589,8 +583,10 @@ def _select_data(
             # mask values below the threshold with NaN
             expr = expr.mask(expr < min_expression)
 
-        # add gene expression to dataframe
-        selected_data[gene] = expr
+        with warnings.catch_warnings():
+            warnings.simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+            # add gene expression to dataframe
+            selected_data[gene] = expr
 
         # if min_expression is not None:
         #     # Apply limits
@@ -628,102 +624,108 @@ def _bin_data(data,
     data = data.copy()
 
     # get values
-    axis = data.index.get_level_values(axis_name).values
-
-    # calculate number of bins from resolution
-    nbins = int((axis.max() - axis.min()) / resolution)
-    #nbins = int((data[axis_name].max() - data[axis_name].min()) / resolution)
-
-    # data = pd.DataFrame(
-    #     {"axis": axis,
-    #      "expr": expr}
-    # )
+    axis_data = data.index.get_level_values(axis_name).values
 
     # get gene names
     genes = [elem for elem in data.columns if elem != axis_name]
 
-    # bin data and calculate mean per bin
-    data["bin"] = pd.cut(data[axis_name], bins=nbins)
+    if resolution > 0:
+        # calculate number of bins from resolution
+        nbins = int((axis_data.max() - axis_data.min()) / resolution)
+        data["bin"] = pd.cut(axis_data, bins=nbins)
 
-    binned_mean = data.groupby("bin")[genes].mean()
-    #binned_mean = binned_mean.reset_index()
+        # calculate mean per bin
+        binned_mean = data.groupby("bin")[genes].mean()
 
-    # remove empty bins
-    #binned_mean = binned_mean.dropna()
-
-    # if minmax_scale:
-    #     # scale values to 0-1
-    #     # scaler = MinMaxScaler()
-    #     # binned_mean["minmax"] = scaler.fit_transform(binned_mean[[expr_col]])
-    #     scaler = MinMaxScaler()
-    #     binned_mean = pd.DataFrame(scaler.fit_transform(binned_mean),
-    #                 index=binned_mean.index,
-    #                 columns=binned_mean.columns)
-
-    # extract the center of each bin
-    #binned_mean["bin_center"] = [elem.mid for elem in binned_mean["bin"]]
-    binned_mean.index = [elem.mid for elem in binned_mean.index]
+        # extract the center of each bin
+        binned_mean.index = [elem.mid for elem in binned_mean.index]
+        binned_mean.index.name = "axis"
+    else:
+        # no actual binning is performed - data is just formated in the same way
+        binned_mean = data.droplevel(["cell_id", "cell_type"])
+        binned_mean.index.name = "axis"
 
     if plot:
-        for gene in genes:
-            _bin_qc_plot(
-                raw_axis=data[axis_name].values,
-                raw_expr=data[gene].values,
-                bin_center=binned_mean.index.values,
-                expr=binned_mean[gene].values,
-                ylabel=gene
-            )
+        _bin_qc_plot(binned_data=binned_mean, raw_data=data)
 
     return binned_mean
 
 def _bin_qc_plot(
-    raw_axis, raw_expr, bin_center, expr, xlabel='x', ylabel='y'
+    binned_data, raw_data, xlabel='x'
 ):
-    # bin_center = binned_data.index.values
-    # expr = binned_data["expr"].values
+    # extract values from binned data
+    bin_center = binned_data.index.values
+    genes = binned_data.columns
+    n_genes = len(genes)
 
-    try:
-        # perform loess regression for the second half of the plot
-        res = smooth_fit(
-        xs=bin_center,
-        ys=expr,
-        loess_bootstrap=False, nsteps=100
-        )
-    except ValueError as e:
-        print(f"A ValueError occurred during loess regression: {e}")
-        res = None
+    # extract values from raw data
+    raw_axis = raw_data.index.get_level_values("axis").values
 
-    fig, axs = plt.subplots(1,2, figsize=(8,4))
-    # Plot the original data
-    axs[0].scatter(
-        raw_axis, raw_expr, label='Original Data', alpha=0.5, color='k', s=1
-        )
+    fig, axs = plt.subplots(n_genes, 2, figsize=(8, 4*n_genes),
+                            sharex='col', sharey='row'
+                            )
 
-    # Plot the binned values
-    axs[0].plot(
-        bin_center, expr,
-        color='firebrick',
-        #marker='o',
-        linestyle='-', label='Binned Mean')
+    if n_genes == 1:
+        # reshape the axis array so that 2d indexing works later
+        axs = axs.reshape(1,2)
 
-    # Add labels and legend
-    axs[0].set_xlabel(xlabel)
-    axs[0].set_ylabel(ylabel)
-    axs[0].legend()
+    for i, gene in enumerate(genes):
+        expr = binned_data[gene].values
+        raw_expr = raw_data[gene].values
 
-    #axs[1].plot(binned_data["bin_center"], binned_data["minmax"])
-    axs[1].scatter(
-        x=bin_center, y=expr,s=1, color="k", label="Binned Mean")
-    if res is not None:
-        axs[1].plot(res["x"], res["y_pred"], label="Loess Regression")
-    axs[1].legend()
+        not_nan = ~np.isnan(expr)
+
+        try:
+            # perform loess regression for the second half of the plot
+            res = smooth_fit(
+            xs=bin_center[not_nan],
+            ys=expr[not_nan], # make sure there are no NaN in the data
+            loess_bootstrap=False, nsteps=100
+            )
+        except ValueError as e:
+            print(f"A ValueError occurred during loess regression: {e}")
+            res = None
+
+        # Plot the original data
+        axs[i, 0].scatter(
+            raw_axis, raw_expr, label='Original Data', alpha=0.5, color='k', s=1
+            )
+
+        # Plot the binned values
+        axs[i, 0].plot(
+            bin_center, expr,
+            color='firebrick',
+            alpha=0.5,
+            linestyle='-', label='Binned Mean')
+
+        # Add labels and legend
+        axs[i, 0].set_xlabel(xlabel)
+        axs[i, 0].set_ylabel(f"Expression of '{gene}'")
+        axs[i, 0].legend()
+
+        #axs[1].plot(binned_data["bin_center"], binned_data["minmax"])
+        axs[i, 1].scatter(
+            x=bin_center, y=expr,s=1, color="k", label="Binned Mean")
+        if res is not None:
+            axs[i, 1].plot(res["x"], res["y_pred"], color='royalblue',
+                           label="Loess Regression")
+            axs[i, 1].fill_between(res["x"],
+                                   res["conf_lower"],
+                                   res["conf_upper"],
+                                   color='royalblue',
+                                   alpha=0.2, label='Confidence Interval')
+
+        axs[i, 1].legend()
+        axs[i, 1].set_xlabel(xlabel)
+        axs[i, 1].set_ylabel(f"Scaled expression of '{gene}'")
 
     # Show plot
+    plt.tight_layout()
     plt.show()
 
 def cell_abundance_along_obs_val(
     adata: AnnData,
-    obs_val: Union[str, Tuple[str, str]],
+    axis: Union[str, Tuple[str, str]],
     groupby: Optional[str] = None,
     xlim: Tuple = (0, np.inf),
     savepath: Optional[os.PathLike] = None,
@@ -740,7 +742,7 @@ def cell_abundance_along_obs_val(
 
     Args:
         adata (AnnData): Annotated data matrix.
-        obs_val (Union[str, Tuple[str, str]]): Observation category to be plotted on the x-axis.
+        axis (Union[str, Tuple[str, str]]): Observation category to be plotted on the x-axis.
             Can be a string representing a column in `adata.obs` or a tuple (obsm_key, obsm_col)
             where `obsm_key` is a key in `adata.obsm` and `obsm_col` is a column in the corresponding DataFrame.
         groupby (Optional[str], optional): Column in `adata.obs` to group by. Defaults to None.
@@ -758,35 +760,35 @@ def cell_abundance_along_obs_val(
 
     # check type of obs_val
     adata_obs = adata.obs.copy()
-    if isinstance(obs_val, tuple):
+    if isinstance(axis, tuple):
         print("Retrieve `obs_val` from .obsm.")
-        obsm_key = obs_val[0]
-        obsm_col = obs_val[1]
-        obs_val = f"distance_from_{obsm_col}"
-        adata_obs[obs_val] = adata.obsm[obsm_key][obsm_col]
+        obsm_key = axis[0]
+        obsm_col = axis[1]
+        axis = f"distance_from_{obsm_col}"
+        adata_obs[axis] = adata.obsm[obsm_key][obsm_col]
 
     # get data for plotting
-    data = adata_obs[[obs_val, groupby]].dropna()
+    data = adata_obs[[axis, groupby]].dropna()
 
     # remove zeros
-    xlim_mask = (data[obs_val] > xlim[0]) & (data[obs_val] <= xlim[1])
+    xlim_mask = (data[axis] > xlim[0]) & (data[axis] <= xlim[1])
     data = data[xlim_mask].copy()
 
     # Create the histogram
     fig, ax = plt.subplots(1,1, figsize=(figsize[0], figsize[1]))
 
     if not kde:
-        h = sns.histplot(data=data, x=obs_val,
+        h = sns.histplot(data=data, x=axis,
                     hue=groupby, palette=DEFAULT_CATEGORICAL_CMAP.colors,
                     multiple=multiple, element=histplot_element,
                     alpha=1, ax=ax
                     )
     else:
-        h = sns.kdeplot(data=data, x=obs_val,
+        h = sns.kdeplot(data=data, x=axis,
                     hue=groupby, palette=DEFAULT_CATEGORICAL_CMAP.colors,
                     alpha=1, ax=ax, multiple=multiple
                     )
-        plt.xlim(0, data[obs_val].max())
+        plt.xlim(0, data[axis].max())
 
     # Move the legend outside of the plot
     sns.move_legend(h, "upper left", bbox_to_anchor=(1, 1))

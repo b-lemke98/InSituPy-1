@@ -16,7 +16,7 @@ import insitupy
 from insitupy._constants import LOAD_FUNCS
 from insitupy._exceptions import ModalityNotFoundError
 from insitupy.io.files import check_overwrite_and_remove_if_true
-from insitupy.utils.utils import convert_to_list
+from insitupy.utils.utils import convert_to_list, remove_empty_subplots
 from insitupy.utils.utils import textformat as tf
 
 from ..io.plots import save_and_show_figure
@@ -205,7 +205,7 @@ class InSituExperiment:
             new_metadata = new_metadata[cols_to_use]
 
         if by is None:
-            if len(new_metadata) != len(updated_metadata):
+            if len(new_metadata) != len(old_metadata):
                 raise ValueError("Length of new metadata does not match the existing metadata.")
             warnings.warn("No 'by' column provided. Metadata will be paired by order.")
             #updated_metadata = pd.concat([updated_metadata.reset_index(drop=True), new_metadata.reset_index(drop=True)], axis=1)
@@ -322,7 +322,7 @@ class InSituExperiment:
             dpi_save (int, optional): DPI for saving the plot. Defaults to 300.
         """
         num_datasets = len(self._data)
-        n_plots, n_rows, max_cols = get_nrows_maxcols(self._data, max_cols)
+        n_plots, n_rows, max_cols = get_nrows_maxcols(len(self._data), max_cols)
         fig, axes = plt.subplots(n_rows, max_cols, figsize=(figsize[0]*max_cols, figsize[1]*n_rows))
 
         # make sure title_columns is a list
@@ -341,14 +341,17 @@ class InSituExperiment:
             else:
                 ax.set_title(f"Dataset {idx + 1}", fontdict={"fontsize": title_size})
 
-        if n_plots > 1:
 
-            # check if there are empty plots remaining
-            i = n_plots
-            while i < n_rows * max_cols:
-                i+=1
-                # remove empty plots
-                axes[i].set_axis_off()
+        remove_empty_subplots(
+            axes, n_plots, n_rows, max_cols
+        )
+        # if n_plots > 1:
+        #     # check if there are empty plots remaining
+        #     i = n_plots
+        #     while i < n_rows * max_cols:
+        #         i+=1
+        #         # remove empty plots
+        #         axes[i].set_axis_off()
         if show:
             #fig.tight_layout()
             save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=True)
