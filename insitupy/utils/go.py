@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -13,8 +13,6 @@ from scipy.cluster.hierarchy import (dendrogram, fcluster, linkage,
                                      set_link_color_palette)
 from scipy.spatial.distance import squareform
 
-#from ..calculations import jaccard_dist
-#from ..utils import SpeciesToID, find_between
 #from .adata import create_deg_df
 
 class SpeciesToID:
@@ -33,6 +31,14 @@ class SpeciesToID:
         self.check_species(species)
         return self.species_dict[species]
 
+def find_between(s, first, last ):
+    try:
+        start = s.index( first ) + len( first )
+        end = s.index( last, start )
+        return s[start:end]
+    except ValueError:
+        return ""
+
 class GOEnrichment():
     def __init__(self):
         self._results = {}
@@ -41,8 +47,8 @@ class GOEnrichment():
     def results(self):
         return self._results
 
-    def gprofiler(self, target_genes: Union[dict, list] = None, top_n: int = 300,
-                  organism: str = None, key_added: str = None,
+    def gprofiler(self, target_genes: Union[dict, list] = None, top_n: Optional[int] = None,
+                  organism: str = None, key_added: str = 'result',
                   uns_key_added: str = 'gprofiler', return_df: bool = True,
                   sortby: str = 'pvals_adj', **kwargs: Any):
         """
@@ -71,9 +77,6 @@ class GOEnrichment():
             target_genes = {'query': target_genes}
         else:
             raise ValueError("`target_genes` must be a dictionary with query names as keys and lists of genes as values, or a list of genes.")
-
-        if key_added is None:
-            key_added = 'foo'
 
         if organism is None:
             raise ValueError("`organism` not specified. Needs gprofiler naming conventions, e.g. `mmusculus`")
@@ -108,8 +111,8 @@ class GOEnrichment():
         if return_df:
             return enrichment
 
-    def stringdb(self, target_genes: Union[dict, list] = None, top_n: int = 300,
-                 organism: str = None, key_added: str = None,
+    def stringdb(self, target_genes: Union[dict, list] = None, top_n: Optional[int] = None,
+                 organism: str = None, key_added: str = 'result',
                  uns_key_added: str = 'stringdb', return_df: bool = True,
                  sortby: str = 'pvals_adj', **kwargs: Any):
         """
@@ -138,9 +141,6 @@ class GOEnrichment():
             target_genes = {'query': target_genes}
         else:
             raise ValueError("`target_genes` must be a dictionary with query names as keys and lists of genes as values, or a list of genes.")
-
-        if key_added is None:
-            key_added = 'foo'
 
         if organism is None:
             raise ValueError("`organism` not specified. Needs stringdb naming conventions, e.g. `mmusculus`")
@@ -182,8 +182,8 @@ class GOEnrichment():
         if return_df:
             return enrichment
 
-    def enrichr(self, target_genes: Union[dict, list] = None, top_n: int = 300,
-                organism: str = None, key_added: str = None,
+    def enrichr(self, target_genes: Union[dict, list] = None, top_n: Optional[int] = None,
+                organism: str = None, key_added: str = 'result',
                 enrichr_libraries: str = 'GO_Biological_Process_2018',
                 outdir: str = None, no_plot: bool = True,
                 uns_key_added: str = 'enrichr', return_df: bool = True,
@@ -220,9 +220,6 @@ class GOEnrichment():
         else:
             raise ValueError("`target_genes` must be a dictionary with query names as keys and lists of genes as values, or a list of genes.")
 
-        if key_added is None:
-            key_added = 'foo'
-
         if organism is None:
             raise ValueError("`organism` not specified. Needs to have one of the following values: `mouse`, `human`")
 
@@ -230,8 +227,6 @@ class GOEnrichment():
         for group, genes in target_genes.items():
             if top_n is not None:
                 genes = genes[:top_n]
-
-            print(organism)
 
             e = gseapy.enrichr(gene_list=genes, gene_sets=enrichr_libraries,
                             organism=organism, outdir=outdir, no_plot=no_plot,
@@ -403,7 +398,7 @@ class StringDB:
         if self.return_results:
             return self.result
 
-    def stringdb_network_from_adata(self, adata: AnnData = None, key: str = None, top_n: int = 300, organism: str = None, output_format: str = "image",
+    def stringdb_network_from_adata(self, adata: AnnData = None, key: str = None, top_n: Optional[int] = None, organism: str = None, output_format: str = "image",
         key_added: str = None, sortby: str = 'pvals_adj', ascending: bool = True,
         **kwargs: Any):
 

@@ -171,6 +171,23 @@ def remove_empty_subplots(axes, nplots, nrows, ncols):
             axes[i].set_axis_off()
             i+=1
 
+def check_list(List, list_to_compare):
+    '''
+    Compare two lists and return the elements that are in both lists.
+    If not all elements are in both lists give message telling which are not.
+    '''
+
+    not_in = []
+    List = [l if l in list_to_compare else not_in.append(l) for l in List]
+
+    # remove None values
+    List = [elem for elem in List if elem is not None]
+
+    if len(not_in) > 0:
+        print("Following elements not found: {}".format(", ".join(not_in)), flush=True)
+
+    return List
+
 def _generate_time_based_uid():
     time_str = datetime.now().strftime("%y%m%d-%H%M%S%f")
     short_uid = str(uuid4()).split("-")[0]
