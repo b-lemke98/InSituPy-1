@@ -15,7 +15,7 @@ from scipy.stats import pearsonr, spearmanr, zscore
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
-from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
+from insitupy._constants import DEFAULT_CATEGORICAL_CMAP, _init_mpl_fontsize
 from insitupy._core._checks import check_raw, has_valid_labels
 from insitupy.io.plots import save_and_show_figure
 from insitupy.utils._regression import smooth_fit
@@ -418,6 +418,7 @@ def expr_along_obs_val(
         else:
             return fig, axs
 
+
 def cell_expression_along_axis(
     adata,
     axis,
@@ -427,13 +428,14 @@ def cell_expression_along_axis(
     xlim: Tuple[Union[int, float], Union[int, float]] = (0, np.inf),
     min_expression: Union[int, float] = 0,
     xlabel: Optional[str] = None,
-    kde: bool = True,
     fit_reg: bool = False,
-    lowess: bool = False,
-    robust: bool = False,
+    kde: bool = False,
     fig_height: Number = 4,
-    fig_marginal_ratio: Number = 0.2,
-    scatter_size: Number = 1
+    fig_marginal_ratio: Number = 0.15,
+    scatter_size: Number = 1,
+    wspace: Number = 0.4,
+    hspace: Number = 0.1,
+    font_scale_factor: Number = 1
 ):
 
     """
@@ -458,6 +460,9 @@ def cell_expression_along_axis(
     Returns:
         None: Displays the plot.
     """
+    # reset matplotlib settings
+    _init_mpl_fontsize(scale_factor=font_scale_factor)
+
     # make sure genes is a list
     genes = convert_to_list(genes)
 
@@ -474,68 +479,360 @@ def cell_expression_along_axis(
 
     # Prepare a figure with subplots
     num_genes = len(genes)
+    num_cols = 4
+    num_rows = (num_genes + num_cols - 1) // num_cols
     marg_height = fig_height * fig_marginal_ratio
-    fig, axes = plt.subplots(num_genes + 1, 2,
-                             figsize=(fig_height + marg_height, fig_height * (num_genes) + marg_height),
-                             #sharex=True, sharey=True,
+    fig, axes = plt.subplots(num_rows + 1, num_cols * 2,
+                             figsize=(fig_height * (1-hspace) * num_cols + marg_height,
+                                      fig_height * (1-wspace) * num_rows + marg_height),
                              sharey='row', sharex='col',
-                             height_ratios=[marg_height] + [fig_height]*num_genes,
-                             width_ratios=[fig_height, marg_height]
+                             gridspec_kw={'height_ratios': [marg_height] + [fig_height]*num_rows,
+                                          'width_ratios': [fig_height, marg_height]*num_cols
+                                          }
                              )
 
-    # Histogram for the x-axis density
-    sns.kdeplot(data=data_for_one_celltype, x="axis", ax=axes[0, 0], color='darkgray', fill=True)
+    # Adjust the space between subplots
+    plt.subplots_adjust(wspace=wspace, hspace=hspace)
 
-    # remove values axis from histogram
-    axes[0, 0].get_yaxis().set_visible(False)
-    axes[0, 0].spines['left'].set_visible(False)
+
 
     for i, gene in enumerate(genes):
-    #for i, (gene, data_of_one_celltype) in enumerate(data_dict.items()):
+        row = i // num_cols + 1
+        col = i % num_cols * 2
 
-        #data_for_one_gene = data_for_one_celltype[["axis", gene]].copy()
+        if row == 1:
+            # Histogram for the x-axis density
+            sns.kdeplot(data=data_for_one_celltype, x="axis", ax=axes[0, col],
+                        color='darkgray', fill=True)
+
+            # remove the empty axes in between the plots
+            axes[0, col+1].remove()
+
+            # remove values axis from histogram
+            axes[0, col].get_yaxis().set_visible(False)
+            axes[0, col].spines['left'].set_visible(False)
+
+        # select data for current gene
         data_for_one_gene = data_for_one_celltype[[gene]].copy()
 
         if kde:
             # KDE plot
             sns.kdeplot(data=data_for_one_gene.reset_index("axis"),
                         x="axis", y=gene,
-                        ax=axes[i + 1, 0],
+                        ax=axes[row, col],
                         fill=True, cmap="Reds", levels=8)
 
         # Scatter plot
-        sns.regplot(data=data_for_one_gene.reset_index("axis"),
-                    x="axis", y=gene, ax=axes[i + 1, 0],
-                    color="k", #s=8
-                    scatter_kws={"s": scatter_size},
-                    fit_reg=fit_reg,
-                    lowess=lowess,
-                    robust=robust,
-                    line_kws={"color": "orange"}
+        axis_values = data_for_one_gene.index.get_level_values('axis').values
+        expr_values = data_for_one_gene[gene].values
+
+        # drop NaNs
+        not_nan = ~np.isnan(expr_values)
+        axis_values = axis_values[not_nan]
+        expr_values = expr_values[not_nan]
+
+        axes[row, col].scatter(
+            x=axis_values,
+            y=expr_values,
+            alpha=0.5, color='k', s=2
+            )
+
+        if fit_reg:
+            if len(axis_values) > 1:
+                try:
+                    # perform loess regression for the second half of the plot
+                    res = smooth_fit(
+                    xs=axis_values,
+                    ys=expr_values, # make sure there are no NaN in the data
+                    loess_bootstrap=False, nsteps=100
                     )
+                except ValueError as e:
+                    print(f"A ValueError occurred during loess regression: {e}")
+                    res = None
+            else:
+                print(f"Only one datapoint left for gene {gene} after filtering. Skipped LOESS regression.")
+                res = None
+
+            if res is not None:
+                axes[row, col].plot(res["x"], res["y_pred"],
+                            color='royalblue', linewidth=3,
+                            #label=reg_label
+                            )
+                axes[row, col].fill_between(res["x"],
+                                    res["conf_lower"],
+                                    res["conf_upper"],
+                                    color='royalblue',
+                                    alpha=0.2,
+                                    #label='95% CI of Loess Regression'
+                                    )
+
 
         # Histogram for the gene expression
         sns.kdeplot(
-            data=data_for_one_gene, y=gene, ax=axes[i + 1, 1], color='darkgray', fill=True
+            data=data_for_one_gene, y=gene, ax=axes[row, col+1], color='darkgray', fill=True
         )
 
         # remove values axis from histogram
-        axes[i + 1, 1].get_xaxis().set_visible(False)
-        axes[i + 1, 1].spines['bottom'].set_visible(False)
+        axes[row, col+1].get_xaxis().set_visible(False)
+        axes[row, col+1].spines['bottom'].set_visible(False)
 
         # Set labels
-        axes[i + 1, 0].set_ylabel(f"{gene} in '{cell_type}'")
+        #axes[row, col].set_ylabel(f"{gene} in '{cell_type}'")
+        axes[row, col].set_ylabel(f"{gene}")
 
-    # Set common x-label
-    if xlabel is None:
-        axes[-1, 0].set_xlabel("_".join(convert_to_list(axis)))
-    else:
-        axes[-1, 0].set_xlabel(xlabel)
+    plt.suptitle(f"Gene expression in '{cell_type}'")
 
-    axes[0, 1].remove()
+    # Turn off empty subplots
+    total_plots = (num_rows + 1) * num_cols * 2
+    for i in range(len(genes), num_cols * num_rows):
+        row = i // num_cols + 1
+        col = i % num_cols * 2
+        axes[row, col].set_axis_off()
+        axes[row, col + 1].set_axis_off()
 
-    plt.tight_layout()
+        if row == 1:
+            axes[0, col].set_axis_off()
+            axes[0, col+1].set_axis_off()
+
+    #plt.tight_layout()
     plt.show()
+
+
+# def cell_expression_along_axis(
+#     adata,
+#     axis,
+#     genes: List[str],
+#     cell_type_column,
+#     cell_type,
+#     xlim: Tuple[Union[int, float], Union[int, float]] = (0, np.inf),
+#     min_expression: Union[int, float] = 0,
+#     xlabel: Optional[str] = None,
+#     kde: bool = True,
+#     fit_reg: bool = False,
+#     lowess: bool = False,
+#     robust: bool = False,
+#     fig_height: Number = 4,
+#     fig_marginal_ratio: Number = 0.2,
+#     scatter_size: Number = 1
+# ):
+
+#     """
+#     Plot gene expression along a specified axis for a given cell type.
+
+#     Args:
+#         adata: AnnData object containing the single-cell data.
+#         axis: Observation value to plot along the x-axis.
+#         genes (List[str]): List of genes to plot.
+#         cell_type_column: Column name in `adata.obs` that contains cell type information.
+#         cell_type: Specific cell type to filter the data.
+#         xlim (Tuple[Union[int, float], Union[int, float]], optional): Limits for the x-axis. Defaults to (0, np.inf).
+#         min_expression (Union[int, float], optional): Minimum expression level to include in the plot. Defaults to 0.
+#         xlabel (Optional[str], optional): Label for the x-axis. Defaults to None.
+#         fit_reg (bool, optional): Whether to fit a regression line. Defaults to False.
+#         lowess (bool, optional): Whether to use LOWESS for regression. Defaults to False.
+#         robust (bool, optional): Whether to use a robust regression. Defaults to False.
+#         fig_height (Number, optional): Height of the figure. Defaults to 4.
+#         fig_marginal_ratio (Number, optional): Ratio of the marginal plot height to the main plot height. Defaults to 0.2.
+#         scatter_size (Number, optional): Size of the scatter plot points. Defaults to 1.
+
+#     Returns:
+#         None: Displays the plot.
+#     """
+#     # make sure genes is a list
+#     genes = convert_to_list(genes)
+
+#     # select the data for plotting
+#     data_for_one_celltype = _select_data(
+#         adata=adata,
+#         obs_val=axis,
+#         cell_type_column=cell_type_column,
+#         cell_type=cell_type,
+#         genes=genes,
+#         min_expression=min_expression,
+#         xlim=xlim,
+#     )
+
+#     # Prepare a figure with subplots
+#     num_genes = len(genes)
+#     marg_height = fig_height * fig_marginal_ratio
+#     fig, axes = plt.subplots(num_genes + 1, 2,
+#                              figsize=(fig_height + marg_height, fig_height * (num_genes) + marg_height),
+#                              #sharex=True, sharey=True,
+#                              sharey='row', sharex='col',
+#                              height_ratios=[marg_height] + [fig_height]*num_genes,
+#                              width_ratios=[fig_height, marg_height]
+#                              )
+
+#     # Histogram for the x-axis density
+#     sns.kdeplot(data=data_for_one_celltype, x="axis", ax=axes[0, 0], color='darkgray', fill=True)
+
+#     # remove values axis from histogram
+#     axes[0, 0].get_yaxis().set_visible(False)
+#     axes[0, 0].spines['left'].set_visible(False)
+
+#     for i, gene in enumerate(genes):
+#         # select data for current gene
+#         data_for_one_gene = data_for_one_celltype[[gene]].copy()
+
+#         if kde:
+#             # KDE plot
+#             sns.kdeplot(data=data_for_one_gene.reset_index("axis"),
+#                         x="axis", y=gene,
+#                         ax=axes[i + 1, 0],
+#                         fill=True, cmap="Reds", levels=8)
+
+#         # Scatter plot
+#         sns.regplot(data=data_for_one_gene.reset_index("axis"),
+#                     x="axis", y=gene, ax=axes[i + 1, 0],
+#                     color="k", #s=8
+#                     scatter_kws={"s": scatter_size},
+#                     fit_reg=fit_reg,
+#                     lowess=lowess,
+#                     robust=robust,
+#                     line_kws={"color": "orange"}
+#                     )
+
+#         # Histogram for the gene expression
+#         sns.kdeplot(
+#             data=data_for_one_gene, y=gene, ax=axes[i + 1, 1], color='darkgray', fill=True
+#         )
+
+#         # remove values axis from histogram
+#         axes[i + 1, 1].get_xaxis().set_visible(False)
+#         axes[i + 1, 1].spines['bottom'].set_visible(False)
+
+#         # Set labels
+#         axes[i + 1, 0].set_ylabel(f"{gene} in '{cell_type}'")
+
+#     # Set common x-label
+#     if xlabel is None:
+#         axes[-1, 0].set_xlabel("_".join(convert_to_list(axis)))
+#     else:
+#         axes[-1, 0].set_xlabel(xlabel)
+
+#     axes[0, 1].remove()
+
+#     plt.tight_layout()
+#     plt.show()
+
+# def cell_expression_along_axis(
+#     adata,
+#     axis,
+#     genes: List[str],
+#     cell_type_column,
+#     cell_type,
+#     xlim: Tuple[Union[int, float], Union[int, float]] = (0, np.inf),
+#     min_expression: Union[int, float] = 0,
+#     xlabel: Optional[str] = None,
+#     kde: bool = True,
+#     fit_reg: bool = False,
+#     lowess: bool = False,
+#     robust: bool = False,
+#     fig_height: Number = 4,
+#     fig_marginal_ratio: Number = 0.2,
+#     scatter_size: Number = 1
+# ):
+
+#     """
+#     Plot gene expression along a specified axis for a given cell type.
+
+#     Args:
+#         adata: AnnData object containing the single-cell data.
+#         axis: Observation value to plot along the x-axis.
+#         genes (List[str]): List of genes to plot.
+#         cell_type_column: Column name in `adata.obs` that contains cell type information.
+#         cell_type: Specific cell type to filter the data.
+#         xlim (Tuple[Union[int, float], Union[int, float]], optional): Limits for the x-axis. Defaults to (0, np.inf).
+#         min_expression (Union[int, float], optional): Minimum expression level to include in the plot. Defaults to 0.
+#         xlabel (Optional[str], optional): Label for the x-axis. Defaults to None.
+#         fit_reg (bool, optional): Whether to fit a regression line. Defaults to False.
+#         lowess (bool, optional): Whether to use LOWESS for regression. Defaults to False.
+#         robust (bool, optional): Whether to use a robust regression. Defaults to False.
+#         fig_height (Number, optional): Height of the figure. Defaults to 4.
+#         fig_marginal_ratio (Number, optional): Ratio of the marginal plot height to the main plot height. Defaults to 0.2.
+#         scatter_size (Number, optional): Size of the scatter plot points. Defaults to 1.
+
+#     Returns:
+#         None: Displays the plot.
+#     """
+#     # make sure genes is a list
+#     genes = convert_to_list(genes)
+
+#     # select the data for plotting
+#     data_for_one_celltype = _select_data(
+#         adata=adata,
+#         obs_val=axis,
+#         cell_type_column=cell_type_column,
+#         cell_type=cell_type,
+#         genes=genes,
+#         min_expression=min_expression,
+#         xlim=xlim,
+#     )
+
+#     # Prepare a figure with subplots
+#     num_genes = len(genes)
+#     marg_height = fig_height * fig_marginal_ratio
+#     fig, axes = plt.subplots(num_genes + 1, 2,
+#                              figsize=(fig_height + marg_height, fig_height * (num_genes) + marg_height),
+#                              #sharex=True, sharey=True,
+#                              sharey='row', sharex='col',
+#                              height_ratios=[marg_height] + [fig_height]*num_genes,
+#                              width_ratios=[fig_height, marg_height]
+#                              )
+
+#     # Histogram for the x-axis density
+#     sns.kdeplot(data=data_for_one_celltype, x="axis", ax=axes[0, 0], color='darkgray', fill=True)
+
+#     # remove values axis from histogram
+#     axes[0, 0].get_yaxis().set_visible(False)
+#     axes[0, 0].spines['left'].set_visible(False)
+
+#     for i, gene in enumerate(genes):
+#     #for i, (gene, data_of_one_celltype) in enumerate(data_dict.items()):
+
+#         #data_for_one_gene = data_for_one_celltype[["axis", gene]].copy()
+#         data_for_one_gene = data_for_one_celltype[[gene]].copy()
+
+#         if kde:
+#             # KDE plot
+#             sns.kdeplot(data=data_for_one_gene.reset_index("axis"),
+#                         x="axis", y=gene,
+#                         ax=axes[i + 1, 0],
+#                         fill=True, cmap="Reds", levels=8)
+
+#         # Scatter plot
+#         sns.regplot(data=data_for_one_gene.reset_index("axis"),
+#                     x="axis", y=gene, ax=axes[i + 1, 0],
+#                     color="k", #s=8
+#                     scatter_kws={"s": scatter_size},
+#                     fit_reg=fit_reg,
+#                     lowess=lowess,
+#                     robust=robust,
+#                     line_kws={"color": "orange"}
+#                     )
+
+#         # Histogram for the gene expression
+#         sns.kdeplot(
+#             data=data_for_one_gene, y=gene, ax=axes[i + 1, 1], color='darkgray', fill=True
+#         )
+
+#         # remove values axis from histogram
+#         axes[i + 1, 1].get_xaxis().set_visible(False)
+#         axes[i + 1, 1].spines['bottom'].set_visible(False)
+
+#         # Set labels
+#         axes[i + 1, 0].set_ylabel(f"{gene} in '{cell_type}'")
+
+#     # Set common x-label
+#     if xlabel is None:
+#         axes[-1, 0].set_xlabel("_".join(convert_to_list(axis)))
+#     else:
+#         axes[-1, 0].set_xlabel(xlabel)
+
+#     axes[0, 1].remove()
+
+#     plt.tight_layout()
+#     plt.show()
 
 def _select_data(
     adata,
