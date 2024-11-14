@@ -10,14 +10,17 @@ from insitupy.utils.utils import check_list, get_nrows_maxcols
 def go_plot(
     enrichment,
     style="dot",
-    color_key=None, size_key=None, groups=None,
+    color_key="Gene ratio",
+    size_key=None, groups=None,
     fig=None, axis=None,
-    max_to_plot=25, max_cols=4, cmap='viridis', cmin=None, cmax=None,
+    max_to_plot=10,
+    max_cols=4, cmap='viridis', cmin=None, cmax=None,
     ax_label_size=16, markersize=240,
     figsize=(8,6),
     remove_yticklabels=False,
     xtick_label_size=16, ytick_label_size=16,
-    clb_label_size=16, clb_tick_label_size=16, clb_pos=None, clb_norm=False,
+    clb_label_size=16, clb_tick_label_size=16,
+    clb_pos=None, clb_norm=False,
     title_size=16, max_line_length=30, custom_headers=None,
     max_name_length=60,
     value_to_plot='Enrichment score',
@@ -83,12 +86,15 @@ def go_plot(
 
     # get min and max for the colorbar
     if color_key is not None:
-        if clb_norm:
-            cmax = enrichment[color_key].max() if cmax is None else cmax
-            cmin = enrichment[color_key].min() if cmin is None else cmin
-        else:
-            cmax = None
-            cmin = None
+        try:
+            if clb_norm:
+                cmax = enrichment[color_key].max() if cmax is None else cmax
+                cmin = enrichment[color_key].min() if cmin is None else cmin
+            else:
+                cmax = None
+                cmin = None
+        except KeyError:
+            print(f"color_key '{color_key}' not found in columns.")
 
     # Plotting
     if axis is None:
@@ -111,7 +117,11 @@ def go_plot(
             # if max_to_plot is not None and len(df) > max_to_plot:
             #         df = df[:max_to_plot]
             if color_key is not None:
-                color = df[color_key]
+                try:
+                    color = df[color_key]
+                except KeyError:
+                    print(f"color_key '{color_key}' not found in columns.")
+                    color = 'k'
             else:
                 color = 'k'
 
@@ -124,7 +134,8 @@ def go_plot(
 
             # plotting
             if style == "dot":
-                s = axs[i].scatter(df[value_to_plot], df[name_key],
+                s = axs[i].scatter(
+                    df[value_to_plot], df[name_key],
                     c=color, cmap=cmap,
                     s=markersize,
                     edgecolors='k')
