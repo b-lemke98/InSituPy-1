@@ -294,7 +294,7 @@ class InSituData:
                 # save that the current key was analyzed
                 geom_attr.metadata[key]["analyzed"] = tf.TICK
 
-                print(f"Added results to `.cells.matrix.obsm[{geometry_type}]", flush=True)
+                print(f'Added results to `.cells.matrix.obsm["{geometry_type}"]', flush=True)
 
     def assign_annotations(
         self,
@@ -1381,7 +1381,7 @@ class InSituData:
         # cmap_annotations: str ="Dark2",
         grayscale_colormap: List[str] = ["red", "green", "cyan", "magenta", "yellow", "gray"],
         return_viewer: bool = False,
-        widgets_max_width: int = 200
+        widgets_max_width: int = 500
         ):
         # get information about pixel size
         if (pixel_size is None) & (scalebar):
@@ -1721,7 +1721,7 @@ class InSituData:
 
         genes = convert_to_list(genes)
 
-        nplots, nrows, ncols = get_nrows_maxcols(genes, max_cols=maxcols)
+        nplots, nrows, ncols = get_nrows_maxcols(len(genes), max_cols=maxcols)
 
         # setup figure
         fig, axs = plt.subplots(nrows, ncols, figsize=(figsize[0]*ncols, figsize[1]*nrows))
@@ -2115,24 +2115,32 @@ def calc_distance_of_cells_from(
     Returns:
         None
     """
+    # extract anndata object
+    adata = data.cells.matrix
+
     if region_name is None:
         print(f'Calculate the distance of cells from the annotation "{annotation_class}"')
-        region_mask = [True] * len(data.cells.matrix)
+        region_mask = [True] * len(adata)
     else:
         assert region_key is not None, "`region_key` must not be None if `region_name` is not None."
         print(f'Calculate the distance of cells from the annotation "{annotation_class}" within region "{region_name}"')
-        region_col_name = f'regions-{region_key}'
 
-        if region_col_name not in data.cells.matrix.obs.columns:
+        try:
+            region_df = adata.obsm["regions"]
+        except KeyError:
             data.assign_regions(keys=region_key)
+            region_df = adata.obsm["regions"]
+        else:
+            if region_key not in region_df.columns:
+                data.assign_regions(keys=region_key)
 
         # generate mask for selected region
-        region_mask = data.cells.matrix.obs[region_col_name] == region_name
+        region_mask = region_df[region_key] == region_name
 
     # create geopandas points from cells
-    x = data.cells.matrix.obsm["spatial"][:, 0][region_mask]
-    y = data.cells.matrix.obsm["spatial"][:, 1][region_mask]
-    indices = data.cells.matrix.obs_names[region_mask]
+    x = adata.obsm["spatial"][:, 0][region_mask]
+    y = adata.obsm["spatial"][:, 1][region_mask]
+    indices = adata.obs_names[region_mask]
     cells = gpd.points_from_xy(x, y)
 
     # retrieve annotation information
@@ -2152,10 +2160,17 @@ def calc_distance_of_cells_from(
 
     # add results to CellData
     if key_to_save is None:
-        key_to_save = f"dist_from_{annotation_class}"
-    data.cells.matrix.obs[key_to_save] = min_dists
-    print(f'Save distances to `.cells.matrix.obs["{key_to_save}"]`')
+        #key_to_save = f"dist_from_{annotation_class}"
+        key_to_save = annotation_class
+    #adata.obs[key_to_save] = min_dists
 
+    obsm_keys = adata.obsm.keys()
+    if "distance_from" not in obsm_keys:
+        # add empty pandas dataframe with obs_names as index
+        adata.obsm["distance_from"] = pd.DataFrame(index=adata.obs_names)
+
+    adata.obsm["distance_from"][key_to_save] = min_dists
+    print(f'Saved distances to `.cells.matrix.obsm["distance_from"]["{key_to_save}"]`')
 
 def differential_gene_expression(
     data: InSituData,

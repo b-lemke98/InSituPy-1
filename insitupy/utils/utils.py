@@ -145,23 +145,48 @@ def nested_dict_numpy_to_list(dictionary):
         elif isinstance(value, dict):
             nested_dict_numpy_to_list(value)
 
-def get_nrows_maxcols(keys, max_cols):
+def get_nrows_maxcols(n_keys, max_cols):
     '''
     Determine optimal number of rows and columns for `plt.subplot` based on
-    list of keys [`keys`] and maximum number of columns [`max_cols`].
+    number of keys ['n_keys'] and maximum number of columns [`max_cols`].
 
     Returns: `n_plots`, `n_rows`, `max_cols`
     '''
 
-    n_plots = len(keys)
-    if n_plots > max_cols:
-        n_rows = math.ceil(n_plots / max_cols)
+    #n_plots = len(keys)
+    if n_keys > max_cols:
+        n_rows = math.ceil(n_keys / max_cols)
     else:
         n_rows = 1
-        max_cols = n_plots
+        max_cols = n_keys
 
-    return n_plots, n_rows, max_cols
+    return n_keys, n_rows, max_cols
 
+def remove_empty_subplots(axes, nplots, nrows, ncols):
+    if nplots > 1:
+        # check if there are empty plots remaining
+        i = nplots
+        while i < nrows * ncols:
+            # remove empty plots
+            axes[i].set_axis_off()
+            i+=1
+
+def check_list(List, list_to_compare):
+    '''
+    Compare two lists and return the elements that are in both lists.
+    If not all elements are in both lists give message telling which are not.
+    '''
+
+    not_in = []
+    List = [l if l in list_to_compare else not_in.append(l) for l in List]
+
+    # remove None values
+    List = [elem for elem in List if elem is not None]
+
+    if len(not_in) > 0:
+        print("Following elements not found: {}".format(", ".join(not_in)), flush=True)
+
+    return List
 
 def _generate_time_based_uid():
     time_str = datetime.now().strftime("%y%m%d-%H%M%S%f")

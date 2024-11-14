@@ -2,6 +2,7 @@ import string
 from pathlib import Path
 
 import matplotlib
+import matplotlib.pyplot as plt
 
 from insitupy.palettes import CustomPalettes
 
@@ -37,10 +38,30 @@ SHAPES_SYMBOL = "\U0001F52C" # 🔬
 POINTS_SYMBOL = "\U0001F4CD" # 📍
 REGIONS_SYMBOL = "\U0001F30D" # 🌍
 
+# annotations
+FORBIDDEN_ANNOTATION_NAMES = ["rest"]
+
+## Matplotlib settings
 # cmaps
 palettes = CustomPalettes()
 DEFAULT_CATEGORICAL_CMAP = palettes.tab20_mod
 REGION_CMAP = matplotlib.colormaps["tab10"]
 
-# annotations
-FORBIDDEN_ANNOTATION_NAMES = ["rest"]
+# font size
+def _init_mpl_fontsize(scale_factor=1):
+    '''
+    https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.rcParams
+    '''
+    SMALL_SIZE = 14*scale_factor
+    MEDIUM_SIZE = 16*scale_factor
+    BIGGER_SIZE = 18*scale_factor
+
+    plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+    plt.rc('axes', titlesize=MEDIUM_SIZE)     # fontsize of the axes title
+    plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
+_init_mpl_fontsize()

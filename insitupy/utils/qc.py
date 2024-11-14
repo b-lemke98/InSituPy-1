@@ -30,7 +30,7 @@ def collect_qc_data(
     data_folders: List[Union[str, os.PathLike, Path]]
     ) -> pd.DataFrame:
 
-    cats = ["run_name", "region_name", "preservation_method",
+    cats = ["run_name", "slide_id", "region_name", "preservation_method",
             "num_cells", "transcripts_per_cell",
             "transcripts_per_100um", "panel_organism", "panel_tissue_type"]
 
@@ -56,7 +56,7 @@ def plot_qc(
     ):
     # plot
     plt.rcParams.update({'font.size': fontsize})
-    n_plots, nrows, ncols = get_nrows_maxcols(cats, max_cols=max_cols)
+    n_plots, nrows, ncols = get_nrows_maxcols(len(cats), max_cols=max_cols)
     fig, axs = plt.subplots(nrows, ncols, figsize=(9*ncols, 8*nrows))
 
     if n_plots > 1:
