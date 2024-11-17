@@ -1857,7 +1857,8 @@ def register_images(
     add_registered_image: bool = True,
     decon_scale_factor: float = 0.2,
     physicalsize: str = 'µm',
-    prefix: str = ""
+    prefix: str = "",
+    min_good_matches: int = 20
     ):
     '''
     Register images stored in XeniumData object.
@@ -1985,7 +1986,8 @@ def register_images(
         axes_template=axes_template,
         max_width=4000,
         convert_to_grayscale=False,
-        perspective_transform=False
+        perspective_transform=False,
+        min_good_matches=min_good_matches
     )
 
     # run all steps to extract features and get transformation matrix

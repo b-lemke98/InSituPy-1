@@ -9,6 +9,8 @@ try:
 except ImportError:
     WITH_NAPARI = False
 
+from insitupy._constants import CACHE
+
 from . import images as im
 from . import io
 from . import plotting as pl

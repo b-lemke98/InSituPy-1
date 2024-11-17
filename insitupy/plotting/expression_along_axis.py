@@ -2,6 +2,7 @@ import os
 import textwrap
 import warnings
 from numbers import Number
+from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from warnings import warn
 
@@ -431,6 +432,10 @@ def cell_expression_along_axis(
     xlabel: Optional[str] = None,
     fit_reg: bool = False,
     kde: bool = False,
+    maxcols: bool = 4,
+    savepath: Union[str, os.PathLike, Path] = None,
+    save_only: bool = False,
+    dpi_save: int = 300,
     fig_height: Number = 4,
     fig_marginal_ratio: Number = 0.15,
     scatter_size: Number = 1,
@@ -487,15 +492,14 @@ def cell_expression_along_axis(
 
     # Prepare a figure with subplots
     num_genes = len(genes)
-    num_cols = 4
-    num_rows = (num_genes + num_cols - 1) // num_cols
+    num_rows = (num_genes + maxcols - 1) // maxcols
     marg_height = fig_height * fig_marginal_ratio
-    fig, axes = plt.subplots(num_rows + 1, num_cols * 2,
-                             figsize=(fig_height * (1-hspace) * num_cols + marg_height,
+    fig, axes = plt.subplots(num_rows + 1, maxcols * 2,
+                             figsize=(fig_height * (1-hspace) * maxcols + marg_height,
                                       fig_height * (1-wspace) * num_rows + marg_height),
                              sharey='row', sharex='col',
                              gridspec_kw={'height_ratios': [marg_height] + [fig_height]*num_rows,
-                                          'width_ratios': [fig_height, marg_height]*num_cols
+                                          'width_ratios': [fig_height, marg_height]*maxcols
                                           }
                              )
 
@@ -503,8 +507,8 @@ def cell_expression_along_axis(
     plt.subplots_adjust(wspace=wspace, hspace=hspace)
 
     for i, gene in enumerate(genes):
-        row = i // num_cols + 1
-        col = i % num_cols * 2
+        row = i // maxcols + 1
+        col = i % maxcols * 2
 
         if row == 1:
             # Histogram for the x-axis density
@@ -599,10 +603,10 @@ def cell_expression_along_axis(
     plt.suptitle(f"Gene expression in '{cell_type}'")
 
     # Turn off empty subplots
-    total_plots = (num_rows + 1) * num_cols * 2
-    for i in range(len(genes), num_cols * num_rows):
-        row = i // num_cols + 1
-        col = i % num_cols * 2
+    total_plots = (num_rows + 1) * maxcols * 2
+    for i in range(len(genes), maxcols * num_rows):
+        row = i // maxcols + 1
+        col = i % maxcols * 2
         axes[row, col].set_axis_off()
         axes[row, col + 1].set_axis_off()
 
@@ -613,8 +617,7 @@ def cell_expression_along_axis(
         # add the xlabel to the plot above
         axes[row-1, col].set_xlabel(xlabel_str)
 
-    #plt.tight_layout()
-    plt.show()
+    save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=False)
 
 
 def _select_data(
