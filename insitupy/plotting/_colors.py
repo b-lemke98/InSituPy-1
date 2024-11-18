@@ -98,7 +98,8 @@ def continuous_data_to_rgba(
     upper_climit_pct: int = 95,
     lower_climit: Optional[int] = None,
     clip = False,
-    nan_val: tuple = (1,1,1,0)
+    nan_val: tuple = (1,1,1,0),
+    return_mapping: bool = False
     ):
     if np.any(np.isnan(data)):
         contains_nans = True
@@ -137,7 +138,10 @@ def continuous_data_to_rgba(
     else:
         result_rgba = rgba_data
 
-    return result_rgba
+    if return_mapping:
+        return result_rgba, scalarMap
+    else:
+        return result_rgba
 
 
 def _data_to_rgba(
@@ -146,10 +150,10 @@ def _data_to_rgba(
     categorical_cmap: Union[str, ListedColormap] = None,
     upper_climit_pct: int = 99,
     return_mapping: bool = False,
-    nan_val: tuple = (1,1,1,0)
+    nan_val: tuple = (1,1,1,0),
     ):
     if is_numeric_dtype(data):
-        return continuous_data_to_rgba(data=data, cmap=continuous_cmap, upper_climit_pct=upper_climit_pct)
+        return continuous_data_to_rgba(data=data, cmap=continuous_cmap, upper_climit_pct=upper_climit_pct, return_mapping=return_mapping)
     else:
         if categorical_cmap is None:
             # pal = CustomPalettes()
