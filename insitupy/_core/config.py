@@ -1,6 +1,8 @@
 import dask
 import numpy as np
 import pandas as pd
+from matplotlib.backends.backend_qt5agg import FigureCanvas
+from matplotlib.figure import Figure
 from scipy.sparse import issparse
 
 from insitupy import WITH_NAPARI
@@ -8,7 +10,6 @@ from insitupy._constants import POINTS_SYMBOL
 
 if WITH_NAPARI:
     import napari
-
     def init_data_name():
         global current_data_name
         current_data_name = "main"
@@ -28,6 +29,8 @@ if WITH_NAPARI:
             adata = xdata.cells.matrix
             global boundaries
             boundaries = xdata.cells.boundaries
+            global viewer
+            viewer = xdata.viewer
         else:
             adata = xdata.alt[current_data_name].matrix
             boundaries = xdata.alt[current_data_name].boundaries
@@ -81,6 +84,12 @@ if WITH_NAPARI:
             pixel_size = xdata.images.metadata[first_key]["pixel_size"]
         else:
             pixel_size = pixel_size_param
+
+        # set up colorlegend
+        global static_canvas
+        static_canvas = FigureCanvas(Figure(figsize=(5, 5)))
+
+
 
     def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget):
         set_viewer_config(xdata)

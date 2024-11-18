@@ -27,6 +27,7 @@ from shapely import Point, Polygon
 from shapely.affinity import scale as scale_func
 from tqdm import tqdm
 
+import insitupy._core.config as config
 from insitupy import WITH_NAPARI, __version__
 from insitupy._constants import ISPY_METADATA_FILE, LOAD_FUNCS, REGIONS_SYMBOL
 from insitupy._core._checks import _check_assignment, _substitution_func
@@ -42,6 +43,7 @@ from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_celldata, read_shapesdata)
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting import volcano_plot
+from insitupy.plotting.plots import _add_colorlegend_to_canvas
 from insitupy.utils import create_deg_dataframe
 from insitupy.utils.deg import create_deg_dataframe
 from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
@@ -1489,10 +1491,10 @@ class InSituData:
             cells = self.cells
         except AttributeError:
             # add annotation widget to napari
-            annot_widget = add_new_geometries_widget()
-            annot_widget.max_height = 100
-            annot_widget.max_width = widgets_max_width
-            self.viewer.window.add_dock_widget(annot_widget, name="Add geometries", area="right")
+            add_geom_widget = add_new_geometries_widget()
+            add_geom_widget.max_height = 100
+            add_geom_widget.max_width = widgets_max_width
+            self.viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
         else:
             # initialize the widgets
             show_points_widget, locate_cells_widget, show_geometries_widget, show_boundaries_widget, select_data = _initialize_widgets(xdata=self)
@@ -1519,10 +1521,10 @@ class InSituData:
                 locate_cells_widget.max_width = widgets_max_width
 
             # add annotation widget to napari
-            annot_widget = add_new_geometries_widget()
+            add_geom_widget = add_new_geometries_widget()
             #annot_widget.max_height = 100
-            annot_widget.max_width = widgets_max_width
-            self.viewer.window.add_dock_widget(annot_widget, name="Add geometries", area="right")
+            add_geom_widget.max_width = widgets_max_width
+            self.viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
 
             # if show_region_widget is not None:
             #     self.viewer.window.add_dock_widget(show_region_widget, name="Show regions", area="right")
@@ -1534,17 +1536,13 @@ class InSituData:
                 #show_annotations_widget.max_height = 100
                 show_geometries_widget.max_width = widgets_max_width
 
-
         # EVENTS
-        # Function assign to an layer addition event
+        # Assign function to an layer addition event
         def _update_uid(event):
             if event is not None:
 
                 layer = event.source
-                # print(event.action) # print what event.action returns
-                # print(event.data_indices) # print index of event
                 if event.action == "add":
-                    # print(f'Added to {layer}')
                     if 'uid' in layer.properties:
                         layer.properties['uid'][-1] = str(uuid4())
                     else:
@@ -1552,28 +1550,37 @@ class InSituData:
 
                 elif event.action == "remove":
                     pass
-                    # print(f"Removed from {layer}")
                 else:
                     raise ValueError("Unexpected value '{event.action}' for `event.action`. Expected 'add' or 'remove'.")
 
-                # print(layer.properties)
-
+        # Assign the function to data of all existing layers
         for layer in self.viewer.layers:
             if isinstance(layer, Shapes) or isinstance(layer, Points):
                 layer.events.data.connect(_update_uid)
-                #layer.metadata = layer.properties
 
-        # Connect the function to all shapes layers in the viewer
+        # Connect the function to the data of existing shapes and points layers in the viewer
         def connect_to_all_shapes_layers(event):
             layer = event.source[event.index]
             if event is not None:
                 if isinstance(layer, Shapes) or isinstance(layer, Points):
-                    # print('Annotation layer added')
                     layer.events.data.connect(_update_uid)
 
         # Connect the function to any new layers added to the viewer
         self.viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
 
+        # add color legend widget
+        self.viewer.window.add_dock_widget(config.static_canvas, area='left', name='Color legend')
+
+        # def update_colorlegend(event):
+        #     # if event.type == "inserted":
+        #     layer = event.source[event.index]
+        #     _add_colorlegend_to_canvas(layer=layer, static_canvas=config.static_canvas)
+        #     # if event.type == "removed":
+        #         # config.static_canvas.figure.clear()
+        #         # config.static_canvas.draw()
+
+        # self.viewer.layers.events.inserted.connect(update_colorlegend)
+        # #self.viewer.layers.events.removed.connect(add_colorlegend_widget)
 
         # NAPARI SETTINGS
         if scalebar:

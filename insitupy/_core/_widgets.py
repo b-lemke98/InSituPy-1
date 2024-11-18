@@ -11,6 +11,8 @@ from shapely.geometry.multipolygon import MultiPolygon
 import insitupy._core.config as config
 from insitupy import WITH_NAPARI
 from insitupy._core._layers import _create_points_layer, _update_points_layer
+from insitupy._core.config import static_canvas
+from insitupy.plotting.plots import _add_colorlegend_to_canvas
 
 from .._constants import (POINTS_SYMBOL, REGION_CMAP, REGIONS_SYMBOL,
                           SHAPES_SYMBOL)
@@ -180,13 +182,15 @@ if WITH_NAPARI:
                         #layers_to_add.append(gene_layer)
                     else:
                         #print(f"Key '{gene}' already in layer list.", flush=True)
-                        # update the points layer
+                        # update the existing points layer
                         layer = viewer.layers[layer_names_for_current_data[0]]
                         _update_points_layer(
                             layer=layer,
                             new_color_values=color_value,
                             new_name=new_layer_name,
                         )
+
+                    _add_colorlegend_to_canvas(values=color_value, canvas=static_canvas)
 
             @add_cells_widget.key.changed.connect
             @add_cells_widget.call_button.changed.connect
