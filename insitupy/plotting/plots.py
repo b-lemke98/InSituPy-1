@@ -1,23 +1,32 @@
 import os
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 from napari.viewer import Viewer
 
+import insitupy._core.config as config
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting._colors import _data_to_rgba
 
 
 def plot_colorlegend(
     viewer: Viewer,
-    layer_name: str,
+    layer_name: Optional[str] = None,
     savepath: Union[str, os.PathLike, Path] = None,
     save_only: bool = False,
     dpi_save: int = 300,
     ):
+    # automatically get layer
+    if layer_name is None:
+        candidate_layers = [l for l in viewer.layers if l.name.startswith(f"{config.current_data_name}")]
+        try:
+            layer_name = candidate_layers[0].name
+        except IndexError:
+            raise ValueError("No layer with cellular transcriptomic data found. First add a layer using the 'Show Data' widget.")
+
     # extract layer
     layer = viewer.layers[layer_name]
 
