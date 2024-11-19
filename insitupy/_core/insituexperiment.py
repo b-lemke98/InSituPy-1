@@ -241,8 +241,8 @@ class InSituExperiment:
 
     def dge(self,
             data_id: int,
-            ref_id: int,
             data_annotation_tuple: Union[Tuple[str, str], Tuple[str, str]], # tuple of annotation key and names
+            ref_id: Optional[int] = None,
             ref_annotation_tuple: Union[Literal["rest"], Tuple[str, str], Tuple[str, str]] = "rest",
             obs_tuple: Optional[Tuple[str, str]] = None,
             region_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
@@ -263,8 +263,8 @@ class InSituExperiment:
 
         Args:
             data_id (int): Identifier for the primary dataset within the `InSituExperiment` object.
-            ref_id (int): Identifier for the reference dataset within the `InSituExperiment` object.
             data_annotation_tuple (Union[Tuple[str, str], Tuple[str, str]]): Tuple containing the annotation key and name for the primary data.
+            ref_id (Optional[int]): Identifier for the reference dataset within the `InSituExperiment` object.
             ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
             obs_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
             region_tuple (Optional[Union[Tuple[str, str], Tuple[str, str]]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
@@ -289,19 +289,40 @@ class InSituExperiment:
                 )
         """
 
-        # get data
+        # get data and extract information about experiment
         data = self.data[data_id]
-        ref_data = self.data[ref_id]
-
-        # extract information about experiment
         data_name = self.metadata.loc[data_id, name_col]
-        ref_name = self.metadata.loc[ref_id, name_col]
+
+        if ref_id is not None:
+            ref_data = self.data[ref_id]
+            ref_name = self.metadata.loc[ref_id, name_col]
+        else:
+            ref_data = None
+            ref_name = data_name
+
+        if isinstance(data_annotation_tuple, tuple):
+            data_annot_name = data_annotation_tuple[1]
+        elif data_annotation_tuple == "rest":
+            data_annot_name = data_annotation_tuple
+        else:
+            raise ValueError(f"Argument `data_annotation_tuple` has to be either tuple or 'rest'. Instead: {data_annotation_tuple}")
+
+        if isinstance(ref_annotation_tuple, tuple):
+            ref_annot_name = ref_annotation_tuple[1]
+        elif ref_annotation_tuple == "rest":
+            ref_annot_name = ref_annotation_tuple
+        else:
+            raise ValueError(f"Argument `ref_annotation_tuple` has to be either tuple or 'rest'. Instead: {ref_annotation_tuple}")
 
         # create title if necessary
         if title is None:
-            title = f"'{data_annotation_tuple[1]}' in {data_name} vs. '{ref_annotation_tuple[1]}' in {ref_name}\n{obs_tuple[0]}: {obs_tuple[1]}"
+            if obs_tuple is not None:
+                cell_title_part = f"\n{obs_tuple[0]}: {obs_tuple[1]}"
+            else:
+                cell_title_part = ""
+            title = f"'{data_annot_name}' in {data_name} vs. '{ref_annot_name}' in {ref_name}{cell_title_part}"
 
-        dge = differential_gene_expression(
+        dge_res = differential_gene_expression(
             data=data,
             ref_data=ref_data,
             data_annotation_tuple=data_annotation_tuple,
@@ -315,7 +336,7 @@ class InSituExperiment:
             title = title
         )
         if not plot_volcano:
-            return dge
+            return dge_res
 
     def iterdata(self):
         """Iterate over the metadata rows and corresponding data.
