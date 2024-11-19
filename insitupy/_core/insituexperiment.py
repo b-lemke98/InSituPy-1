@@ -13,14 +13,14 @@ from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
 
 import insitupy
+from insitupy import differential_gene_expression
 from insitupy._constants import LOAD_FUNCS
 from insitupy._exceptions import ModalityNotFoundError
 from insitupy.io.files import check_overwrite_and_remove_if_true
-from insitupy.utils.utils import convert_to_list, remove_empty_subplots
+from insitupy.io.plots import save_and_show_figure
+from insitupy.utils.utils import (convert_to_list, get_nrows_maxcols,
+                                  remove_empty_subplots)
 from insitupy.utils.utils import textformat as tf
-
-from ..io.plots import save_and_show_figure
-from ..utils.utils import get_nrows_maxcols
 
 
 class InSituExperiment:
@@ -238,6 +238,82 @@ class InSituExperiment:
             if hasattr(xd, "viewer"):
                 del xd.viewer
         return deepcopy(self)
+
+    def dge(self,
+            data_id: int,
+            ref_id: int,
+            data_annotation_tuple: Union[Tuple[str, str], Tuple[str, str]], # tuple of annotation key and names
+            ref_annotation_tuple: Union[Literal["rest"], Tuple[str, str], Tuple[str, str]] = "rest",
+            obs_tuple: Optional[Tuple[str, str]] = None,
+            region_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
+            plot_volcano: bool = True,
+            method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
+            ignore_duplicate_assignments: bool = False,
+            force_assignment: bool = False,
+            name_col: str = "sample_id",
+            title: Optional[str] = None,
+            ):
+        """
+        Wrapper function for performing differential gene expression analysis within an `InSituExperiment` object.
+
+        This function serves as a wrapper around the `differential_gene_expression` function,
+        facilitating the retrieval of data and metadata, and the generation of a plot title
+        if not provided. It compares gene expression between specified annotations within
+        a single InSituData object or between two InSituData objects.
+
+        Args:
+            data_id (int): Identifier for the primary dataset within the `InSituExperiment` object.
+            ref_id (int): Identifier for the reference dataset within the `InSituExperiment` object.
+            data_annotation_tuple (Union[Tuple[str, str], Tuple[str, str]]): Tuple containing the annotation key and name for the primary data.
+            ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
+            obs_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
+            region_tuple (Optional[Union[Tuple[str, str], Tuple[str, str]]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
+            plot_volcano (bool, optional): Whether to generate a volcano plot of the results. Defaults to True.
+            method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']], optional): Statistical method to use for differential expression analysis. Defaults to 't-test'.
+            ignore_duplicate_assignments (bool, optional): Whether to ignore duplicate assignments in the data. Defaults to False.
+            force_assignment (bool, optional): Whether to force assignment of annotations and regions. Defaults to False.
+            name_col (str, optional): Column name in metadata to use for naming samples. Defaults to "sample_id".
+            title (Optional[str], optional): Title for the volcano plot. If not provided, a title is generated based on the data and reference names. Defaults to None.
+
+        Returns:
+            None
+
+        Example:
+            >>> analysis.dge(
+                    data_id=1,
+                    ref_id=2,
+                    data_annotation_tuple=("cell_type", "neuron"),
+                    ref_annotation_tuple=("cell_type", "astrocyte"),
+                    plot_volcano=True,
+                    method='wilcoxon'
+                )
+        """
+
+        # get data
+        data = self.data[data_id]
+        ref_data = self.data[ref_id]
+
+        # extract information about experiment
+        data_name = self.metadata.loc[data_id, name_col]
+        ref_name = self.metadata.loc[ref_id, name_col]
+
+        # create title if necessary
+        if title is None:
+            title = f"'{data_annotation_tuple[1]}' in {data_name} vs. '{ref_annotation_tuple[1]}' in {ref_name}\n{obs_tuple[0]}: {obs_tuple[1]}"
+
+        differential_gene_expression(
+            data=data,
+            ref_data=ref_data,
+            data_annotation_tuple=data_annotation_tuple,
+            ref_annotation_tuple=ref_annotation_tuple,
+            obs_tuple=obs_tuple,
+            region_tuple=region_tuple,
+            plot_volcano=plot_volcano,
+            method=method,
+            ignore_duplicate_assignments=ignore_duplicate_assignments,
+            force_assignment=force_assignment,
+            title = title
+        )
 
     def iterdata(self):
         """Iterate over the metadata rows and corresponding data.
