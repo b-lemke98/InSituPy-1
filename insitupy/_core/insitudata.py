@@ -1208,7 +1208,23 @@ class InSituData:
             # save to the respective directory
             self.saveas(path=path)
 
+    def save_current_colorlegend(self, savepath):
 
+        # Check if static_canvas exists
+        if not hasattr(config, 'static_canvas'):
+            print("Warning: 'static_canvas' attribute not found in config. "
+                "Please display data in the napari viewer using '.show()' first.")
+            return
+
+        try:
+            # Save the figure to a PDF file
+            config.static_canvas.figure.savefig(savepath)
+            print(f"Figure saved as {savepath}")
+        except RuntimeError as e:
+            if 'FigureCanvasQTAgg has been deleted' in str(e):
+                print("Warning: The color legend has been deleted and cannot be saved.")
+            else:
+                raise  # Re-raise the exception if it's a different error
 
     def _update_to_existing_project(self,
                                     path: Optional[Union[str, os.PathLike, Path]],
