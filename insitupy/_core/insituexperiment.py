@@ -301,7 +301,7 @@ class InSituExperiment:
         if title is None:
             title = f"'{data_annotation_tuple[1]}' in {data_name} vs. '{ref_annotation_tuple[1]}' in {ref_name}\n{obs_tuple[0]}: {obs_tuple[1]}"
 
-        differential_gene_expression(
+        dge = differential_gene_expression(
             data=data,
             ref_data=ref_data,
             data_annotation_tuple=data_annotation_tuple,
@@ -314,6 +314,8 @@ class InSituExperiment:
             force_assignment=force_assignment,
             title = title
         )
+        if not plot_volcano:
+            return dge
 
     def iterdata(self):
         """Iterate over the metadata rows and corresponding data.
