@@ -1568,8 +1568,8 @@ class InSituData:
         # Connect the function to any new layers added to the viewer
         self.viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
 
-        # add color legend widget
-        self.viewer.window.add_dock_widget(config.static_canvas, area='left', name='Color legend')
+        # # add color legend widget
+        # self.viewer.window.add_dock_widget(config.static_canvas, area='left', name='Color legend')
 
         # def update_colorlegend(event):
         #     # if event.type == "inserted":

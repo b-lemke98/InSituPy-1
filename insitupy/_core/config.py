@@ -18,6 +18,11 @@ if WITH_NAPARI:
         global recent_selections
         recent_selections = []
 
+    def init_colorlegend_canvas():
+        # set up colorlegend
+        global static_canvas
+        static_canvas = FigureCanvas(Figure(figsize=(5, 5)))
+
     # set viewer configurations
     def set_viewer_config(
         xdata,
@@ -85,9 +90,6 @@ if WITH_NAPARI:
         else:
             pixel_size = pixel_size_param
 
-        # set up colorlegend
-        global static_canvas
-        static_canvas = FigureCanvas(Figure(figsize=(5, 5)))
 
 
 

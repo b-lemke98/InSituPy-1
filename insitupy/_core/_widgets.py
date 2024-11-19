@@ -11,7 +11,6 @@ from shapely.geometry.multipolygon import MultiPolygon
 import insitupy._core.config as config
 from insitupy import WITH_NAPARI
 from insitupy._core._layers import _create_points_layer, _update_points_layer
-from insitupy._core.config import static_canvas
 from insitupy.plotting.plots import _add_colorlegend_to_canvas
 
 from .._constants import (POINTS_SYMBOL, REGION_CMAP, REGIONS_SYMBOL,
