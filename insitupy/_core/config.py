@@ -6,10 +6,8 @@ from matplotlib.figure import Figure
 from scipy.sparse import issparse
 
 from insitupy import WITH_NAPARI
-from insitupy._constants import POINTS_SYMBOL
 
 if WITH_NAPARI:
-    import napari
     def init_data_name():
         global current_data_name
         current_data_name = "main"
@@ -24,7 +22,7 @@ if WITH_NAPARI:
         static_canvas = FigureCanvas(Figure(figsize=(5, 5)))
 
     # set viewer configurations
-    def set_viewer_config(
+    def init_viewer_config(
         xdata,
         pixel_size_param = None
         ):
@@ -90,32 +88,3 @@ if WITH_NAPARI:
         else:
             pixel_size = pixel_size_param
 
-
-
-
-    def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget):
-        set_viewer_config(xdata)
-
-        # set choices
-        boundaries_widget.key.choices = masks
-
-        # reset the currently selected key to None
-        points_widget.value.value = None
-
-        # add last addition to recent
-        points_widget.recent.choices = sorted(recent_selections)
-        points_widget.recent.value = None
-
-        # set only the last cell layer visible
-        cell_layers = []
-        for elem in xdata.viewer.layers:
-            if isinstance(elem, napari.layers.points.points.Points):
-                if not elem.name.startswith(POINTS_SYMBOL):
-                    # only if the layer is not a point annotation layer, it is added
-                    cell_layers.append(elem)
-        #point_layers = [elem for elem in xdata.viewer.layers if isinstance(elem, napari.layers.points.points.Points)]
-        n_cell_layers = len(cell_layers)
-
-        for i, l in enumerate(cell_layers):
-            if i < n_cell_layers-1:
-                l.visible = False

@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Optional, Union
 
 import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 from napari.viewer import Viewer
 
@@ -66,53 +65,4 @@ def plot_colorlegend(
     save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=False)
     plt.show()
 
-def _add_colorlegend_to_canvas(values, canvas):
-    # try:
-    #     # get values
-    #     values = layer.properties["value"]
-    # except KeyError:
-    #     pass
-    # else:
 
-    # create color mapping
-    rgba_list, mapping = _data_to_rgba(values, return_mapping=True)
-
-    if isinstance(mapping, dict):
-        # # categorical colorbar
-        # # create a figure for the colorbar
-        # fig, ax = plt.subplots(
-        #     #figsize=(5, 3)
-        #     )
-        # fig.subplots_adjust(bottom=0.5)
-
-        # circles = [Line2D([0], [0],
-        #                     marker='o', color='w', label=label,
-        #                     markerfacecolor=color, markeredgecolor='k', markersize=15) for label, color in mapping.items()]
-
-        # ax.legend(handles=circles, loc="center", labelspacing=1, borderpad=0.5)
-        # ax.set_title(layer.name)
-        # ax.set_axis_off()
-
-        pass
-
-    else:
-        # # continuous colorlegend
-        # # create a figure for the colorbar
-        # fig, ax = plt.subplots(
-        #     figsize=(6, 1)
-        #     )
-        # fig.subplots_adjust(bottom=0.5)
-
-        # # Add the colorbar to the figure
-        # cbar = fig.colorbar(mapping, orientation='horizontal', cax=ax)
-        # cbar.ax.set_title(layer.name)
-
-        canvas.figure.clear()  # Clear the current figure
-        gs = GridSpec(1, 1, top=1.2, bottom=0.6, left=-0.5, right=1.5)  # Define the grid spec
-        axes = canvas.figure.add_subplot(gs[0])  # Add subplot with the grid spec
-        colorbar = canvas.figure.colorbar(mapping, ax=axes, orientation='horizontal')
-        colorbar.set_label('Gene expression')
-        colorbar.ax.tick_params(labelsize=10)  # Adjust tick label size
-        #colorbar.set_ticks(np.linspace(norm.vmin, norm.vmax, num=5))  # Set the number of ticks
-        axes.set_axis_off()
-        canvas.draw()  # Redraw the canvas

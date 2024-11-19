@@ -30,7 +30,9 @@ def create_cmap_mapping(data, cmap: Union[str, ListedColormap] = None):
                 try:
                     unique_categories = np.sort(np.unique(data[~np.isnan(data)]))
                 except TypeError:
-                    unique_categories = np.sort(np.unique(data))
+                    #unique_categories = np.sort(np.unique(data))
+                    # Convert all elements to strings before sorting
+                    unique_categories = np.sort(np.unique(data.astype(str)))
 
     # get colormap if necessary
     if not isinstance(cmap, ListedColormap):

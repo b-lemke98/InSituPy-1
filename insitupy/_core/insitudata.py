@@ -43,7 +43,6 @@ from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_celldata, read_shapesdata)
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting import volcano_plot
-from insitupy.plotting.plots import _add_colorlegend_to_canvas
 from insitupy.utils import create_deg_dataframe
 from insitupy.utils.deg import create_deg_dataframe
 from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
@@ -1568,8 +1567,11 @@ class InSituData:
         # Connect the function to any new layers added to the viewer
         self.viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
 
-        # # add color legend widget
-        # self.viewer.window.add_dock_widget(config.static_canvas, area='left', name='Color legend')
+        # add color legend widget
+        import insitupy._core.config as config
+        from insitupy._core.config import init_colorlegend_canvas
+        init_colorlegend_canvas()
+        self.viewer.window.add_dock_widget(config.static_canvas, area='left', name='Color legend')
 
         # def update_colorlegend(event):
         #     # if event.type == "inserted":
