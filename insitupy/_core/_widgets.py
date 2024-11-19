@@ -8,6 +8,7 @@ import pandas as pd
 from matplotlib.colors import rgb2hex
 from shapely.geometry.multipolygon import MultiPolygon
 
+import insitupy._core._callbacks
 import insitupy._core.config as config
 from insitupy import WITH_NAPARI
 from insitupy._core._layers import _create_points_layer, _update_points_layer
@@ -15,8 +16,9 @@ from insitupy._core._layers import _create_points_layer, _update_points_layer
 from .._constants import (POINTS_SYMBOL, REGION_CMAP, REGIONS_SYMBOL,
                           SHAPES_SYMBOL)
 from ..images.utils import create_img_pyramid
-from ._callbacks import (_set_show_names_based_on_geom_type,
-                         _update_classes_on_key_change,
+from ._callbacks import (_refresh_widgets_after_data_change,
+                         _set_show_names_based_on_geom_type,
+                         _update_classes_on_key_change, _update_colorbar,
                          _update_keys_based_on_geom_type)
 
 if WITH_NAPARI:
@@ -41,7 +43,7 @@ if WITH_NAPARI:
             # initialize data_name of viewer
             config.init_data_name()
             # initialize viewer configuration
-            config.set_viewer_config(xdata=xdata,
+            config.init_viewer_config(xdata=xdata,
                                         #data_name=config.current_data_name
                                         )
             config.init_recent_selections()
@@ -68,7 +70,7 @@ if WITH_NAPARI:
             @select_data.data_name.changed.connect
             def update_widgets_on_data_change(event=None):
                 config.current_data_name = select_data.data_name.value
-                config._refresh_widgets_after_data_change(xdata,
+                insitupy._core._callbacks._refresh_widgets_after_data_change(xdata,
                                                     add_cells_widget,
                                                     add_boundaries_widget)
 
@@ -180,7 +182,7 @@ if WITH_NAPARI:
                         #layers_to_add.append(gene_layer)
                     else:
                         #print(f"Key '{gene}' already in layer list.", flush=True)
-                        # update the points layer
+                        # update the existing points layer
                         layer = viewer.layers[layer_names_for_current_data[0]]
                         _update_points_layer(
                             layer=layer,
@@ -230,10 +232,12 @@ if WITH_NAPARI:
 
             def callback(event=None):
                 # after the points widget is run, the widgets have to be refreshed to current data layer
-                config._refresh_widgets_after_data_change(xdata,
+                _refresh_widgets_after_data_change(xdata,
                                                         points_widget=add_cells_widget,
                                                         boundaries_widget=add_boundaries_widget
                                                         )
+                _update_colorbar()
+
             if add_cells_widget is not None:
                 add_cells_widget.call_button.clicked.connect(callback)
             if add_boundaries_widget is not None:
