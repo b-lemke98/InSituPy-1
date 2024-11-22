@@ -18,6 +18,7 @@ from insitupy._exceptions import ModalityNotFoundError
 from insitupy.io.files import check_overwrite_and_remove_if_true
 from insitupy.utils.utils import convert_to_list
 from insitupy.utils.utils import textformat as tf
+from insitupy._core._checks import is_integer_counts
 
 from ..io.plots import save_and_show_figure
 from ..utils.utils import get_nrows_maxcols
@@ -617,12 +618,13 @@ class InSituExperiment:
             return dataset.viewer
         
 
-    def plot_overview(self, colums_to_plot: List[str] = [], index: bool = True, qc_width: float = 4.0):
+    def plot_overview(self, colums_to_plot: List[str] = [], layer: str = None, index: bool = True, qc_width: float = 4.0):
         """
         Plots an overview table with metadata and quality control metrics.
 
         Args:
             columns_to_plot (List[str]): List of column names to include in the plot.
+            layer (str, optional): The layer of the AnnData object to use for calculations. If None, the function will use the main matrix (adata.X) or the 'counts' layer if the main matrix does not contain integer counts.
             index (bool, optional): Whether to add extra index or not. Default is True.
             custom_width (float, optional): Custom width for metadata columns. Default is 1.0.
             qc_width (float, optional): Width for quality control metric columns. Default is 4.0.
@@ -633,7 +635,7 @@ class InSituExperiment:
         Returns:
             None: Displays a plot with the overview table.
         """
-        
+        from anndata import AnnData
         try:
             from plottable import Table, ColumnDefinition
         except ImportError:
@@ -643,13 +645,13 @@ class InSituExperiment:
             """
             Calculate the maximum cell width for each column based on text length, including the column name in the calculation, and return the sum of them.
 
-            Parameters:
-            df (pd.DataFrame): The DataFrame containing the data.
-            multiplier (int): The multiplier to adjust the width based on text length.
+            Args:
+                df (pd.DataFrame): The DataFrame containing the data.
+                multiplier (int): The multiplier to adjust the width based on text length.
 
             Returns:
-            dict: A dictionary with column names as keys and maximum widths as values.
-            int: The sum of the maximum widths.
+                dict: A dictionary with column names as keys and maximum widths as values.
+                int: The sum of the maximum widths.
             """
             max_widths = {}
             total_width = 0
@@ -665,15 +667,15 @@ class InSituExperiment:
             """
             Custom function to create a horizontal bar plot.
 
-            Parameters:
-            ax (Axes): The axes on which to plot.
-            val (float): The value to plot.
-            max (float): The maximum value for the x-axis.
-            color (str, optional): The color of the bar.
-            rect_kw (dict, optional): Additional keyword arguments for the rectangle.
+            Args:
+                ax (Axes): The axes on which to plot.
+                val (float): The value to plot.
+                max (float): The maximum value for the x-axis.
+                color (str, optional): The color of the bar.
+                rect_kw (dict, optional): Additional keyword arguments for the rectangle.
 
             Returns:
-            bar: The bar plot.
+                bar: The bar plot.
             """
             # Create a horizontal bar plot with the specified value and maximum
             bar = ax.barh(y=0.5, left=1, width=val + 1, height=0.8, fc=color, ec="None", zorder=0.05)
@@ -689,6 +691,34 @@ class InSituExperiment:
                 ax.text(width + 1, rect.get_y() + rect.get_height() / 2, f'{width:.0f}', ha='left', va='center')
             return bar
         
+        def calculate_metrics(adata: AnnData, layer: str = None):
+            """
+            Calculate quality control metrics for an AnnData object.
+
+            Args:
+                adata (AnnData): Annotated data matrix.
+                layer (str, optional): The layer of the AnnData object to use for calculations. If None, the function will use the main matrix (adata.X) or the 'counts' layer if the main matrix does not contain integer counts.
+
+            Returns:
+                tuple: A tuple containing the median number of genes by counts and the median total counts.
+
+            Notes:
+                - If no raw counts are provided and the main matrix (adata.X) does not contain integer counts, the function will issue a warning and return (0, 0).
+            """
+            if layer is None:
+                if not is_integer_counts(adata.X):
+                    if not is_integer_counts(adata.layers["counts"]):
+                        warnings.warn("No raw counts provided, metrics would be set to 0.")
+                        return 0, 0
+                    else:
+                        df_cells, _ = sc.pp.calculate_qc_metrics(adata, percent_top=None, layer="counts")
+                else:
+                    df_cells, _ = sc.pp.calculate_qc_metrics(adata, percent_top=None)
+            else:
+                df_cells, _ = sc.pp.calculate_qc_metrics(adata, percent_top=None, layer=layer)
+            
+            return df_cells["n_genes_by_counts"].median(), df_cells["total_counts"].median()
+
         # Copy the metadata, select the columns to plot, and add index if nessiccary
         df = self.metadata.copy()[colums_to_plot]
         colname_tmp = "ind_tmp"
@@ -716,18 +746,19 @@ class InSituExperiment:
         #Calculate predefined QC metrics
         list_gene_count = []
         list_transcript_count = []
-        for exp in self:
-            if not hasattr(exp.data[0], "cells"):
+        for _, data in self.iterdata():
+            if not hasattr(data, "cells"):
                 warnings.warn("Counts were not loaded. Loading.")
-                exp.data[0].load_cells()
-            if not hasattr(exp.data[0], "cells") or not hasattr(exp.data[0].cells, "matrix"):
+                data.load_cells()
+            if not hasattr(data, "cells") or not hasattr(data.cells, "matrix"):
                 warnings.warn("Counts are not defined or loaded.")
                 list_gene_count.append(0)
                 list_transcript_count.append(0)
             else:
-                df_cells, _ = sc.pp.calculate_qc_metrics(exp[0].data[0].cells.matrix, percent_top=None)
-                list_gene_count.append(df_cells["n_genes_by_counts"].median())
-                list_transcript_count.append(df_cells["total_counts"].median())
+                m_gene_counts, m_transcript_counts = calculate_metrics(data.cells.matrix, layer=layer)
+                list_gene_count.append(m_gene_counts)
+                list_transcript_count.append(m_transcript_counts)
+
         df["mean_transcript_counts"] = list_transcript_count
         df["mean_gene_counts"] = list_gene_count
         max_genes = df["mean_gene_counts"].max()

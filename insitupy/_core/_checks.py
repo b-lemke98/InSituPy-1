@@ -46,6 +46,19 @@ def check_integer_counts(X):
     # check if the matrix contains raw counts
     if not np.all(np.modf(X)[0] == 0):
         raise ValueError("Anndata object does not contain raw counts. Preprocessing aborted.")
+    
+
+def is_integer_counts(X):
+    '''
+    Check if a matrix consists of raw integer counts or if it is processed already.
+    '''
+
+    # convert sparse matrix to numpy array
+    if issparse(X):
+        X = X.toarray()
+
+    # check if the matrix contains raw counts
+    return np.all(np.modf(X)[0] == 0)
 
 def check_raw(adata, use_raw, layer=None):
     # check if plotting raw data
