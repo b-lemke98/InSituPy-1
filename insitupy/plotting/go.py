@@ -56,9 +56,12 @@ def go_plot(
         libraries = [libraries] if isinstance(libraries, str) else list(libraries)
 
         # check if all libraries are in dataframe
-        notin = [elem for elem in libraries if elem not in enrichment['source'].unique()]
-        assert len(notin) == 0, "Following libraries could not be found in the `source` column: {}".format(notin)
-
+        libs_available = enrichment['source'].unique()
+        notin = [elem for elem in libraries if elem not in libs_available]
+        assert len(notin) == 0, (
+            f"Following libraries could not be found in the `source` column: {notin}\n"
+            f"Following libraries are possible: {libs_available}"
+        )
         # filter for libraries
         enrichment = enrichment[enrichment['source'].isin(libraries)].copy()
 

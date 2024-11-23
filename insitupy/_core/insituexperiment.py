@@ -252,6 +252,9 @@ class InSituExperiment:
             force_assignment: bool = False,
             name_col: str = "sample_id",
             title: Optional[str] = None,
+            savepath: Union[str, os.PathLike, Path] = None,
+            save_only: bool = False,
+            dpi_save: int = 300,
             ):
         """
         Wrapper function for performing differential gene expression analysis within an `InSituExperiment` object.
@@ -274,6 +277,9 @@ class InSituExperiment:
             force_assignment (bool, optional): Whether to force assignment of annotations and regions. Defaults to False.
             name_col (str, optional): Column name in metadata to use for naming samples. Defaults to "sample_id".
             title (Optional[str], optional): Title for the volcano plot. If not provided, a title is generated based on the data and reference names. Defaults to None.
+            savepath (Union[str, os.PathLike, Path], optional): Path to save the plot (default is None).
+            save_only (bool): If True, only save the plot without displaying it (default is False).
+            dpi_save (int): Dots per inch (DPI) for saving the plot (default is 300).
 
         Returns:
             None
@@ -333,7 +339,10 @@ class InSituExperiment:
             method=method,
             ignore_duplicate_assignments=ignore_duplicate_assignments,
             force_assignment=force_assignment,
-            title = title
+            title = title,
+            savepath = savepath,
+            save_only = save_only,
+            dpi_save = dpi_save,
         )
         if not plot_volcano:
             return dge_res
@@ -444,15 +453,7 @@ class InSituExperiment:
         remove_empty_subplots(
             axes, n_plots, n_rows, max_cols
         )
-        # if n_plots > 1:
-        #     # check if there are empty plots remaining
-        #     i = n_plots
-        #     while i < n_rows * max_cols:
-        #         i+=1
-        #         # remove empty plots
-        #         axes[i].set_axis_off()
         if show:
-            #fig.tight_layout()
             save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=True)
         else:
             return fig, axes

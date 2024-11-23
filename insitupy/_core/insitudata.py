@@ -2212,6 +2212,9 @@ def differential_gene_expression(
     ignore_duplicate_assignments: bool = False,
     force_assignment: bool = False,
     title: Optional[str] = None,
+    savepath: Union[str, os.PathLike, Path] = None,
+    save_only: bool = False,
+    dpi_save: int = 300,
     **kwargs
     ):
     """
@@ -2233,6 +2236,9 @@ def differential_gene_expression(
         ignore_duplicate_assignments (bool, optional): Whether to ignore duplicate assignments in the data. Defaults to False.
         force_assignment (bool, optional): Whether to force assignment of annotations and regions. Defaults to False.
         title (Optional[str], optional): Title for the volcano plot. Defaults to None.
+        savepath (Union[str, os.PathLike, Path], optional): Path to save the plot (default is None).
+        save_only (bool): If True, only save the plot without displaying it (default is False).
+        dpi_save (int): Dots per inch (DPI) for saving the plot (default is 300).
         **kwargs: Additional keyword arguments for the volcano plot.
 
     Returns:
@@ -2395,6 +2401,9 @@ def differential_gene_expression(
         volcano_plot(
             data=df,
             title=plot_title,
+            savepath = savepath,
+            save_only = save_only,
+            dpi_save = dpi_save,
             **kwargs
             )
     else:

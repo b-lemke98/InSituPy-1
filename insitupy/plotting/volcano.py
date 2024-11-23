@@ -26,6 +26,13 @@ def volcano_plot(data,
         data (pd.DataFrame): DataFrame containing gene names, log fold changes, and p-values.
         significance_threshold (float): P-value threshold for significance (default is 0.05).
         fold_change_threshold (float): Log2 fold change threshold for up/down regulation (default is 1).
+        title (str): Title of the plot (default is "Volcano Plot").
+        savepath (Union[str, os.PathLike, Path], optional): Path to save the plot (default is None).
+        save_only (bool): If True, only save the plot without displaying it (default is False).
+        dpi_save (int): Dots per inch (DPI) for saving the plot (default is 300).
+
+    Returns:
+        None
     """
     plt.figure(figsize=(10, 6))
 
