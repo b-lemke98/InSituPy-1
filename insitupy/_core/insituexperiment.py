@@ -127,8 +127,7 @@ class InSituExperiment:
             dataset = data
         else:
             dataset = insitupy.read_xenium(data)
-
-        assert isinstance(dataset, insitupy._core.insitudata.InSituData), "Loaded dataset is not an InSituData object."
+        assert isinstance(dataset, insitupy.InSituData), "Loaded dataset is not an InSituData object."
 
         # # set a unique ID
         # dataset._set_uid()
@@ -791,7 +790,7 @@ class InSituExperiment:
                 r.set(**rect_kw)
             for rect in bar:
                 width = rect.get_width()
-                ax.text(width, rect.get_y() + rect.get_height() / 2, f'{width:.0f}', ha='left', va='center')
+                ax.text(width + 1, rect.get_y() + rect.get_height() / 2, f'{width:.0f}', ha='left', va='center')
             return bar
 
         def calculate_metrics(adata: AnnData, layer: str = None):
