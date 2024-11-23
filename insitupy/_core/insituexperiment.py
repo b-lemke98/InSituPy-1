@@ -14,11 +14,11 @@ from matplotlib.figure import Figure
 
 import insitupy
 from insitupy._constants import LOAD_FUNCS
+from insitupy._core._checks import is_integer_counts
 from insitupy._exceptions import ModalityNotFoundError
 from insitupy.io.files import check_overwrite_and_remove_if_true
 from insitupy.utils.utils import convert_to_list
 from insitupy.utils.utils import textformat as tf
-from insitupy._core._checks import is_integer_counts
 
 from ..io.plots import save_and_show_figure
 from ..utils.utils import get_nrows_maxcols
@@ -616,7 +616,7 @@ class InSituExperiment:
         dataset.show()
         if return_viewer:
             return dataset.viewer
-        
+
 
     def plot_overview(self, colums_to_plot: List[str] = [], layer: str = None, index: bool = True, qc_width: float = 4.0):
         """
@@ -637,10 +637,10 @@ class InSituExperiment:
         """
         from anndata import AnnData
         try:
-            from plottable import Table, ColumnDefinition
+            from plottable import ColumnDefinition, Table
         except ImportError:
             raise ImportError("This function requires the 'plottable' framework. Please install it with 'pip install plottable'.")
-        
+
         def calculate_max_cell_widths_and_sum(df, multiplier=0.2):
             """
             Calculate the maximum cell width for each column based on text length, including the column name in the calculation, and return the sum of them.
@@ -662,7 +662,7 @@ class InSituExperiment:
                 total_width += max_width
             return max_widths, total_width
 
-        
+
         def custom_bar(ax: Axes, val: float, max: float, color: str = None, rect_kw: dict = {}):
             """
             Custom function to create a horizontal bar plot.
@@ -678,7 +678,7 @@ class InSituExperiment:
                 bar: The bar plot.
             """
             # Create a horizontal bar plot with the specified value and maximum
-            bar = ax.barh(y=0.5, left=1, width=val + 1, height=0.8, fc=color, ec="None", zorder=0.05)
+            bar = ax.barh(y=0.5, left=1, width=val, height=0.8, fc=color, ec="None", zorder=0.05)
             ax.set_xlim(0, max + 10)
             ax.set_xticks(ax.get_xticks())
             ax.set_xticklabels(['{:.0f}'.format(x) for x in ax.get_xticks()])
@@ -688,9 +688,9 @@ class InSituExperiment:
                 r.set(**rect_kw)
             for rect in bar:
                 width = rect.get_width()
-                ax.text(width + 1, rect.get_y() + rect.get_height() / 2, f'{width:.0f}', ha='left', va='center')
+                ax.text(width, rect.get_y() + rect.get_height() / 2, f'{width:.0f}', ha='left', va='center')
             return bar
-        
+
         def calculate_metrics(adata: AnnData, layer: str = None):
             """
             Calculate quality control metrics for an AnnData object.
@@ -708,15 +708,19 @@ class InSituExperiment:
             if layer is None:
                 if not is_integer_counts(adata.X):
                     if not is_integer_counts(adata.layers["counts"]):
-                        warnings.warn("No raw counts provided, metrics would be set to 0.")
+                        warnings.warn("No raw counts provided, metrics are set to 0.")
                         return 0, 0
                     else:
                         df_cells, _ = sc.pp.calculate_qc_metrics(adata, percent_top=None, layer="counts")
                 else:
                     df_cells, _ = sc.pp.calculate_qc_metrics(adata, percent_top=None)
             else:
-                df_cells, _ = sc.pp.calculate_qc_metrics(adata, percent_top=None, layer=layer)
-            
+                if not is_integer_counts(adata.layers[layer]):
+                    warnings.warn(f"No raw counts provided in layer '{layer}', metrics are set to 0.")
+                    return 0, 0
+                else:
+                    df_cells, _ = sc.pp.calculate_qc_metrics(adata, percent_top=None, layer=layer)
+
             return df_cells["n_genes_by_counts"].median(), df_cells["total_counts"].median()
 
         # Copy the metadata, select the columns to plot, and add index if nessiccary
@@ -742,7 +746,7 @@ class InSituExperiment:
                 column_definition.append(ColumnDefinition(name=column_name, textprops={"ha": "center"}, width=width_dict[column_name], title="", border=border))
             else:
                 column_definition.append(ColumnDefinition(name=column_name, group="metadata", textprops={"ha": "center"}, width=width_dict[column_name]))
-        
+
         #Calculate predefined QC metrics
         list_gene_count = []
         list_transcript_count = []
@@ -776,6 +780,6 @@ class InSituExperiment:
                     footer_divider=True, ax=ax, row_divider_kw={"linewidth": 1, "linestyle": (0, (1, 5))},
                     col_label_divider_kw={"linewidth": 1, "linestyle": "-"}, column_border_kw={"linewidth": 1, "linestyle": "-"},
                     index_col=col_id,)
-        
+
         plt.show()
 
