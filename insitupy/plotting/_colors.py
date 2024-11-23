@@ -3,6 +3,7 @@ from typing import Optional, Union
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib import cm
 from matplotlib.colors import ListedColormap
 from pandas.api.types import is_numeric_dtype
@@ -29,7 +30,9 @@ def create_cmap_mapping(data, cmap: Union[str, ListedColormap] = None):
                 try:
                     unique_categories = np.sort(np.unique(data[~np.isnan(data)]))
                 except TypeError:
-                    unique_categories = np.sort(np.unique(data))
+                    #unique_categories = np.sort(np.unique(data))
+                    # Convert all elements to strings before sorting
+                    unique_categories = np.sort(np.unique(data.astype(str)))
 
     # get colormap if necessary
     if not isinstance(cmap, ListedColormap):
@@ -69,17 +72,21 @@ def categorical_data_to_rgba(data,
 def _determine_climits(
     color_values,
     upper_climit_pct,
-    lower_climit = None
+    lower_climit = None,
+    force_above_zero = False
     ) -> list:
 
     if lower_climit is None:
         lower_climit = color_values.min()
 
-    color_values_above_zero = color_values[color_values > 0]
+    if force_above_zero:
+        color_values_for_calc = color_values[color_values > 0]
+    else:
+        color_values_for_calc = color_values
     try:
-        upper_climit = np.percentile(color_values_above_zero, upper_climit_pct)
+        upper_climit = np.percentile(color_values_for_calc, upper_climit_pct)
     except IndexError:
-        # if there were not color_values_above_zero, a IndexError appears
+        # if there were no color values above zero, a IndexError appears
         upper_climit = 0
 
     climits = [lower_climit, upper_climit]
@@ -90,19 +97,53 @@ def _determine_climits(
 def continuous_data_to_rgba(
     data,
     cmap: Union[str, ListedColormap],
-    upper_climit_pct: int = 99,
-    lower_climit: Optional[int] = 0,
-    clip = False
+    upper_climit_pct: int = 95,
+    lower_climit: Optional[int] = None,
+    clip = False,
+    nan_val: tuple = (1,1,1,0),
+    return_mapping: bool = False
     ):
+    if np.any(np.isnan(data)):
+        contains_nans = True
+        # Convert the numpy array to a pandas Series
+        value_series = pd.Series(data)
+
+        # check where there are nas
+        isna_mask = value_series.isna()
+        notna_mask = ~isna_mask
+
+        # get only values without NaNs
+        notna_values = value_series[notna_mask].values
+    else:
+        notna_values = data
+        contains_nans = False
+
     # get colormap if necessary
     if not isinstance(cmap, ListedColormap):
         cmap = plt.get_cmap(cmap)
 
-    climits = _determine_climits(color_values=data, upper_climit_pct=upper_climit_pct, lower_climit=lower_climit)
+    if lower_climit is None:
+        lower_climit = np.min(notna_values)
+
+    climits = _determine_climits(color_values=notna_values, upper_climit_pct=upper_climit_pct, lower_climit=lower_climit)
 
     norm = mpl.colors.Normalize(vmin=climits[0], vmax=climits[1], clip=clip)
     scalarMap = cm.ScalarMappable(norm=norm, cmap=cmap)
-    return scalarMap.to_rgba(data)
+    rgba_data = scalarMap.to_rgba(notna_values)
+
+    if contains_nans:
+        result_values = pd.Series(index=value_series.index, dtype="object")
+        tuple_list = [tuple(elem) for elem in rgba_data]
+        result_values.loc[notna_mask] = tuple_list
+        result_values.loc[isna_mask] = [nan_val] * isna_mask.sum()
+        result_rgba = np.array(result_values.tolist())
+    else:
+        result_rgba = rgba_data
+
+    if return_mapping:
+        return result_rgba, scalarMap
+    else:
+        return result_rgba
 
 
 def _data_to_rgba(
@@ -111,10 +152,10 @@ def _data_to_rgba(
     categorical_cmap: Union[str, ListedColormap] = None,
     upper_climit_pct: int = 99,
     return_mapping: bool = False,
-    nan_val: tuple = (1,1,1,0)
+    nan_val: tuple = (1,1,1,0),
     ):
     if is_numeric_dtype(data):
-        return continuous_data_to_rgba(data=data, cmap=continuous_cmap, upper_climit_pct=upper_climit_pct)
+        return continuous_data_to_rgba(data=data, cmap=continuous_cmap, upper_climit_pct=upper_climit_pct, return_mapping=return_mapping)
     else:
         if categorical_cmap is None:
             # pal = CustomPalettes()

@@ -13,15 +13,15 @@ from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
 
 import insitupy
+from insitupy import differential_gene_expression
 from insitupy._constants import LOAD_FUNCS
 from insitupy._core._checks import is_integer_counts
 from insitupy._exceptions import ModalityNotFoundError
 from insitupy.io.files import check_overwrite_and_remove_if_true
-from insitupy.utils.utils import convert_to_list
+from insitupy.io.plots import save_and_show_figure
+from insitupy.utils.utils import (convert_to_list, get_nrows_maxcols,
+                                  remove_empty_subplots)
 from insitupy.utils.utils import textformat as tf
-
-from ..io.plots import save_and_show_figure
-from ..utils.utils import get_nrows_maxcols
 
 
 class InSituExperiment:
@@ -206,7 +206,7 @@ class InSituExperiment:
             new_metadata = new_metadata[cols_to_use]
 
         if by is None:
-            if len(new_metadata) != len(updated_metadata):
+            if len(new_metadata) != len(old_metadata):
                 raise ValueError("Length of new metadata does not match the existing metadata.")
             warnings.warn("No 'by' column provided. Metadata will be paired by order.")
             #updated_metadata = pd.concat([updated_metadata.reset_index(drop=True), new_metadata.reset_index(drop=True)], axis=1)
@@ -239,6 +239,114 @@ class InSituExperiment:
             if hasattr(xd, "viewer"):
                 del xd.viewer
         return deepcopy(self)
+
+    def dge(self,
+            data_id: int,
+            data_annotation_tuple: Union[Tuple[str, str], Tuple[str, str]], # tuple of annotation key and names
+            ref_id: Optional[int] = None,
+            ref_annotation_tuple: Union[Literal["rest"], Tuple[str, str], Tuple[str, str]] = "rest",
+            obs_tuple: Optional[Tuple[str, str]] = None,
+            region_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
+            plot_volcano: bool = True,
+            method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
+            ignore_duplicate_assignments: bool = False,
+            force_assignment: bool = False,
+            name_col: str = "sample_id",
+            title: Optional[str] = None,
+            savepath: Union[str, os.PathLike, Path] = None,
+            save_only: bool = False,
+            dpi_save: int = 300,
+            ):
+        """
+        Wrapper function for performing differential gene expression analysis within an `InSituExperiment` object.
+
+        This function serves as a wrapper around the `differential_gene_expression` function,
+        facilitating the retrieval of data and metadata, and the generation of a plot title
+        if not provided. It compares gene expression between specified annotations within
+        a single InSituData object or between two InSituData objects.
+
+        Args:
+            data_id (int): Identifier for the primary dataset within the `InSituExperiment` object.
+            data_annotation_tuple (Union[Tuple[str, str], Tuple[str, str]]): Tuple containing the annotation key and name for the primary data.
+            ref_id (Optional[int]): Identifier for the reference dataset within the `InSituExperiment` object.
+            ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
+            obs_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
+            region_tuple (Optional[Union[Tuple[str, str], Tuple[str, str]]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
+            plot_volcano (bool, optional): Whether to generate a volcano plot of the results. Defaults to True.
+            method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']], optional): Statistical method to use for differential expression analysis. Defaults to 't-test'.
+            ignore_duplicate_assignments (bool, optional): Whether to ignore duplicate assignments in the data. Defaults to False.
+            force_assignment (bool, optional): Whether to force assignment of annotations and regions. Defaults to False.
+            name_col (str, optional): Column name in metadata to use for naming samples. Defaults to "sample_id".
+            title (Optional[str], optional): Title for the volcano plot. If not provided, a title is generated based on the data and reference names. Defaults to None.
+            savepath (Union[str, os.PathLike, Path], optional): Path to save the plot (default is None).
+            save_only (bool): If True, only save the plot without displaying it (default is False).
+            dpi_save (int): Dots per inch (DPI) for saving the plot (default is 300).
+
+        Returns:
+            None
+
+        Example:
+            >>> analysis.dge(
+                    data_id=1,
+                    ref_id=2,
+                    data_annotation_tuple=("cell_type", "neuron"),
+                    ref_annotation_tuple=("cell_type", "astrocyte"),
+                    plot_volcano=True,
+                    method='wilcoxon'
+                )
+        """
+
+        # get data and extract information about experiment
+        data = self.data[data_id]
+        data_name = self.metadata.loc[data_id, name_col]
+
+        if ref_id is not None:
+            ref_data = self.data[ref_id]
+            ref_name = self.metadata.loc[ref_id, name_col]
+        else:
+            ref_data = None
+            ref_name = data_name
+
+        if isinstance(data_annotation_tuple, tuple):
+            data_annot_name = data_annotation_tuple[1]
+        elif data_annotation_tuple == "rest":
+            data_annot_name = data_annotation_tuple
+        else:
+            raise ValueError(f"Argument `data_annotation_tuple` has to be either tuple or 'rest'. Instead: {data_annotation_tuple}")
+
+        if isinstance(ref_annotation_tuple, tuple):
+            ref_annot_name = ref_annotation_tuple[1]
+        elif ref_annotation_tuple == "rest":
+            ref_annot_name = ref_annotation_tuple
+        else:
+            raise ValueError(f"Argument `ref_annotation_tuple` has to be either tuple or 'rest'. Instead: {ref_annotation_tuple}")
+
+        # create title if necessary
+        if title is None:
+            if obs_tuple is not None:
+                cell_title_part = f"\n{obs_tuple[0]}: {obs_tuple[1]}"
+            else:
+                cell_title_part = ""
+            title = f"'{data_annot_name}' in {data_name} vs. '{ref_annot_name}' in {ref_name}{cell_title_part}"
+
+        dge_res = differential_gene_expression(
+            data=data,
+            ref_data=ref_data,
+            data_annotation_tuple=data_annotation_tuple,
+            ref_annotation_tuple=ref_annotation_tuple,
+            obs_tuple=obs_tuple,
+            region_tuple=region_tuple,
+            plot_volcano=plot_volcano,
+            method=method,
+            ignore_duplicate_assignments=ignore_duplicate_assignments,
+            force_assignment=force_assignment,
+            title = title,
+            savepath = savepath,
+            save_only = save_only,
+            dpi_save = dpi_save,
+        )
+        if not plot_volcano:
+            return dge_res
 
     def iterdata(self):
         """Iterate over the metadata rows and corresponding data.
@@ -323,7 +431,7 @@ class InSituExperiment:
             dpi_save (int, optional): DPI for saving the plot. Defaults to 300.
         """
         num_datasets = len(self._data)
-        n_plots, n_rows, max_cols = get_nrows_maxcols(self._data, max_cols)
+        n_plots, n_rows, max_cols = get_nrows_maxcols(len(self._data), max_cols)
         fig, axes = plt.subplots(n_rows, max_cols, figsize=(figsize[0]*max_cols, figsize[1]*n_rows))
 
         # make sure title_columns is a list
@@ -342,16 +450,11 @@ class InSituExperiment:
             else:
                 ax.set_title(f"Dataset {idx + 1}", fontdict={"fontsize": title_size})
 
-        if n_plots > 1:
 
-            # check if there are empty plots remaining
-            i = n_plots
-            while i < n_rows * max_cols:
-                i+=1
-                # remove empty plots
-                axes[i].set_axis_off()
+        remove_empty_subplots(
+            axes, n_plots, n_rows, max_cols
+        )
         if show:
-            #fig.tight_layout()
             save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=True)
         else:
             return fig, axes
@@ -523,7 +626,7 @@ class InSituExperiment:
         return experiment
 
     @classmethod
-    def from_region(cls,
+    def from_regions(cls,
                     data: insitupy.InSituData,
                     region_key: str,
                     region_names: Optional[Union[List[str], str]] = None

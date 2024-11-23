@@ -199,7 +199,7 @@ class bootstrap_loess:
 def smooth_fit(xs: np.ndarray, ys: np.ndarray,
                xmin: Optional[float] = None,
                xmax: Optional[float] = None,
-               nsteps: Optional[float] = None,
+               nsteps: int = 100,
                method: Literal["lowess", "loess"] = "loess",
                stderr: bool = True,
                loess_bootstrap: bool = True,
@@ -226,6 +226,9 @@ def smooth_fit(xs: np.ndarray, ys: np.ndarray,
     Returns:
         pd.DataFrame: A DataFrame containing the predicted y values and associated standard errors and confidence intervals.
     """
+    # assure the input are numpy arrays
+    xs = np.array(xs)
+    ys = np.array(ys)
 
     # check method
     if method == "loess":

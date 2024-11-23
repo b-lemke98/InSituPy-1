@@ -27,6 +27,7 @@ from shapely import Point, Polygon
 from shapely.affinity import scale as scale_func
 from tqdm import tqdm
 
+import insitupy._core.config as config
 from insitupy import WITH_NAPARI, __version__
 from insitupy._constants import ISPY_METADATA_FILE, LOAD_FUNCS, REGIONS_SYMBOL
 from insitupy._core._checks import _check_assignment, _substitution_func
@@ -294,7 +295,7 @@ class InSituData:
                 # save that the current key was analyzed
                 geom_attr.metadata[key]["analyzed"] = tf.TICK
 
-                print(f"Added results to `.cells.matrix.obsm[{geometry_type}]", flush=True)
+                print(f'Added results to `.cells.matrix.obsm["{geometry_type}"]', flush=True)
 
     def assign_annotations(
         self,
@@ -1207,7 +1208,23 @@ class InSituData:
             # save to the respective directory
             self.saveas(path=path)
 
+    def save_current_colorlegend(self, savepath):
 
+        # Check if static_canvas exists
+        if not hasattr(config, 'static_canvas'):
+            print("Warning: 'static_canvas' attribute not found in config. "
+                "Please display data in the napari viewer using '.show()' first.")
+            return
+
+        try:
+            # Save the figure to a PDF file
+            config.static_canvas.figure.savefig(savepath)
+            print(f"Figure saved as {savepath}")
+        except RuntimeError as e:
+            if 'FigureCanvasQTAgg has been deleted' in str(e):
+                print("Warning: The color legend has been deleted and cannot be saved.")
+            else:
+                raise  # Re-raise the exception if it's a different error
 
     def _update_to_existing_project(self,
                                     path: Optional[Union[str, os.PathLike, Path]],
@@ -1381,7 +1398,7 @@ class InSituData:
         # cmap_annotations: str ="Dark2",
         grayscale_colormap: List[str] = ["red", "green", "cyan", "magenta", "yellow", "gray"],
         return_viewer: bool = False,
-        widgets_max_width: int = 200
+        widgets_max_width: int = 500
         ):
         # get information about pixel size
         if (pixel_size is None) & (scalebar):
@@ -1489,10 +1506,10 @@ class InSituData:
             cells = self.cells
         except AttributeError:
             # add annotation widget to napari
-            annot_widget = add_new_geometries_widget()
-            annot_widget.max_height = 100
-            annot_widget.max_width = widgets_max_width
-            self.viewer.window.add_dock_widget(annot_widget, name="Add geometries", area="right")
+            add_geom_widget = add_new_geometries_widget()
+            add_geom_widget.max_height = 100
+            add_geom_widget.max_width = widgets_max_width
+            self.viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
         else:
             # initialize the widgets
             show_points_widget, locate_cells_widget, show_geometries_widget, show_boundaries_widget, select_data = _initialize_widgets(xdata=self)
@@ -1519,10 +1536,10 @@ class InSituData:
                 locate_cells_widget.max_width = widgets_max_width
 
             # add annotation widget to napari
-            annot_widget = add_new_geometries_widget()
+            add_geom_widget = add_new_geometries_widget()
             #annot_widget.max_height = 100
-            annot_widget.max_width = widgets_max_width
-            self.viewer.window.add_dock_widget(annot_widget, name="Add geometries", area="right")
+            add_geom_widget.max_width = widgets_max_width
+            self.viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
 
             # if show_region_widget is not None:
             #     self.viewer.window.add_dock_widget(show_region_widget, name="Show regions", area="right")
@@ -1534,17 +1551,13 @@ class InSituData:
                 #show_annotations_widget.max_height = 100
                 show_geometries_widget.max_width = widgets_max_width
 
-
         # EVENTS
-        # Function assign to an layer addition event
+        # Assign function to an layer addition event
         def _update_uid(event):
             if event is not None:
 
                 layer = event.source
-                # print(event.action) # print what event.action returns
-                # print(event.data_indices) # print index of event
                 if event.action == "add":
-                    # print(f'Added to {layer}')
                     if 'uid' in layer.properties:
                         layer.properties['uid'][-1] = str(uuid4())
                     else:
@@ -1552,28 +1565,40 @@ class InSituData:
 
                 elif event.action == "remove":
                     pass
-                    # print(f"Removed from {layer}")
                 else:
                     raise ValueError("Unexpected value '{event.action}' for `event.action`. Expected 'add' or 'remove'.")
 
-                # print(layer.properties)
-
+        # Assign the function to data of all existing layers
         for layer in self.viewer.layers:
             if isinstance(layer, Shapes) or isinstance(layer, Points):
                 layer.events.data.connect(_update_uid)
-                #layer.metadata = layer.properties
 
-        # Connect the function to all shapes layers in the viewer
+        # Connect the function to the data of existing shapes and points layers in the viewer
         def connect_to_all_shapes_layers(event):
             layer = event.source[event.index]
             if event is not None:
                 if isinstance(layer, Shapes) or isinstance(layer, Points):
-                    # print('Annotation layer added')
                     layer.events.data.connect(_update_uid)
 
         # Connect the function to any new layers added to the viewer
         self.viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
 
+        # add color legend widget
+        import insitupy._core.config as config
+        from insitupy._core.config import init_colorlegend_canvas
+        init_colorlegend_canvas()
+        self.viewer.window.add_dock_widget(config.static_canvas, area='left', name='Color legend')
+
+        # def update_colorlegend(event):
+        #     # if event.type == "inserted":
+        #     layer = event.source[event.index]
+        #     _add_colorlegend_to_canvas(layer=layer, static_canvas=config.static_canvas)
+        #     # if event.type == "removed":
+        #         # config.static_canvas.figure.clear()
+        #         # config.static_canvas.draw()
+
+        # self.viewer.layers.events.inserted.connect(update_colorlegend)
+        # #self.viewer.layers.events.removed.connect(add_colorlegend_widget)
 
         # NAPARI SETTINGS
         if scalebar:
@@ -1721,7 +1746,7 @@ class InSituData:
 
         genes = convert_to_list(genes)
 
-        nplots, nrows, ncols = get_nrows_maxcols(genes, max_cols=maxcols)
+        nplots, nrows, ncols = get_nrows_maxcols(len(genes), max_cols=maxcols)
 
         # setup figure
         fig, axs = plt.subplots(nrows, ncols, figsize=(figsize[0]*ncols, figsize[1]*nrows))
@@ -1857,7 +1882,8 @@ def register_images(
     add_registered_image: bool = True,
     decon_scale_factor: float = 0.2,
     physicalsize: str = 'µm',
-    prefix: str = ""
+    prefix: str = "",
+    min_good_matches: int = 20
     ):
     '''
     Register images stored in XeniumData object.
@@ -1985,7 +2011,8 @@ def register_images(
         axes_template=axes_template,
         max_width=4000,
         convert_to_grayscale=False,
-        perspective_transform=False
+        perspective_transform=False,
+        min_good_matches=min_good_matches
     )
 
     # run all steps to extract features and get transformation matrix
@@ -2115,24 +2142,32 @@ def calc_distance_of_cells_from(
     Returns:
         None
     """
+    # extract anndata object
+    adata = data.cells.matrix
+
     if region_name is None:
         print(f'Calculate the distance of cells from the annotation "{annotation_class}"')
-        region_mask = [True] * len(data.cells.matrix)
+        region_mask = [True] * len(adata)
     else:
         assert region_key is not None, "`region_key` must not be None if `region_name` is not None."
         print(f'Calculate the distance of cells from the annotation "{annotation_class}" within region "{region_name}"')
-        region_col_name = f'regions-{region_key}'
 
-        if region_col_name not in data.cells.matrix.obs.columns:
+        try:
+            region_df = adata.obsm["regions"]
+        except KeyError:
             data.assign_regions(keys=region_key)
+            region_df = adata.obsm["regions"]
+        else:
+            if region_key not in region_df.columns:
+                data.assign_regions(keys=region_key)
 
         # generate mask for selected region
-        region_mask = data.cells.matrix.obs[region_col_name] == region_name
+        region_mask = region_df[region_key] == region_name
 
     # create geopandas points from cells
-    x = data.cells.matrix.obsm["spatial"][:, 0][region_mask]
-    y = data.cells.matrix.obsm["spatial"][:, 1][region_mask]
-    indices = data.cells.matrix.obs_names[region_mask]
+    x = adata.obsm["spatial"][:, 0][region_mask]
+    y = adata.obsm["spatial"][:, 1][region_mask]
+    indices = adata.obs_names[region_mask]
     cells = gpd.points_from_xy(x, y)
 
     # retrieve annotation information
@@ -2152,48 +2187,104 @@ def calc_distance_of_cells_from(
 
     # add results to CellData
     if key_to_save is None:
-        key_to_save = f"dist_from_{annotation_class}"
-    data.cells.matrix.obs[key_to_save] = min_dists
-    print(f'Save distances to `.cells.matrix.obs["{key_to_save}"]`')
+        #key_to_save = f"dist_from_{annotation_class}"
+        key_to_save = annotation_class
+    #adata.obs[key_to_save] = min_dists
 
+    obsm_keys = adata.obsm.keys()
+    if "distance_from" not in obsm_keys:
+        # add empty pandas dataframe with obs_names as index
+        adata.obsm["distance_from"] = pd.DataFrame(index=adata.obs_names)
+
+    adata.obsm["distance_from"][key_to_save] = min_dists
+    print(f'Saved distances to `.cells.matrix.obsm["distance_from"]["{key_to_save}"]`')
 
 def differential_gene_expression(
     data: InSituData,
-    annotation_tuple: Union[Tuple[str, str], Tuple[str, str]], # tuple of annotation key and names
-    reference_data: Optional[InSituData] = None, # if comparing across two InSituData objects this argument can be used
-    reference_tuple: Union[Literal["rest"], Tuple[str, str], Tuple[str, str]] = "rest",
+    data_annotation_tuple: Union[Tuple[str, str], Tuple[str, str]], # tuple of annotation key and names
+    ref_data: Optional[InSituData] = None, # if comparing across two InSituData objects this argument can be used
+    ref_annotation_tuple: Union[Literal["rest"], Tuple[str, str], Tuple[str, str]] = "rest",
     obs_tuple: Optional[Tuple[str, str]] = None,
     region_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
     # reference: str = "rest",
     plot_volcano: bool = True,
-    comb_col_name: str = "combined_annotation_column",
     method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
     ignore_duplicate_assignments: bool = False,
     force_assignment: bool = False,
+    title: Optional[str] = None,
+    savepath: Union[str, os.PathLike, Path] = None,
+    save_only: bool = False,
+    dpi_save: int = 300,
     **kwargs
     ):
+    """
+    Perform differential gene expression analysis on in situ sequencing data.
+
+    This function compares gene expression between specified annotations within a single
+    InSituData object or between two InSituData objects. It supports various statistical
+    methods for differential expression analysis and can generate a volcano plot of the results.
+
+    Args:
+        data (InSituData): The primary in situ data object.
+        data_annotation_tuple (Union[Tuple[str, str], Tuple[str, str]]): Tuple containing the annotation key and name.
+        ref_data (Optional[InSituData], optional): Reference in situ data object for comparison. Defaults to None.
+        ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
+        obs_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
+        region_tuple (Optional[Union[Tuple[str, str], Tuple[str, str]]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
+        plot_volcano (bool, optional): Whether to generate a volcano plot of the results. Defaults to True.
+        method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']], optional): Statistical method to use for differential expression analysis. Defaults to 't-test'.
+        ignore_duplicate_assignments (bool, optional): Whether to ignore duplicate assignments in the data. Defaults to False.
+        force_assignment (bool, optional): Whether to force assignment of annotations and regions. Defaults to False.
+        title (Optional[str], optional): Title for the volcano plot. Defaults to None.
+        savepath (Union[str, os.PathLike, Path], optional): Path to save the plot (default is None).
+        save_only (bool): If True, only save the plot without displaying it (default is False).
+        dpi_save (int): Dots per inch (DPI) for saving the plot (default is 300).
+        **kwargs: Additional keyword arguments for the volcano plot.
+
+    Returns:
+        Union[None, Dict[str, Any]]: If `plot_volcano` is True, returns None. Otherwise, returns a dictionary with the results DataFrame and parameters used for the analysis.
+
+    Raises:
+        ValueError: If `ref_annotation_tuple` is neither 'rest' nor a 2-tuple.
+        AssertionError: If `ref_data` is provided when `ref_annotation_tuple` is 'rest'.
+        AssertionError: If `region_tuple` is provided when `ref_data` is not None.
+        AssertionError: If the specified region or annotation is not found in the data.
+
+    Example:
+        >>> result = differential_gene_expression(
+                data=my_data,
+                data_annotation_tuple=("cell_type", "neuron"),
+                ref_data=my_ref_data,
+                ref_annotation_tuple=("cell_type", "astrocyte"),
+                plot_volcano=True,
+                method='wilcoxon'
+            )
+    """
+
+    comb_col_name = "combined_annotation_column"
+
     # extract annotation information
-    annotation_key = annotation_tuple[0]
-    annotation_name = annotation_tuple[1]
+    annotation_key = data_annotation_tuple[0]
+    annotation_name = data_annotation_tuple[1]
 
     # extract information from reference tuple
-    if reference_tuple == "rest":
-        assert reference_data is None, "If `reference_tuple` is 'rest', `reference_data` must be None."
+    if ref_annotation_tuple == "rest":
+        assert ref_data is None, "If `reference_tuple` is 'rest', `reference_data` must be None."
         reference_key = None
         reference_name = "rest"
-    elif isinstance(reference_tuple, tuple) & (len(reference_tuple) == 2):
-        reference_key = reference_tuple[0]
-        reference_name = reference_tuple[1]
+    elif isinstance(ref_annotation_tuple, tuple) & (len(ref_annotation_tuple) == 2):
+        reference_key = ref_annotation_tuple[0]
+        reference_name = ref_annotation_tuple[1]
     else:
         raise ValueError("`reference_tuple` is neither 'rest' nor a 2-tuple.")
 
     _check_assignment(data=data, key=annotation_key, force_assignment=force_assignment, modality="annotations")
 
     # check if the reference needs to be checked
-    check_reference_during_substitution = True if reference_data is None else False
+    check_reference_during_substitution = True if ref_data is None else False
 
     if region_tuple is not None:
-        assert reference_data is None, "If `region_tuple` is given, `reference_data` must be None."
+        assert ref_data is None, "If `region_tuple` is given, `reference_data` must be None."
 
         region_key = region_tuple[0]
         region_name = region_tuple[1]
@@ -2228,22 +2319,22 @@ def differential_gene_expression(
     assert np.any(col_with_id == annotation_name), f"annotation_name '{annotation_name}' not found under annotation_key '{annotation_key}'."
 
     # mark the annotations with 1 or 2 depending if it is adata1 or adata2
-    if reference_data is not None:
+    if ref_data is not None:
         # add a 1- in front of the annotation to differentiate it later from the reference data
         col_with_id = col_with_id.apply(func=lambda x: f"1-{x}")
 
     # add the column to obs
     adata1.obs[comb_col_name] = col_with_id
 
-    if reference_data is not None:
+    if ref_data is not None:
         # process reference_data if it is not None
-        if reference_tuple is None:
-            reference_tuple = annotation_tuple
+        if ref_annotation_tuple is None:
+            ref_annotation_tuple = data_annotation_tuple
 
-        _check_assignment(data=reference_data, key=reference_key, force_assignment=force_assignment, modality="annotations")
+        _check_assignment(data=ref_data, key=reference_key, force_assignment=force_assignment, modality="annotations")
 
         # extract reference anndata
-        adata2 = reference_data.cells.matrix.copy()
+        adata2 = ref_data.cells.matrix.copy()
         # repeat the same as for adata1 for adata2
         col_with_id_ref = adata2.obsm["annotations"].apply(
             func=lambda row: _substitution_func(
@@ -2270,15 +2361,20 @@ def differential_gene_expression(
         rgg_groups = [f"1-{annotation_name}"]
         rgg_reference = f"2-{reference_name}"
 
-        # create plot title for later
-        plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {reference_data.sample_id}"
-
+        if title is None:
+            # create plot title for later
+            plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {ref_data.sample_id}"
+        else:
+            plot_title = title
     else:
         adata_combined = adata1
         rgg_groups = [annotation_name]
         rgg_reference = reference_name
 
-        plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {data.sample_id}"
+        if title is None:
+            plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {data.sample_id}"
+        else:
+            plot_title = title
 
     if obs_tuple is not None:
         # filter for observation value
@@ -2305,6 +2401,9 @@ def differential_gene_expression(
         volcano_plot(
             data=df,
             title=plot_title,
+            savepath = savepath,
+            save_only = save_only,
+            dpi_save = dpi_save,
             **kwargs
             )
     else:
