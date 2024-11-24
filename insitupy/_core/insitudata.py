@@ -1872,7 +1872,7 @@ class InSituData:
     def to_spatialdata_dict(self, levels: int = 5):
 
         """
-        Converts the current InSituData object to a SpatialData object.
+        Converts the current InSituData object to a dictionary for SpatialData object.
 
         This function integrates various data elements such as images, labels, transcripts, and annotations
         into a SpatialData object. It requires the spatialdata framework to be installed.
@@ -1881,8 +1881,7 @@ class InSituData:
             ImportError: If the spatialdata framework is not installed.
 
         Returns:
-            SpatialData: A SpatialData object containing the integrated data elements.
-
+            Dict: a dictionary with all modalities saved in SpatialData format.
         """
 
         try:
@@ -2005,6 +2004,21 @@ class InSituData:
         return merged_dict, merged_dict_names
     
     def to_spatialdata(self, levels: int = 5):
+
+        """
+        Converts the current InSituData object to a SpatialData object.
+
+        This function integrates various data elements such as images, labels, transcripts, and annotations
+        into a SpatialData object. It requires the spatialdata framework to be installed.
+
+        Raises:
+            ImportError: If the spatialdata framework is not installed.
+
+        Returns:
+            SpatialData: A SpatialData object containing the integrated data elements.
+
+        """
+
         try:
             from spatialdata import SpatialData
         except:
