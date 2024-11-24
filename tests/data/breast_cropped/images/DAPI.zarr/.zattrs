@@ -1,0 +1,57 @@
+{
+    "OME": {
+        "Creator": "tifffile.py 2024.8.30",
+        "Image": {
+            "ID": "Image:0",
+            "Name": "Image0",
+            "Pixels": {
+                "Channel": {
+                    "ID": "Channel:0:0",
+                    "LightPath": null,
+                    "SamplesPerPixel": "1"
+                },
+                "DimensionOrder": "XYCZT",
+                "ID": "Pixels:0",
+                "PhysicalSizeX": "0.2125",
+                "PhysicalSizeXUnit": "\u00b5m",
+                "PhysicalSizeY": "0.2125",
+                "PhysicalSizeYUnit": "\u00b5m",
+                "SignificantBits": "8",
+                "SizeC": "1",
+                "SizeT": "1",
+                "SizeX": "35416",
+                "SizeY": "25778",
+                "SizeZ": "1",
+                "TiffData": {
+                    "IFD": "0",
+                    "PlaneCount": "1"
+                },
+                "Type": "uint8"
+            }
+        },
+        "UUID": "urn:uuid:473da44f-a466-11ef-9b40-d4f32d04133d",
+        "xmlns": "http://www.openmicroscopy.org/Schemas/OME/2016-06",
+        "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+        "xsi:schemaLocation": "http://www.openmicroscopy.org/Schemas/OME/2016-06 http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd"
+    },
+    "axes": "YX",
+    "contrast_limits": [
+        0,
+        85
+    ],
+    "cropping_xlim": [
+        1784.8952116084097,
+        1799.180644879295
+    ],
+    "cropping_ylim": [
+        3263.895406691521,
+        3281.156971893841
+    ],
+    "filename": "0001879__Replicate 1__DAPI__registered.ome.tif",
+    "pixel_size": 0.2125,
+    "rgb": false,
+    "shape": [
+        81,
+        67
+    ]
+}

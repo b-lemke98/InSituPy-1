@@ -1,0 +1,15 @@
+{
+    "_index": "_index",
+    "column-order": [
+        "transcript_counts",
+        "control_probe_counts",
+        "control_codeword_counts",
+        "total_counts",
+        "cell_area",
+        "nucleus_area",
+        "cell_id",
+        "region"
+    ],
+    "encoding-type": "dataframe",
+    "encoding-version": "0.2.0"
+}

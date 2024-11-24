@@ -1,0 +1,80 @@
+{
+    "data": {
+        "images": {
+            "nuclei": "images/nuclei.zarr",
+            "DAPI": "images/DAPI.zarr",
+            "HE": "images/HE.zarr"
+        },
+        "cells": "cells/241116-230830232504-92f3e7f6",
+        "transcripts": "transcripts/transcripts.parquet"
+    },
+    "history": {
+        "cells": [],
+        "annotations": [],
+        "regions": []
+    },
+    "path": "C:/Users/Anna/.cache/InSituPy/demo_datasets/hbreastcancer/output-XETG00000__slide_id__hbreastcancer",
+    "metadata_file": "experiment.xenium",
+    "uids": [
+        "0b5deeb4-e036-48df-b755-330f2b17db9d",
+        "4ca56cee-35c8-4c09-8619-b46c3ac0cfed"
+    ],
+    "method": "Xenium",
+    "cropping_history": {
+        "xlim": [
+            [
+                1784,
+                1799
+            ]
+        ],
+        "ylim": [
+            [
+                3263,
+                3281
+            ]
+        ]
+    },
+    "slide_id": "0001879",
+    "sample_id": "Replicate 1",
+    "version": "1.4.0",
+    "xenium": {
+        "run_name": "PREVIEW: Human Breast Cancer",
+        "run_start_time": "",
+        "region_name": "Replicate 1",
+        "preservation_method": "ffpe",
+        "num_cells": 167780,
+        "transcripts_per_cell": 166.0,
+        "transcripts_per_100um": 105.9945809453222,
+        "cassette_name": "human_breast_cancer_SIM1",
+        "slide_id": "0001879",
+        "panel_design_id": "PD_260",
+        "panel_name": "Breast Cancer Tumor Microenvironment",
+        "panel_organism": "Human",
+        "panel_tissue_type": "Breast",
+        "panel_num_targets_predesigned": 280,
+        "panel_num_targets_custom": 33,
+        "pixel_size": 0.2125,
+        "instrument_sn": "Xenium prototype instrument",
+        "instrument_sw_version": "Development",
+        "analysis_sw_version": "Xenium-1.0.1",
+        "experiment_uuid": "",
+        "cassette_uuid": "",
+        "roi_uuid": "",
+        "z_step_size": 3.0,
+        "well_uuid": "",
+        "images": {
+            "morphology_filepath": "morphology.ome.tif",
+            "morphology_mip_filepath": "morphology_mip.ome.tif",
+            "morphology_focus_filepath": "morphology_focus.ome.tif",
+            "registered_DAPI_filepath": "../registered_images/0001879__Replicate 1__DAPI__registered.ome.tif",
+            "registered_HE_filepath": "../registered_images/__0001879__Replicate 1__HE__registered.ome.tif"
+        },
+        "xenium_explorer_files": {
+            "transcripts_zarr_filepath": "transcripts.zarr.zip",
+            "cells_zarr_filepath": "cells.zarr.zip",
+            "cell_features_zarr_filepath": "cell_feature_matrix.zarr.zip",
+            "analysis_zarr_filepath": "analysis.zarr.zip",
+            "analysis_summary_filepath": "analysis_summary.html"
+        }
+    }
+}

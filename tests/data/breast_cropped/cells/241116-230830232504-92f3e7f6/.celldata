@@ -1,0 +1,6 @@
+{
+    "matrix": "matrix.h5ad",
+    "boundaries": "boundaries.zarr",
+    "version": "1.4.0",
+    "config": {}
+}

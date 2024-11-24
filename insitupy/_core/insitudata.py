@@ -1869,6 +1869,152 @@ class InSituData:
         else:
             print(f"No modality '{modality}' found. Nothing removed.")
 
+    def to_spatialdata_dict(self, levels: int = 5):
+
+        """
+        Converts the current InSituData object to a SpatialData object.
+
+        This function integrates various data elements such as images, labels, transcripts, and annotations
+        into a SpatialData object. It requires the spatialdata framework to be installed.
+
+        Raises:
+            ImportError: If the spatialdata framework is not installed.
+
+        Returns:
+            SpatialData: A SpatialData object containing the integrated data elements.
+
+        """
+
+        try:
+            from spatialdata.transformations.transformations import Scale, Identity
+            from spatialdata import SpatialData
+            import dask.dataframe as dd
+            from xarray import DataArray
+            from spatialdata.models import Image2DModel, Labels2DModel, TableModel, PointsModel, ShapesModel
+        except:
+            raise ImportError("This function requires spatialdata framework, please install with pip install spatialdata.")
+
+
+        def transform_anndata(adata: AnnData, cells_as_circles: bool = True):
+
+            REGION = "region"
+            attrs = {}
+            attrs["instance_key"] = "cell_id" if cells_as_circles else "cell_labels"
+            adata.obs["cell_id"] = adata.obs.index
+            adata.obs.index = range(len(adata.obs))
+            adata.obs.index = adata.obs.index.astype(str)
+            attrs[REGION] = "cell_circles" if cells_as_circles else "cell_labels"
+            adata.obs[REGION] = attrs[REGION]
+            adata.obs[REGION] = adata.obs[REGION].astype("category")
+            attrs["region_key"] = REGION
+            adata.uns["spatialdata_attrs"] = attrs
+            if cells_as_circles:
+                transform = Scale([1.0 / self.metadata["xenium"]["pixel_size"], 1.0 / self.metadata["xenium"]["pixel_size"]], axes=("x", "y"))
+                radius = np.sqrt(self.cells.matrix.obs["cell_area"].to_numpy() / np.pi)
+                circles = ShapesModel.parse(
+                        self.cells.matrix.obsm["spatial"].copy(),
+                        geometry=0,
+                        radius=radius,
+                        transformations={"global": transform},
+                        index=self.cells.matrix.obs.index.copy(),
+                )
+            return adata, circles
+
+
+ 
+        def transform_images(xd: InSituData, levels: int = 5):
+            images = {}
+            image_types = {}
+            if hasattr(xd, "images"):
+                for name in xd.images.names:
+                    images_list =  xd.images.get(name)
+
+                    if len(xd.images.metadata[name]["shape"]) == 3:
+                        axes = ("y", "x", "c")
+                        array = DataArray(data=images_list[0], name="image", dims=axes)
+                        images[name] = Image2DModel.parse(array, dims=axes, c_coords=["r", "g", "b"], chunks=(1, 4096, 4096), scale_factors=[2 for _ in range(levels)])
+                        image_types[name] = "image"
+                    else:
+                        axes = ("c", "y", "x")
+                        array = DataArray(data=images_list[0].reshape(1, images_list[0].shape[0], images_list[0].shape[1]), name="image", dims=axes)
+                        images[name] = Image2DModel.parse(array, dims=("c", "y", "x"), chunks=(1, 4096, 4096), scale_factors=[2 for _ in range(levels)])
+                        image_types[name] = "image"
+            return images, image_types
+ 
+
+        def transform_labels(xd: InSituData):
+            labels = {}
+            label_types = {}
+            if hasattr(xd, "cells") and hasattr(xd.cells, "boundaries"):
+
+                for name in xd.cells.boundaries.metadata.keys():
+        
+                    labels_list =  xd.cells.boundaries.get(name)
+                    array = DataArray(data=labels_list[0], name="label", dims=("y", "x"))
+                    labels[name] = Labels2DModel.parse(array, dims=("y", "x"), chunks=(4096, 4096), scale_factors=[2 for _ in range(levels)])
+                    label_types[name] = "labels"
+            return labels, label_types
+
+        
+        def transform_transcripts(xd: InSituData):
+            points = {}
+            point_types = {}
+            if hasattr(xd, "transcripts"):
+                df = dd.from_pandas(xd.transcripts, npartitions=1)
+                df.columns = df.columns.droplevel(0)
+                df['transcript_id'] = df.index
+                df = df.reset_index(drop=True)
+                rename_dict = {
+                                "xenium": "cell_id",
+                                "gene": "feature_name"
+                            }
+                df = df.rename(columns=rename_dict)
+                scale = Scale([1.0 / xd.metadata["xenium"]["pixel_size"], 1.0 / xd.metadata["xenium"]["pixel_size"], 1.0], axes=("x", "y", "z"))
+                parsed_points = PointsModel.parse(df,
+                                                coordinates={"x": "x", "y": "y", "z": "z"},
+                                                feature_key="feature_name",
+                                                instance_key="cell_id",
+                                                transformations={"global": scale},
+                                                sort=True)
+                points = {"transcripts": parsed_points}
+                point_types = {"transcripts": "points"}
+            return points, point_types
+        
+        def transform_matrix_annotations(xd: InSituData):
+            tables, shapes, table_types, shape_type = {}, {}, {}, {}
+            if hasattr(xd, "cells") and hasattr(xd.cells, "matrix"):
+                adata, circles = transform_anndata(xd.cells.matrix.copy())
+                tables["table"] = TableModel.parse(adata)
+                shapes["cell_circles"] = circles
+                table_types["table"] = "tables"
+                shape_type["cell_circles"] = "shapes"
+
+            if hasattr(xd, "annotations"):
+                for key in xd.annotations.metadata.keys():
+                    gdf = ShapesModel.parse(xd.annotations.get(key), transformations={"global": Identity()})
+                    shapes[key] = gdf
+                    shape_type[key] = "shapes"
+            return tables | shapes, table_types | shape_type
+        
+        transcripts, points_names = transform_transcripts(self)
+        matrix_shapes, matrix_shapes_names = transform_matrix_annotations(self)
+        images, images_names = transform_images(self, levels)
+        labels, labels_names = transform_labels(self)
+        merged_dict = transcripts | matrix_shapes | images | labels
+        merged_dict_names = points_names | matrix_shapes_names | images_names | labels_names
+        return merged_dict, merged_dict_names
+    
+    def to_spatialdata(self, levels: int = 5):
+        try:
+            from spatialdata import SpatialData
+        except:
+            raise ImportError("This function requires spatialdata framework, please install with pip install spatialdata.")
+
+
+        dict, _ = self.to_spatialdata_dict(levels=levels)
+        sdata = SpatialData.from_elements_dict(dict)
+        return sdata
+
 
 
 def register_images(
