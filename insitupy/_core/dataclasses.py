@@ -925,6 +925,26 @@ class ImageData(DeepCopyMixin, GetMixin):
              return_savepaths: bool = False,
              overwrite: bool = False
              ):
+        """
+        Save images to the specified output folder in either Zarr or OME-TIFF format.
+
+        Args:
+            output_folder (Union[str, os.PathLike, Path]): The directory where images will be saved.
+            keys_to_save (Optional[str]): Specific keys of images to save. If None, all images are saved.
+            as_zarr (bool): If True, save images in Zarr format. Otherwise, save as OME-TIFF.
+            zipped (bool): If True and saving as Zarr, compress the Zarr files into zip archives.
+            save_pyramid (bool): If True, save image pyramids (only applicable for Zarr format).
+            compression (Literal['jpeg', 'LZW', 'jpeg2000', 'ZLIB', None]): Compression method for OME-TIFF files.
+            return_savepaths (bool): If True, return the paths of the saved files.
+            overwrite (bool): If True, overwrite existing files in the output folder.
+
+        Returns:
+            Optional[Dict[str, Path]]: A dictionary mapping image keys to their save paths if `return_savepaths` is True. Otherwise, returns None.
+
+        Raises:
+            FileExistsError: If `overwrite` is False and the output folder already contains files.
+
+        """
         output_folder = Path(output_folder)
 
         if keys_to_save is None:

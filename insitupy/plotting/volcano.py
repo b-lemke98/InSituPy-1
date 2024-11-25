@@ -1,7 +1,7 @@
 import os
 from numbers import Number
 from pathlib import Path
-from typing import Union
+from typing import Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,6 +18,8 @@ def volcano_plot(data,
                  savepath: Union[str, os.PathLike, Path] = None,
                  save_only: bool = False,
                  dpi_save: int = 300,
+                 label_top_n: int = 20,
+                 figsize: Tuple[int, int] = (8, 6),
                  ):
     """
     Create a volcano plot from the DataFrame and label the top 20 most significant up and down-regulated genes.
@@ -30,11 +32,13 @@ def volcano_plot(data,
         savepath (Union[str, os.PathLike, Path], optional): Path to save the plot (default is None).
         save_only (bool): If True, only save the plot without displaying it (default is False).
         dpi_save (int): Dots per inch (DPI) for saving the plot (default is 300).
+        label_top_n (int): Specifying how many of the top up- and downregulated genes are labelled in the plot.
+        figsize (Tuple[int, int]): Size of the figure in inches (default is (8, 6)).
 
     Returns:
         None
     """
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=figsize)
 
     # Determine colors based on significance and fold change
     colors = []
@@ -68,8 +72,8 @@ def volcano_plot(data,
     # # Calculate mixed score and get top 20 up and down-regulated genes
     # volcano_data['mixed_score'] = -np.log10(volcano_data['pvals']) * volcano_data['logfoldchanges']
 
-    top_up_genes = data[data['logfoldchanges'] > fold_change_threshold].nlargest(20, 'scores')
-    top_down_genes = data[data['logfoldchanges'] < -fold_change_threshold].nsmallest(20, 'scores')
+    top_up_genes = data[data['logfoldchanges'] > fold_change_threshold].nlargest(label_top_n, 'scores')
+    top_down_genes = data[data['logfoldchanges'] < -fold_change_threshold].nsmallest(label_top_n, 'scores')
 
     # Combine top genes for annotation
     top_genes = pd.concat([top_up_genes, top_down_genes])

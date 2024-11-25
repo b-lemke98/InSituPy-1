@@ -255,6 +255,7 @@ class InSituExperiment:
             savepath: Union[str, os.PathLike, Path] = None,
             save_only: bool = False,
             dpi_save: int = 300,
+            **kwargs
             ):
         """
         Wrapper function for performing differential gene expression analysis within an `InSituExperiment` object.
@@ -343,6 +344,7 @@ class InSituExperiment:
             savepath = savepath,
             save_only = save_only,
             dpi_save = dpi_save,
+            **kwargs
         )
         if not plot_volcano:
             return dge_res
