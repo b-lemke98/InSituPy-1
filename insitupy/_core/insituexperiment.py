@@ -680,7 +680,7 @@ class InSituExperiment:
 
     def saveas(self, path: Union[str, os.PathLike, Path],
                overwrite: bool = False,
-               verbose: bool = False):
+               verbose: bool = False, **kwargs):
         """Save all datasets to a specified folder.
 
         Args:
@@ -697,7 +697,7 @@ class InSituExperiment:
         # Iterate over the datasets and save each one in a numbered subfolder
         for index, dataset in enumerate(self._data):
             subfolder_path = path / f"data-{str(index).zfill(3)}"
-            dataset.saveas(subfolder_path, verbose=False)
+            dataset.saveas(subfolder_path, verbose=False, **kwargs)
 
         # Optionally, save the metadata as a CSV file
         metadata_path = os.path.join(path, "metadata.csv")
