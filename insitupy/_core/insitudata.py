@@ -935,7 +935,9 @@ class InSituData:
 
         # create imageData object
         img_paths = [self.path / elem for elem in img_files]
-        self.images = ImageData(img_paths, img_names, pixel_size=self.metadata["xenium"]['pixel_size'])
+        self.images = ImageData(img_paths, img_names,
+                                #pixel_size=self.metadata["xenium"]['pixel_size']
+                                )
 
     def load_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
@@ -1031,6 +1033,7 @@ class InSituData:
             zip_output: bool = False,
             images_as_zarr: bool = True,
             zarr_zipped: bool = False,
+            images_max_resolution: Optional[Number] = None, # in µm per pixel
             verbose: bool = True
             ):
         '''
@@ -1061,6 +1064,8 @@ class InSituData:
         # clean old entries in data metadata
         self.metadata["data"] = {}
 
+        pixel_size = self.metadata['xenium']['pixel_size']
+
         # save images
         try:
             images = self.images
@@ -1072,8 +1077,16 @@ class InSituData:
                 path=path,
                 metadata=self.metadata,
                 images_as_zarr=images_as_zarr,
-                zipped=zarr_zipped
+                zipped=zarr_zipped,
+                max_resolution=images_max_resolution
                 )
+
+            # if images_max_resolution is not None:
+            #     if images_max_resolution <= pixel_size:
+            #         warn(f"`max_pixel_size` ({images_max_resolution}) smaller than `pixel_size` ({pixel_size}). Skipped resizing.")
+            #         pass
+            #     else:
+            #         self.metadata['xenium']['pixel_size'] = images_max_resolution
 
         # save cells
         try:
@@ -1393,32 +1406,36 @@ class InSituData:
         # annotation_keys: Optional[str] = None,
         point_size: int = 6,
         scalebar: bool = True,
-        pixel_size: float = None, # if none, extract from metadata
+        #pixel_size: float = None, # if none, extract from metadata
         unit: str = "µm",
         # cmap_annotations: str ="Dark2",
         grayscale_colormap: List[str] = ["red", "green", "cyan", "magenta", "yellow", "gray"],
         return_viewer: bool = False,
         widgets_max_width: int = 500
         ):
-        # get information about pixel size
-        if (pixel_size is None) & (scalebar):
-            # extract pixel_size
-            pixel_size = float(self.metadata["xenium"]["pixel_size"])
-        else:
-            pixel_size = 1
+        # # get information about pixel size
+        # if (pixel_size is None) & (scalebar):
+        #     # extract pixel_size
+        #     pixel_size = float(self.metadata["xenium"]["pixel_size"])
+        # else:
+        #     pixel_size = 1
 
         # create viewer
         self.viewer = napari.Viewer(title=f"{self.slide_id}: {self.sample_id}")
 
         try:
-            image_keys = self.images.metadata.keys()
+            #image_keys = self.images.metadata.keys()
+            images_attr = self.images
         except AttributeError:
             warn("No attribute `.images` found.")
         else:
+            n_images = len(images_attr.metadata)
             n_grayscales = 0 # number of grayscale images
-            for i, img_name in enumerate(image_keys):
-                img = getattr(self.images, img_name)
-                is_visible = False if i < len(image_keys) - 1 else True # only last image is set visible
+            for i, (img_name, img_metadata) in enumerate(images_attr.metadata.items()):
+            #for i, img_name in enumerate(image_keys):
+                img = getattr(images_attr, img_name)
+                is_visible = False if i < n_images - 1 else True # only last image is set visible
+                pixel_size = img_metadata['pixel_size']
 
                 # check if the current image is RGB
                 is_rgb = self.images.metadata[img_name]["rgb"]

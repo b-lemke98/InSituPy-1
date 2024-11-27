@@ -6,6 +6,7 @@ from os.path import relpath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 
+import cv2
 import dask.array as da
 import geopandas as gpd
 import numpy as np
@@ -17,6 +18,7 @@ from shapely import MultiPoint, MultiPolygon, Point, Polygon, affinity
 
 from insitupy import __version__
 from insitupy._constants import FORBIDDEN_ANNOTATION_NAMES
+from insitupy.images.utils import resize_image
 from insitupy.utils.utils import convert_int_to_xenium_hex
 
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
@@ -849,6 +851,8 @@ class ImageData(DeepCopyMixin, GetMixin):
         #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
         self.metadata[name]["axes"] = axes
         self.metadata[name]["OME"] = ome_meta
+        # add universal pixel size to metadata
+        self.metadata[name]['pixel_size'] = float(ome_meta['Image']['Pixels']['PhysicalSizeX'])
 
         # check whether the image is RGB or not
         if len(img_shape) == 3:
@@ -863,9 +867,6 @@ class ImageData(DeepCopyMixin, GetMixin):
             self.metadata[name]["contrast_limits"] = (0, 255)
         else:
             self.metadata[name]["contrast_limits"] = (0, img_max)
-
-        # add universal pixel size to metadata
-        self.metadata[name]['pixel_size'] = pixel_size
 
 
     def load(self,
@@ -923,7 +924,8 @@ class ImageData(DeepCopyMixin, GetMixin):
              save_pyramid: bool = True,
              compression: Literal['jpeg', 'LZW', 'jpeg2000', 'ZLIB', None] = 'ZLIB', # jpeg2000 or ZLIB are recommended in the Xenium documentation - ZLIB is faster
              return_savepaths: bool = False,
-             overwrite: bool = False
+             overwrite: bool = False,
+             max_pixel_size: Optional[Number] = None # in µm per pixel
              ):
         """
         Save images to the specified output folder in either Zarr or OME-TIFF format.
@@ -963,8 +965,34 @@ class ImageData(DeepCopyMixin, GetMixin):
 
         for n, img_metadata in self.metadata.items():
             if n in keys_to_save:
+                print(n)
                 # extract image
                 img = getattr(self, n)
+                new_img_metadata = img_metadata.copy()
+
+                axes = new_img_metadata['axes']
+                pixel_size = new_img_metadata['pixel_size'] # in µm per pixel
+
+                if max_pixel_size is not None:
+                    if max_pixel_size == pixel_size:
+                        warnings.warn(f"`max_pixel_size` ({max_pixel_size}) equal to `pixel_size` ({pixel_size}). Skipped resizing.")
+                        pass
+                    if max_pixel_size < pixel_size:
+                        warnings.warn(f"`max_pixel_size` ({max_pixel_size}) smaller than `pixel_size` ({pixel_size}). Skipped resizing.")
+                        pass
+                    else:
+                        # downscale image
+                        if isinstance(img, list):
+                            img = img[0]
+                        downscale_factor = max_pixel_size / pixel_size
+                        print(f"Downscale image to {max_pixel_size} µm per pixel by factor {downscale_factor}")
+                        img = resize_image(img, scale_factor=1/downscale_factor, axes=axes)
+                        img = da.from_array(img)
+
+                        # change metadata
+                        new_img_metadata['pixel_size'] = max_pixel_size
+                        new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeX'] = str(max_pixel_size)
+                        new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeY'] = str(max_pixel_size)
 
                 if as_zarr:
                     # generate filename
@@ -978,32 +1006,36 @@ class ImageData(DeepCopyMixin, GetMixin):
                     # write to zarr
                     img_path = output_folder / filename
                     write_zarr(image=img, file=img_path,
-                               img_metadata=img_metadata,
-                               save_pyramid=save_pyramid)
-
+                               img_metadata=new_img_metadata,
+                               save_pyramid=save_pyramid,
+                               axes=axes
+                               )
                 else:
                     # get file name for saving
                     #filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
                     filename = n + ".ome.tif"
                     # retrieve image metadata for saving
-                    photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
-                    axes = img_metadata['axes']
+                    photometric = 'rgb' if new_img_metadata['rgb'] else 'minisblack'
+
 
                     # retrieve OME metadata
-                    ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY", "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
+                    ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY",
+                                            "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
 
                     try:
-                        pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
+                        pixel_meta = new_img_metadata["OME"]["Image"]["Pixels"]
                     except KeyError:
-                        pixel_meta = img_metadata["OME"]
+                        pixel_meta = new_img_metadata["OME"]
 
                     selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
 
+                    print("start saving")
                     # write images as OME-TIFF
                     write_ome_tiff(image=img, file=output_folder / filename,
                                 photometric=photometric, axes=axes,
                                 compression=compression,
                                 metadata=selected_metadata, overwrite=False)
+                    print("end saving")
 
                 if return_savepaths:
                     # collect savepaths
