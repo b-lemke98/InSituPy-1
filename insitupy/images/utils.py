@@ -227,8 +227,8 @@ def crop_dask_array_or_pyramid(
             # get scale factors between the different pyramid levels
             scale_factors = [1] + [data[i].shape[0] / data[i+1].shape[0] for i in range(len(data)-1)]
             cropped_data = []
-            xlim_scaled = (xlim[0] / pixel_size, xlim[1] / pixel_size) # convert to metric unit
-            ylim_scaled = (ylim[0] / pixel_size, ylim[1] / pixel_size) # convert to metric unit
+            xlim_scaled = (xlim[0] / pixel_size, xlim[1] / pixel_size) # convert to pixel unit
+            ylim_scaled = (ylim[0] / pixel_size, ylim[1] / pixel_size) # convert to pixel unit
             for img, sf in zip(data, scale_factors):
                 # do cropping while taking the scale factor into account
                 # scale the x and y limits

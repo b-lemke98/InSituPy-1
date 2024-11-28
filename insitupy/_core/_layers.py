@@ -28,7 +28,7 @@ if WITH_NAPARI:
         dataframe: pd.DataFrame,
         viewer: napari.Viewer,
         layer_name: str,
-        scale_factor: Union[Tuple, List, np.ndarray],
+        #scale_factor: Union[Tuple, List, np.ndarray],
         rgb_color: Optional[Tuple] = None,
         show_names: bool = False,
         allow_duplicate_layers: bool = False,
@@ -91,7 +91,6 @@ if WITH_NAPARI:
                     # in shapely objects, leading sometimes to visualization bugs in napari
                     exterior_array = np.array([p.exterior.coords.xy[1].tolist()[:-1],
                                             p.exterior.coords.xy[0].tolist()[:-1]]).T
-                    #exterior_array *= pixel_size # convert to length unit
                     shape_list.append(exterior_array)  # collect shape
                     color_list["Shapes"].append(hexcolor)  # collect corresponding color
                     uid_list["Shapes"].append(uid)  # collect corresponding unique id
@@ -106,7 +105,6 @@ if WITH_NAPARI:
                             if isinstance(linear_ring, LinearRing):
                                 interior_array = np.array([linear_ring.coords.xy[1].tolist()[:-1],
                                                         linear_ring.coords.xy[0].tolist()[:-1]]).T
-                                #interior_array *= pixel_size # convert to length unit
                                 shape_list.append(interior_array)  # collect shape
                                 color_list["Shapes"].append(hexcolor)  # collect corresponding color
                                 uid_list["Shapes"].append(uid)  # collect corresponding unique id
@@ -181,10 +179,10 @@ if WITH_NAPARI:
                     name=layer_name_with_symbol,
                     properties=properties_dict,
                     shape_type=shape_type_list,
-                    edge_width=40,
+                    edge_width=10, # µm
                     edge_color=color_list["Shapes"],
                     face_color='transparent',
-                    scale=scale_factor,
+                    #scale=scale_factor,
                     text=text_dict
                     )
 
@@ -211,7 +209,7 @@ if WITH_NAPARI:
                     size=100,
                     edge_color="black",
                     face_color=color_list["Points"],
-                    scale=scale_factor
+                    #scale=scale_factor
                 )
 
 

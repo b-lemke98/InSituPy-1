@@ -317,7 +317,7 @@ if WITH_NAPARI:
                         class_df["geometry"] = class_df["geometry"].simplify(tolerance)
 
                         # extract scale
-                        scale_factor = class_df.iloc[0]["scale"]
+                        #scale_factor = class_df.iloc[0]["scale"]
 
                         if not "color" in class_df.columns:
                             # create a RGB color with range 0-255 for this key
@@ -330,7 +330,7 @@ if WITH_NAPARI:
                             dataframe=class_df,
                             viewer=viewer,
                             layer_name=layer_name,
-                            scale_factor=scale_factor,
+                            #scale_factor=scale_factor,
                             rgb_color=rgb_color,
                             show_names=show_names
                         )
@@ -381,7 +381,7 @@ if WITH_NAPARI:
                         'edge_width': 40,
                         'edge_color': 'red',
                         'face_color': 'transparent',
-                        'scale': (config.pixel_size, config.pixel_size),
+                        #'scale': (config.pixel_size, config.pixel_size),
                         'properties': {
                             'uid': np.array([], dtype='object')
                         }
@@ -404,7 +404,7 @@ if WITH_NAPARI:
                         'size': 100,
                         'edge_color': 'black',
                         'face_color': 'blue',
-                        'scale': (config.pixel_size, config.pixel_size),
+                        #'scale': (config.pixel_size, config.pixel_size),
                         'properties': {
                             'uid': np.array([], dtype='object')
                         }
@@ -429,7 +429,7 @@ if WITH_NAPARI:
                         'edge_width': 40,
                         'edge_color': '#ffaa00ff',
                         'face_color': 'transparent',
-                        'scale': (config.pixel_size, config.pixel_size),
+                        #'scale': (config.pixel_size, config.pixel_size),
                         'properties': {
                             'uid': np.array([], dtype='object')
                         }

@@ -370,7 +370,7 @@ class InSituData:
             raise ValueError("At least one of shape_layer, region_tuple, or xlim/ylim must be provided.")
 
         # retrieve pixel size of data
-        pixel_size = self.metadata["xenium"]["pixel_size"]
+        #pixel_size = self.metadata["xenium"]["pixel_size"]
 
         if region_tuple is not None:
 
@@ -422,7 +422,7 @@ class InSituData:
 
         if use_shape:
             # convert to metric unit (normally µm)
-            geometry = scale_func(geometry, xfact=pixel_size, yfact=pixel_size, origin=(0,0))
+            #geometry = scale_func(geometry, xfact=pixel_size, yfact=pixel_size, origin=(0,0))
 
             # extract x and y limits from the geometry
             bounding_box = geometry.bounds # (minx, miny, maxx, maxy)
@@ -511,14 +511,18 @@ class InSituData:
         if hasattr(_self, "annotations"):
 
             _self.annotations.crop(
-                xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
-                ylim=tuple([elem / pixel_size for elem in ylim])
+                xlim=tuple([elem for elem in xlim]),
+                ylim=tuple([elem for elem in ylim])
+                # xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
+                # ylim=tuple([elem / pixel_size for elem in ylim])
                 )
 
         if hasattr(_self, "regions"):
             _self.regions.crop(
-                xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
-                ylim=tuple([elem / pixel_size for elem in ylim])
+                xlim=tuple([elem for elem in xlim]),
+                ylim=tuple([elem for elem in ylim])
+                # xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
+                # ylim=tuple([elem / pixel_size for elem in ylim])
             )
 
         # add information about cropping to metadata
@@ -759,14 +763,18 @@ class InSituData:
 
     def import_annotations(self,
                            files: Optional[Union[str, os.PathLike, Path]],
-                           keys: Optional[str]
+                           keys: Optional[str],
+                           pixel_size: Number # µm/pixel - used to convert the pixel coordinates into µm coordinates
                            ):
+        '''
+
+        '''
         print("Importing annotations...", flush=True)
 
         # add annotations object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        pixel_size = self.metadata["xenium"]['pixel_size']
+        #pixel_size = self.metadata["xenium"]['pixel_size']
 
         if not hasattr(self, "annotations"):
             self.annotations = AnnotationsData()
@@ -775,7 +783,7 @@ class InSituData:
             # read annotation and store in dictionary
             self.annotations.add_data(data=file,
                                       key=key,
-                                      scale_factor=(pixel_size, pixel_size)
+                                      scale_factor=pixel_size
                                       )
 
         # # check if anything really added to annotations and if not, remove it again
@@ -794,14 +802,15 @@ class InSituData:
 
     def import_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]],
-                    keys: Optional[str]
+                    keys: Optional[str],
+                    pixel_size: Number # µm/pixel - used to convert the pixel coordinates into µm coordinates
                     ):
         print("Importing regions...", flush=True)
 
         # add regions object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        pixel_size = self.metadata["xenium"]['pixel_size']
+        #pixel_size = self.metadata["xenium"]['pixel_size']
 
         if not hasattr(self, "regions"):
             self.regions = RegionsData()
@@ -810,7 +819,7 @@ class InSituData:
             # read annotation and store in dictionary
             self.regions.add_data(data=file,
                                 key=key,
-                                scale_factor=(pixel_size, pixel_size),
+                                scale_factor=pixel_size
                                 )
 
         self._remove_empty_modalities()
@@ -1064,7 +1073,7 @@ class InSituData:
         # clean old entries in data metadata
         self.metadata["data"] = {}
 
-        pixel_size = self.metadata['xenium']['pixel_size']
+        #pixel_size = self.metadata['xenium']['pixel_size']
 
         # save images
         try:
@@ -1667,6 +1676,7 @@ class InSituData:
         for layer in layers:
             if isinstance(layer, Shapes) or isinstance(layer, Points):
                 name_parsed = parse(name_pattern, layer.name)
+                print(name_parsed)
                 if name_parsed is not None:
                     type_symbol = name_parsed.named["type_symbol"]
                     annot_key = name_parsed.named["annot_key"]
@@ -1680,6 +1690,8 @@ class InSituData:
                     layer_data = layer.data
                     colors = layer.edge_color.tolist()
                     scale = layer.scale
+                    print(scale)
+                    print(layer_data)
 
                     checks_passed = True
                     is_region_layer = False
@@ -1730,7 +1742,8 @@ class InSituData:
                             self.regions.add_data(data=geom_df,
                                                   key=annot_key,
                                                   verbose=True,
-                                                  scale_factor=scale)
+                                                  #scale_factor=scale
+                                                  )
                         else:
                             if not hasattr(self, "annotations"):
                                 self.annotations = AnnotationsData()
@@ -1739,7 +1752,8 @@ class InSituData:
                             self.annotations.add_data(data=geom_df,
                                                       key=annot_key,
                                                       verbose=True,
-                                                      scale_factor=scale)
+                                                      #scale_factor=scale
+                                                      )
 
             else:
                 pass

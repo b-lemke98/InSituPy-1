@@ -44,13 +44,15 @@ class ShapesData(DeepCopyMixin, GetMixin):
     def __init__(self,
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None,
                  keys: Optional[List[str]] = None,
-                 pixel_size: float = 1,
+                 pixel_size: Optional[float] = None,
                  assert_uniqueness: Optional[bool] = None,
                 #  skip_multipolygons: Optional[bool] = None,
                  polygons_only: Optional[bool] = None,
                  forbidden_names: Optional[List[str]] = None
                  # shape_name: Optional[str] = None
                  ) -> None:
+
+
 
         # create dictionary for metadata
         self.metadata = {}
@@ -76,16 +78,19 @@ class ShapesData(DeepCopyMixin, GetMixin):
 
         if files is not None:
             # make sure files and keys are a list
+            assert keys is not None, "If `files` are given, also corresponding `keys` need to be given."
             files = convert_to_list(files)
             keys = convert_to_list(keys)
             assert len(files) == len(keys), "Number of files does not match number of keys."
+
+            assert pixel_size is not None, "If files and `keys` are given, also `pixel_size` needs to be specified"
 
             if files is not None:
                 for key, file in zip(keys, files):
                     # read annotation and store in dictionary
                     self.add_data(data=file,
                                         key=key,
-                                        scale_factor=(pixel_size, pixel_size),
+                                        scale_factor=pixel_size,
                                         )
 
     def __repr__(self):
@@ -175,7 +180,7 @@ class ShapesData(DeepCopyMixin, GetMixin):
                     data: Union[gpd.GeoDataFrame, pd.DataFrame, dict,
                                 str, os.PathLike, Path],
                     key: str,
-                    scale_factor: Optional[Tuple[float, float]] = None,
+                    scale_factor: Number,
                     default_name: str = "name",
                     verbose: bool = False,
                    ):
@@ -194,14 +199,17 @@ class ShapesData(DeepCopyMixin, GetMixin):
                 if np.any([elem in new_names for elem in self.forbidden_names]):
                     raise ValueError(f"One of the forbidden names for annotations ({self.forbidden_names}) has been used in the imported dataset. Please change the respective change to prevent interference with downstream functions.")
 
-        if "scale" not in new_df.columns:
-            # add scale factor to data
-            if scale_factor is None:
-                warnings.warn("No `scale_factor` added to data.")
-            new_df["scale"] = [scale_factor] * len(new_df)
-        else:
-            if verbose:
-                print("Scale inferred from file.", flush=True)
+        # convert geometries into unit (e.g. µm) values
+        new_df["geometry"] = new_df["geometry"].scale(xfact=scale_factor, yfact=scale_factor, origin=(0,0))
+
+        # if "scale" not in new_df.columns:
+        #     # add scale factor to data
+        #     if scale_factor is None:
+        #         warnings.warn("No `scale_factor` added to data.")
+        #     new_df["scale"] = [scale_factor] * len(new_df)
+        # else:
+        #     if verbose:
+        #         print("Scale inferred from file.", flush=True)
 
         # determine the type of layer that needs to be used in napari later
         layer_types = []
@@ -359,7 +367,7 @@ class AnnotationsData(ShapesData):
     def __init__(self,
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None,
                  keys: Optional[List[str]] = None,
-                 pixel_size: float = 1
+                 pixel_size: Optional[float] = None
                  ) -> None:
         self.default_assert_uniqueness = False
         # self.default_skip_multipolygons = False
@@ -374,7 +382,7 @@ class RegionsData(ShapesData):
     def __init__(self,
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None,
                  keys: Optional[List[str]] = None,
-                 pixel_size: float = 1
+                 pixel_size: Optional[float] = None
                  ) -> None:
         self.default_assert_uniqueness = True
         # self.default_skip_multipolygons = True # MultiPolygons are not allowed in regions
@@ -925,7 +933,7 @@ class ImageData(DeepCopyMixin, GetMixin):
              compression: Literal['jpeg', 'LZW', 'jpeg2000', 'ZLIB', None] = 'ZLIB', # jpeg2000 or ZLIB are recommended in the Xenium documentation - ZLIB is faster
              return_savepaths: bool = False,
              overwrite: bool = False,
-             max_pixel_size: Optional[Number] = None # in µm per pixel
+             max_resolution: Optional[Number] = None # in µm per pixel
              ):
         """
         Save images to the specified output folder in either Zarr or OME-TIFF format.
@@ -973,26 +981,26 @@ class ImageData(DeepCopyMixin, GetMixin):
                 axes = new_img_metadata['axes']
                 pixel_size = new_img_metadata['pixel_size'] # in µm per pixel
 
-                if max_pixel_size is not None:
-                    if max_pixel_size == pixel_size:
-                        warnings.warn(f"`max_pixel_size` ({max_pixel_size}) equal to `pixel_size` ({pixel_size}). Skipped resizing.")
+                if max_resolution is not None:
+                    if max_resolution == pixel_size:
+                        warnings.warn(f"`max_pixel_size` ({max_resolution}) equal to `pixel_size` ({pixel_size}). Skipped resizing.")
                         pass
-                    if max_pixel_size < pixel_size:
-                        warnings.warn(f"`max_pixel_size` ({max_pixel_size}) smaller than `pixel_size` ({pixel_size}). Skipped resizing.")
+                    if max_resolution < pixel_size:
+                        warnings.warn(f"`max_pixel_size` ({max_resolution}) smaller than `pixel_size` ({pixel_size}). Skipped resizing.")
                         pass
                     else:
                         # downscale image
                         if isinstance(img, list):
                             img = img[0]
-                        downscale_factor = max_pixel_size / pixel_size
-                        print(f"Downscale image to {max_pixel_size} µm per pixel by factor {downscale_factor}")
+                        downscale_factor = max_resolution / pixel_size
+                        print(f"Downscale image to {max_resolution} µm per pixel by factor {downscale_factor}")
                         img = resize_image(img, scale_factor=1/downscale_factor, axes=axes)
                         img = da.from_array(img)
 
                         # change metadata
-                        new_img_metadata['pixel_size'] = max_pixel_size
-                        new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeX'] = str(max_pixel_size)
-                        new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeY'] = str(max_pixel_size)
+                        new_img_metadata['pixel_size'] = max_resolution
+                        new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeX'] = str(max_resolution)
+                        new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeY'] = str(max_resolution)
 
                 if as_zarr:
                     # generate filename
