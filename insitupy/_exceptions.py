@@ -18,7 +18,7 @@ class ModuleNotFoundOnWindows(ModuleNotFoundError):
                        "This package could be problematic to install on Windows."
         super().__init__(self.message)
 
-class XeniumDataRepeatedCropError(Exception):
+class InSituDataRepeatedCropError(Exception):
     """Exception raised if it is attempted to crop a
     XeniumData object multiple times with the same cropping window.
 

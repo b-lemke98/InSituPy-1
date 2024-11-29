@@ -860,7 +860,10 @@ class ImageData(DeepCopyMixin, GetMixin):
         self.metadata[name]["axes"] = axes
         self.metadata[name]["OME"] = ome_meta
         # add universal pixel size to metadata
-        self.metadata[name]['pixel_size'] = float(ome_meta['Image']['Pixels']['PhysicalSizeX'])
+        try:
+            self.metadata[name]['pixel_size'] = float(ome_meta['Image']['Pixels']['PhysicalSizeX'])
+        except KeyError:
+            self.metadata[name]['pixel_size'] = float(ome_meta['PhysicalSizeX'])
 
         # check whether the image is RGB or not
         if len(img_shape) == 3:
@@ -973,7 +976,6 @@ class ImageData(DeepCopyMixin, GetMixin):
 
         for n, img_metadata in self.metadata.items():
             if n in keys_to_save:
-                print(n)
                 # extract image
                 img = getattr(self, n)
                 new_img_metadata = img_metadata.copy()

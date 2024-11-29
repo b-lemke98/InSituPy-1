@@ -207,8 +207,12 @@ def create_img_pyramid(img: Union[np.ndarray, da.core.Array],
             else:
                 img = img.astype('uint16')
 
-        # rechunk to prevent dask errors
-        img = img.rechunk()
+        try:
+            # rechunk to prevent dask errors
+            img = img.rechunk()
+        except AttributeError:
+            # in case of numpy arrays a Attribute error is thrown
+            pass
 
         # collect subresolution
         img_pyramid.append(img)

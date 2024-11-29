@@ -14,7 +14,7 @@ from insitupy.io.files import read_json
 
 def read_xenium(
     path: Union[str, os.PathLike, Path],
-    metadata_filename: Optional[str] = None,
+    metadata_filename: str = "experiment.xenium",
 ) -> InSituData:
         """_summary_
 
@@ -57,26 +57,26 @@ def read_xenium(
             if not path.is_dir():
                 raise FileNotFoundError(f"No such directory found: {str(path)}")
 
-            if metadata_filename is not None:
-                experiment_xenium_filename = metadata_filename
+            # if metadata_filename is not None:
+            #     experiment_xenium_filename = metadata_filename
 
-            else:
-                # check for modified metadata_filename
-                metadata_files = [elem.name for elem in path.glob("*.xenium")]
-                if "experiment_modified.xenium" in metadata_files:
-                    experiment_xenium_filename = "experiment_modified.xenium"
-                else:
-                    experiment_xenium_filename = "experiment.xenium"
+            # else:
+            #     # check for modified metadata_filename
+            #     metadata_files = [elem.name for elem in path.glob("*.xenium")]
+            #     if "experiment_modified.xenium" in metadata_files:
+            #         experiment_xenium_filename = "experiment_modified.xenium"
+            #     else:
+            #         experiment_xenium_filename = "experiment.xenium"
 
             # # all changes are saved to the modified .xenium json
             # metadata_save_path_after_registration = path / "experiment_modified.xenium"
 
             # save paths of this project in metadata
             metadata["path"] = abspath(path).replace("\\", "/")
-            metadata["metadata_file"] = experiment_xenium_filename
+            metadata["metadata_file"] = metadata_filename
 
             # read metadata
-            metadata["xenium"] = read_json(path / experiment_xenium_filename)
+            metadata["xenium"] = read_json(path / metadata_filename)
 
             # get slide id and sample id from metadata
             slide_id = metadata["xenium"]["slide_id"]

@@ -50,9 +50,9 @@ from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
 from insitupy.utils.utils import convert_to_list, get_nrows_maxcols
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
-from .._exceptions import (ModalityNotFoundError, NotOneElementError,
-                           WrongNapariLayerTypeError, XeniumDataMissingObject,
-                           XeniumDataRepeatedCropError)
+from .._exceptions import (InSituDataRepeatedCropError, ModalityNotFoundError,
+                           NotOneElementError, WrongNapariLayerTypeError,
+                           XeniumDataMissingObject)
 from ..images.utils import create_img_pyramid
 from ..io.files import check_overwrite_and_remove_if_true, read_json
 from ..plotting import expr_along_obs_val
@@ -238,15 +238,17 @@ class InSituData:
             # iterate through names
             for n in geom_names:
                 polygons = geom_df[geom_df["name"] == n]["geometry"].tolist()
-                scales = geom_df[geom_df["name"] == n]["scale"].tolist()
+                #scales = geom_df[geom_df["name"] == n]["scale"].tolist()
 
-                in_poly = []
-                for poly, scale in zip(polygons, scales):
-                    # scale the polygon
-                    poly = scale_func(poly, xfact=scale[0], yfact=scale[1], origin=(0,0))
+                # in_poly = []
+                # for poly, scale in zip(polygons, scales):
+                #     # scale the polygon
+                #     poly = scale_func(poly, xfact=scale[0], yfact=scale[1], origin=(0,0))
 
-                    # check if which of the points are inside the current annotation polygon
-                    in_poly.append(poly.contains(cells))
+                #     # check if which of the points are inside the current annotation polygon
+                #     in_poly.append(poly.contains(cells))
+
+                in_poly = [poly.contains(cells) for poly in polygons]
 
                 # check if points were in any of the polygons
                 in_poly_res = np.array(in_poly).any(axis=0)
@@ -348,17 +350,16 @@ class InSituData:
 
     def crop(self,
              region_tuple: Optional[Tuple[str, str]] = None,
-             layer_name: Optional[str] = None,
              xlim: Optional[Tuple[int, int]] = None,
              ylim: Optional[Tuple[int, int]] = None,
              inplace: bool = False
+             #layer_name: Optional[str] = None,
             ):
         """
         Crop the data based on the provided parameters.
 
         Args:
             region_tuple (Optional[Tuple[str, str]]): A tuple specifying the region to crop.
-            layer_name (Optional[str]): The name of the layer to use for cropping.
             xlim (Optional[Tuple[int, int]]): The x-axis limits for cropping.
             ylim (Optional[Tuple[int, int]]): The y-axis limits for cropping.
             inplace (bool): If True, modify the data in place. Otherwise, return a new cropped data.
@@ -366,8 +367,10 @@ class InSituData:
         Raises:
             ValueError: If none of region_tuple, layer_name, or xlim/ylim are provided.
         """
-        if layer_name is None and region_tuple is None and (xlim is None or ylim is None):
-            raise ValueError("At least one of shape_layer, region_tuple, or xlim/ylim must be provided.")
+        # if layer_name is None and region_tuple is None and (xlim is None or ylim is None):
+        #     raise ValueError("At least one of shape_layer, region_tuple, or xlim/ylim must be provided.")
+        if region_tuple is None and (xlim is None or ylim is None):
+            raise ValueError("At least one of `region_tuple` or `xlim`/`ylim` must be provided.")
 
         # retrieve pixel size of data
         #pixel_size = self.metadata["xenium"]["pixel_size"]
@@ -384,38 +387,38 @@ class InSituData:
 
             use_shape = True
 
-        elif layer_name is not None:
-            try:
-                # extract shape layer for cropping from napari viewer
-                layer = self.viewer.layers[layer_name]
-            except KeyError:
-                raise KeyError(f"Shape layer selected for cropping ('{layer_name}') was not found in layers.")
+        # elif layer_name is not None:
+        #     try:
+        #         # extract shape layer for cropping from napari viewer
+        #         layer = self.viewer.layers[layer_name]
+        #     except KeyError:
+        #         raise KeyError(f"Shape layer selected for cropping ('{layer_name}') was not found in layers.")
 
-            # check the type of the element
-            if not isinstance(layer, napari.layers.Shapes):
-                raise WrongNapariLayerTypeError(found=type(layer), wanted=napari.layers.Shapes)
+        #     # check the type of the element
+        #     if not isinstance(layer, napari.layers.Shapes):
+        #         raise WrongNapariLayerTypeError(found=type(layer), wanted=napari.layers.Shapes)
 
-            # make sure the layer contains only one element
-            if len(layer.data) != 1:
-                raise NotOneElementError(layer.data)
+        #     # make sure the layer contains only one element
+        #     if len(layer.data) != 1:
+        #         raise NotOneElementError(layer.data)
 
-            # select the shape from list
-            crop_window = layer.data[0].copy()
-            # crop_window *= pixel_size
-            shape_type = layer.shape_type[0]
+        #     # select the shape from list
+        #     crop_window = layer.data[0].copy()
+        #     # crop_window *= pixel_size
+        #     shape_type = layer.shape_type[0]
 
-            geometry = convert_napari_shape_to_polygon_or_line(
-                napari_shape_data=crop_window,
-                shape_type=shape_type
-                )
+        #     geometry = convert_napari_shape_to_polygon_or_line(
+        #         napari_shape_data=crop_window,
+        #         shape_type=shape_type
+        #         )
 
-            use_shape = True
+        #     use_shape = True
 
         else:
             # if xlim or ylim is not none, assert that both are not None
-            if xlim is not None or ylim is not None:
-                assert np.all([elem is not None for elem in [xlim, ylim]])
-                use_shape = False
+            #if xlim is not None or ylim is not None:
+            assert np.all([elem is not None for elem in [xlim, ylim]]), "If `region_tuple` is None, both `xlim` and `ylim` need to be set instead."
+            use_shape = False
 
         # # assert that either shape_layer is given or xlim/ylim
         # assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
@@ -446,7 +449,7 @@ class InSituData:
         if np.all([elem in _self.metadata["xenium"].keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
             # test whether the limits are identical
             if (xlim == _self.metadata["xenium"]["cropping_xlim"]) & (ylim == _self.metadata["xenium"]["cropping_ylim"]):
-                raise XeniumDataRepeatedCropError(xlim, ylim)
+                raise InSituDataRepeatedCropError(xlim, ylim)
 
         try:
             # infer mask from cell coordinates
@@ -882,8 +885,6 @@ class InSituData:
                 img_names = list(self.metadata["data"]["images"].keys())
             else:
                 img_names = convert_to_list(names)
-
-            print(img_names)
 
             # get file paths and names
             img_files = [v for k,v in self.metadata["data"]["images"].items() if k in img_names]
@@ -1676,7 +1677,6 @@ class InSituData:
         for layer in layers:
             if isinstance(layer, Shapes) or isinstance(layer, Points):
                 name_parsed = parse(name_pattern, layer.name)
-                print(name_parsed)
                 if name_parsed is not None:
                     type_symbol = name_parsed.named["type_symbol"]
                     annot_key = name_parsed.named["annot_key"]
@@ -1690,8 +1690,6 @@ class InSituData:
                     layer_data = layer.data
                     colors = layer.edge_color.tolist()
                     scale = layer.scale
-                    print(scale)
-                    print(layer_data)
 
                     checks_passed = True
                     is_region_layer = False
@@ -1752,7 +1750,7 @@ class InSituData:
                             self.annotations.add_data(data=geom_df,
                                                       key=annot_key,
                                                       verbose=True,
-                                                      #scale_factor=scale
+                                                      scale_factor=scale[0]
                                                       )
 
             else:

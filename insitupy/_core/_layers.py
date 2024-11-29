@@ -13,7 +13,8 @@ from shapely import (LinearRing, LineString, MultiPoint, MultiPolygon, Point,
                      Polygon)
 
 from insitupy import WITH_NAPARI
-from insitupy._constants import (DEFAULT_CATEGORICAL_CMAP, POINTS_SYMBOL,
+from insitupy._constants import (DEFAULT_CATEGORICAL_CMAP,
+                                 DEFAULT_CONTINUOUS_CMAP, POINTS_SYMBOL,
                                  REGION_CMAP, REGIONS_SYMBOL, SHAPES_SYMBOL)
 from insitupy.palettes import CustomPalettes
 from insitupy.plotting._colors import _data_to_rgba, _determine_climits
@@ -206,7 +207,7 @@ if WITH_NAPARI:
                         'uid': uid_list["Points"], # list with uids
                         'type': type_list["Points"] # list giving information on whether the polygon is interior or exterior
                     },
-                    size=100,
+                    size=40,
                     edge_color="black",
                     face_color=color_list["Points"],
                     #scale=scale_factor
@@ -223,17 +224,15 @@ if WITH_NAPARI:
                             edge_width: float = 0,
                             edge_color: str = 'red',
                             upper_climit_pct: int = 99,
-                            cmap: str = "viridis"
+                            continuous_cmap = DEFAULT_CONTINUOUS_CMAP,
+                            categorical_cmap = DEFAULT_CATEGORICAL_CMAP
                             ) -> LayerDataTuple:
 
-        # remove entries with NaN
-        # mask = pd.notnull(color_values)
-        # color_values = color_values[mask]
-        # points = points[mask]
-        # point_names = point_names[mask]
-
         # get colors
-        colors = _data_to_rgba(data=color_values)
+        colors, mapping, cmap = _data_to_rgba(data=color_values,
+                               continuous_cmap=continuous_cmap,
+                               categorical_cmap=categorical_cmap,
+                               upper_climit_pct=upper_climit_pct)
 
         # generate point layer
         layer = (
@@ -247,17 +246,11 @@ if WITH_NAPARI:
                 'symbol': 'o',
                 'size': point_size,
                 'face_color': colors,
-                #     {
-                #     "color_mode": color_mode, # workaround (see https://github.com/napari/napari/issues/6433)
-                #     "colors": "value"
-                #     },
-                # 'face_color_cycle': color_cycle,
-                # 'face_colormap': color_map,
-                # 'face_contrast_limits': climits,
                 'opacity': opacity,
                 'visible': visible,
                 'edge_width': edge_width,
-                'edge_color': edge_color
+                'edge_color': edge_color,
+                'metadata': {"upper_climit_pct": upper_climit_pct}
                 },
             'points'
             )
@@ -271,7 +264,7 @@ if WITH_NAPARI:
         # cmap: str = "viridis"
         ) -> None:
         # get the RGBA colors for the new values
-        new_colors = _data_to_rgba(data=new_color_values, upper_climit_pct=upper_climit_pct)
+        new_colors, mapping, cmap = _data_to_rgba(data=new_color_values, upper_climit_pct=upper_climit_pct)
 
         # change the colors of the layer
         layer.face_color = new_colors
