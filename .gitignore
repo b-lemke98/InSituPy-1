@@ -142,3 +142,4 @@ dmypy.json
 out/
 demo_dataset*/
 tmp/
+figures/
