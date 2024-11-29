@@ -815,69 +815,84 @@ class ImageData(DeepCopyMixin, GetMixin):
         name: str,
         axes: Optional[str] = None, # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
         pixel_size: Optional[Number] = None,
-        ome_meta: Optional[dict] = None
+        ome_meta: Optional[dict] = None,
+        overwrite: bool = False
         ):
+        if name in self.names:
+            if not overwrite:
+                print(f"`ImageData` object contains already an image with name '{name}'. Image is not added.")
+                do_addition = False
+            else:
+                # remove attribute with current name
+                delattr(self, name)
 
-        # check if image is a path or a data array
-        if isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
-            assert axes is not None, "If `image` is numpy or dask array, `axes` needs to be set."
-            assert pixel_size is not None, "If `image` is numpy or dask array, `pixel_size` needs to be set."
+                # remove from name list and metadata
+                self.names = [elem for elem in self.names if elem != name]
+                self.metadata.pop(name, None)
 
+                do_addition = True
+        else:
+            do_addition = True
+
+        if do_addition:
+            # check if image is a path or a data array
+            if isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
+                assert axes is not None, "If `image` is numpy or dask array, `axes` needs to be set."
+                assert pixel_size is not None, "If `image` is numpy or dask array, `pixel_size` needs to be set."
+
+                try:
+                    # convert to dask array before addition
+                    img = da.from_array(image)
+                except ValueError:
+                    # in this case the array was already a dask array
+                    img = image
+                filename = None
+
+            elif Path(str(image)).exists():
+                # read path
+                image = Path(image)
+                image = image.resolve() # resolve relative path
+                filename = image.name
+                img, ome_meta, axes = read_image(image)
+
+            else:
+                raise ValueError(f"`image` is neither a dask array nor an existing path.")
+
+            # set attribute and add names to object
+            setattr(self, name, img)
+            self.names.append(name)
+
+            # retrieve metadata
+            img_shape = img[0].shape if isinstance(img, list) else img.shape
+            img_max = img[0].max() if isinstance(img, list) else img.max()
+            img_max = int(img_max)
+
+            # save metadata
+            self.metadata[name] = {}
+            self.metadata[name]["filename"] = filename
+            self.metadata[name]["shape"] = img_shape  # store shape
+            self.metadata[name]["axes"] = axes
+            self.metadata[name]["OME"] = ome_meta
+
+            # add universal pixel size to metadata
             try:
-                # convert to dask array before addition
-                img = da.from_array(image)
-            except ValueError:
-                # in this case the array was already a dask array
-                img = image
-            filename = None
+                self.metadata[name]['pixel_size'] = float(ome_meta['Image']['Pixels']['PhysicalSizeX'])
+            except KeyError:
+                self.metadata[name]['pixel_size'] = float(ome_meta['PhysicalSizeX'])
 
-        elif Path(str(image)).exists():
-            # read path
-            image = Path(image)
-            image = image.resolve() # resolve relative path
-            filename = image.name
-            img, ome_meta, axes = read_image(image)
+            # check whether the image is RGB or not
+            if len(img_shape) == 3:
+                self.metadata[name]["rgb"] = True
+            elif len(img_shape) == 2:
+                self.metadata[name]["rgb"] = False
+            else:
+                raise ValueError(f"Unknown image shape: {img_shape}")
 
-        else:
-            raise ValueError(f"`image` is neither a dask array nor an existing path.")
-
-        # set attribute and add names to object
-        setattr(self, name, img)
-        self.names.append(name)
-
-        # retrieve metadata
-        img_shape = img[0].shape if isinstance(img, list) else img.shape
-        img_max = img[0].max() if isinstance(img, list) else img.max()
-        img_max = int(img_max)
-
-        # save metadata
-        self.metadata[name] = {}
-        self.metadata[name]["filename"] = filename
-        #self.metadata[n]["file"] = Path(relpath(impath, self.path)).as_posix() # store file information
-        #self.metadata[n]["file"] = f # store file information
-        self.metadata[name]["shape"] = img_shape  # store shape
-        #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
-        self.metadata[name]["axes"] = axes
-        self.metadata[name]["OME"] = ome_meta
-        # add universal pixel size to metadata
-        try:
-            self.metadata[name]['pixel_size'] = float(ome_meta['Image']['Pixels']['PhysicalSizeX'])
-        except KeyError:
-            self.metadata[name]['pixel_size'] = float(ome_meta['PhysicalSizeX'])
-
-        # check whether the image is RGB or not
-        if len(img_shape) == 3:
-            self.metadata[name]["rgb"] = True
-        elif len(img_shape) == 2:
-            self.metadata[name]["rgb"] = False
-        else:
-            raise ValueError(f"Unknown image shape: {img_shape}")
-
-        # get image contrast limits
-        if self.metadata[name]["rgb"]:
-            self.metadata[name]["contrast_limits"] = (0, 255)
-        else:
-            self.metadata[name]["contrast_limits"] = (0, img_max)
+            # get image contrast limits
+            if self.metadata[name]["rgb"]:
+                self.metadata[name]["contrast_limits"] = (0, 255)
+            else:
+                self.metadata[name]["contrast_limits"] = (0, img_max)
 
 
     def load(self,

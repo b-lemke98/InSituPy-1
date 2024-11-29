@@ -871,7 +871,8 @@ class InSituData:
     def load_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
                     nuclei_type: Literal["focus", "mip", ""] = "mip",
-                    load_cell_segmentation_images: bool = True
+                    load_cell_segmentation_images: bool = True,
+                    reload: bool = False
                     ):
         # load image into ImageData object
         print("Loading images...", flush=True)
@@ -945,9 +946,12 @@ class InSituData:
 
         # create imageData object
         img_paths = [self.path / elem for elem in img_files]
-        self.images = ImageData(img_paths, img_names,
-                                #pixel_size=self.metadata["xenium"]['pixel_size']
-                                )
+
+        if not hasattr(self, "images"):
+            self.images = ImageData(img_paths, img_names)
+        else:
+            for im, n in zip(img_paths, img_names):
+                self.images.add_image(im, n, overwrite=reload)
 
     def load_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
