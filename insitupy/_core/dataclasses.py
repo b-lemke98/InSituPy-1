@@ -1016,8 +1016,15 @@ class ImageData(DeepCopyMixin, GetMixin):
 
                         # change metadata
                         new_img_metadata['pixel_size'] = max_resolution
-                        new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeX'] = str(max_resolution)
-                        new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeY'] = str(max_resolution)
+                        try:
+                            new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeX'] = str(max_resolution)
+                        except KeyError:
+                            new_img_metadata['OME']['PhysicalSizeX'] = str(max_resolution)
+
+                        try:
+                            new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeY'] = str(max_resolution)
+                        except KeyError:
+                            new_img_metadata['OME']['PhysicalSizeY'] = str(max_resolution)
 
                 if as_zarr:
                     # generate filename
