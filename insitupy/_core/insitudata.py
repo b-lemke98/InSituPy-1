@@ -199,15 +199,14 @@ class InSituData:
                           alt_layer: str = None
                           ):
         '''
-        Function to assign the annotations to the anndata object in XeniumData.matrix.
-        Annotation information is added to the DataFrame in `.obs`.
+        Function to assign geometries (annotations or regions) to the anndata object in
+        InSituData.cells.matrix. Assignment information is added to the DataFrame in `.obs`.
         '''
         # assert that prerequisites are met
         try:
             geom_attr = getattr(self, geometry_type)
         except AttributeError:
             raise ModalityNotFoundError(modality=geometry_type)
-        
 
         if alt_layer is None:
             try:
@@ -342,6 +341,15 @@ class InSituData:
             add_masks=add_masks,
             overwrite=overwrite
         )
+        if hasattr(self, "alt"):
+            for key in self.alt.keys():
+                self.assign_geometries(
+                    geometry_type="regions",
+                    keys=keys,
+                    add_masks=add_masks,
+                    overwrite=overwrite,
+                    alt_layer=key
+                )
 
     def copy(self):
         '''
