@@ -19,8 +19,3 @@ def read_images(self, *args, **kwargs):
 
 def read_transcripts(self, *args, **kwargs):
     warn("`read_transcripts` is deprecated. Use `load_transcripts` instead.", DeprecationWarning, stacklevel=2)
-
-
-class XeniumData:
-    def __init__(self, *args, **kwargs):
-        warn("`XeniumData` is deprecated. Use `read_xenium` instead. This reads Xenium data and stores it into an `InSituData` object.", DeprecationWarning, stacklevel=2)

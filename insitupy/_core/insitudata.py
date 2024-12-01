@@ -50,9 +50,9 @@ from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
 from insitupy.utils.utils import convert_to_list, get_nrows_maxcols
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
-from .._exceptions import (InSituDataRepeatedCropError, ModalityNotFoundError,
-                           NotOneElementError, WrongNapariLayerTypeError,
-                           XeniumDataMissingObject)
+from .._exceptions import (InSituDataMissingObject,
+                           InSituDataRepeatedCropError, ModalityNotFoundError,
+                           NotOneElementError, WrongNapariLayerTypeError)
 from ..images.utils import create_img_pyramid
 from ..io.files import check_overwrite_and_remove_if_true, read_json
 from ..plotting import expr_along_obs_val
@@ -198,7 +198,7 @@ class InSituData:
                           overwrite: bool = True
                           ):
         '''
-        Function to assign the annotations to the anndata object in XeniumData.matrix.
+        Function to assign the annotations to the anndata object in InSituData.matrix.
         Annotation information is added to the DataFrame in `.obs`.
         '''
         # assert that prerequisites are met
@@ -327,7 +327,7 @@ class InSituData:
 
     def copy(self):
         '''
-        Function to generate a deep copy of the XeniumData object.
+        Function to generate a deep copy of the InSituData object.
         '''
         from copy import deepcopy
         had_viewer = False
@@ -706,7 +706,7 @@ class InSituData:
                                     right_index=True
                                     )
 
-                # add resulting dataframe to XeniumData
+                # add resulting dataframe to InSituData
                 setattr(self, trans_attr_name, trans_attr)
 
 
@@ -878,7 +878,7 @@ class InSituData:
         print("Loading images...", flush=True)
 
         if self.from_insitudata:
-            # check if matrix data is stored in this XeniumData
+            # check if matrix data is stored in this InSituData
             if "images" not in self.metadata["data"]:
                 raise ModalityNotFoundError(modality="images")
 
@@ -957,7 +957,7 @@ class InSituData:
                         transcript_filename: str = "transcripts.parquet"
                         ):
         if self.from_insitudata:
-            # check if matrix data is stored in this XeniumData
+            # check if matrix data is stored in this InSituData
             if "transcripts" not in self.metadata["data"]:
                 raise ModalityNotFoundError(modality="transcripts")
 
@@ -1051,7 +1051,7 @@ class InSituData:
             verbose: bool = True
             ):
         '''
-        Function to save the XeniumData object.
+        Function to save the InSituData object.
 
         Args:
             path: Path to save the data to.
@@ -1490,7 +1490,7 @@ class InSituData:
             try:
                 cells = self.cells
             except AttributeError:
-                raise XeniumDataMissingObject("cells")
+                raise InSituDataMissingObject("cells")
             else:
                 # convert keys to list
                 keys = convert_to_list(keys)
@@ -1647,7 +1647,7 @@ class InSituData:
                          ):
         """
         Extracts geometric layers from shapes and points layers in the napari viewer
-        and stores them in the XeniumData object as annotations or regions.
+        and stores them in the InSituData object as annotations or regions.
 
         Args:
             name_pattern (str): A format string used to parse the layer names.
@@ -1666,7 +1666,7 @@ class InSituData:
             - It extracts the geometric data, colors, and other relevant properties
             to create a GeoDataFrame.
             - The GeoDataFrame is then added to the annotations or regions of the
-            XeniumData object based on the type of layer.
+            InSituData object based on the type of layer.
             - If the layer is classified as a region but is a point layer, a warning
             is issued, and the layer is skipped.
         """
@@ -1686,7 +1686,7 @@ class InSituData:
                     annot_key = name_parsed.named["annot_key"]
                     class_name = name_parsed.named["class_name"]
 
-                    # if the XeniumData object does not has an annotations attribute, initialize it
+                    # if the InSituData object does not has an annotations attribute, initialize it
                     if not hasattr(self, "annotations"):
                         self.annotations = AnnotationsData() # initialize empty object
 
@@ -1919,7 +1919,7 @@ def register_images(
     min_good_matches: int = 20
     ):
     '''
-    Register images stored in XeniumData object.
+    Register images stored in InSituData object.
     '''
 
     # if image type is IF, the channel name for registration needs to be given
@@ -1968,7 +1968,7 @@ def register_images(
     if len(image.shape) == 4:
         image = image[0]
 
-    # read images in XeniumData object
+    # read images in InSituData object
     data.load_images(names=template_image_name, load_cell_segmentation_images=False)
     template = data.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
 
