@@ -420,7 +420,7 @@ class InSituExperiment:
         """Create a plot with UMAPs of all datasets as subplots using scanpy's pl.umap function.
 
         Args:
-            color (str or list of str, optional): Keys for annotations of observations/cells or variables/genes to color the plot. Defaults to None.
+            color (str, optional): Keys for annotations of observations/cells or variables/genes to color the plot. Defaults to None.
             title_columns (str or list of str, optional): List of column names from metadata to use for subplot titles. Defaults to None.
             max_cols (int, optional): Maximum number of columns for subplots. Defaults to 4.
             **kwargs: Additional keyword arguments to pass to sc.pl.umap.
@@ -434,6 +434,8 @@ class InSituExperiment:
         num_datasets = len(self._data)
         n_plots, n_rows, max_cols = get_nrows_maxcols(len(self._data), max_cols)
         fig, axes = plt.subplots(n_rows, max_cols, figsize=(figsize[0]*max_cols, figsize[1]*n_rows))
+        if n_plots > 1:
+            axes = axes.ravel()
 
         # make sure title_columns is a list
         if title_columns is not None:
@@ -450,7 +452,6 @@ class InSituExperiment:
                 ax.set_title(title, fontdict={"fontsize": title_size})
             else:
                 ax.set_title(f"Dataset {idx + 1}", fontdict={"fontsize": title_size})
-
 
         remove_empty_subplots(
             axes, n_plots, n_rows, max_cols
