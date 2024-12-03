@@ -6,6 +6,7 @@ from os.path import relpath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 
+import cv2
 import dask.array as da
 import geopandas as gpd
 import numpy as np
@@ -17,6 +18,7 @@ from shapely import MultiPoint, MultiPolygon, Point, Polygon, affinity
 
 from insitupy import __version__
 from insitupy._constants import FORBIDDEN_ANNOTATION_NAMES
+from insitupy.images.utils import resize_image
 from insitupy.utils.utils import convert_int_to_xenium_hex
 
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
@@ -42,13 +44,15 @@ class ShapesData(DeepCopyMixin, GetMixin):
     def __init__(self,
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None,
                  keys: Optional[List[str]] = None,
-                 pixel_size: float = 1,
+                 pixel_size: Optional[float] = None,
                  assert_uniqueness: Optional[bool] = None,
                 #  skip_multipolygons: Optional[bool] = None,
                  polygons_only: Optional[bool] = None,
                  forbidden_names: Optional[List[str]] = None
                  # shape_name: Optional[str] = None
                  ) -> None:
+
+
 
         # create dictionary for metadata
         self.metadata = {}
@@ -74,16 +78,19 @@ class ShapesData(DeepCopyMixin, GetMixin):
 
         if files is not None:
             # make sure files and keys are a list
+            assert keys is not None, "If `files` are given, also corresponding `keys` need to be given."
             files = convert_to_list(files)
             keys = convert_to_list(keys)
             assert len(files) == len(keys), "Number of files does not match number of keys."
+
+            assert pixel_size is not None, "If files and `keys` are given, also `pixel_size` needs to be specified"
 
             if files is not None:
                 for key, file in zip(keys, files):
                     # read annotation and store in dictionary
                     self.add_data(data=file,
                                         key=key,
-                                        scale_factor=(pixel_size, pixel_size),
+                                        scale_factor=pixel_size,
                                         )
 
     def __repr__(self):
@@ -173,7 +180,7 @@ class ShapesData(DeepCopyMixin, GetMixin):
                     data: Union[gpd.GeoDataFrame, pd.DataFrame, dict,
                                 str, os.PathLike, Path],
                     key: str,
-                    scale_factor: Optional[Tuple[float, float]] = None,
+                    scale_factor: Number,
                     default_name: str = "name",
                     verbose: bool = False,
                    ):
@@ -192,14 +199,17 @@ class ShapesData(DeepCopyMixin, GetMixin):
                 if np.any([elem in new_names for elem in self.forbidden_names]):
                     raise ValueError(f"One of the forbidden names for annotations ({self.forbidden_names}) has been used in the imported dataset. Please change the respective change to prevent interference with downstream functions.")
 
-        if "scale" not in new_df.columns:
-            # add scale factor to data
-            if scale_factor is None:
-                warnings.warn("No `scale_factor` added to data.")
-            new_df["scale"] = [scale_factor] * len(new_df)
-        else:
-            if verbose:
-                print("Scale inferred from file.", flush=True)
+        # convert geometries into unit (e.g. µm) values
+        new_df["geometry"] = new_df["geometry"].scale(xfact=scale_factor, yfact=scale_factor, origin=(0,0))
+
+        # if "scale" not in new_df.columns:
+        #     # add scale factor to data
+        #     if scale_factor is None:
+        #         warnings.warn("No `scale_factor` added to data.")
+        #     new_df["scale"] = [scale_factor] * len(new_df)
+        # else:
+        #     if verbose:
+        #         print("Scale inferred from file.", flush=True)
 
         # determine the type of layer that needs to be used in napari later
         layer_types = []
@@ -357,7 +367,7 @@ class AnnotationsData(ShapesData):
     def __init__(self,
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None,
                  keys: Optional[List[str]] = None,
-                 pixel_size: float = 1
+                 pixel_size: Optional[float] = None
                  ) -> None:
         self.default_assert_uniqueness = False
         # self.default_skip_multipolygons = False
@@ -372,7 +382,7 @@ class RegionsData(ShapesData):
     def __init__(self,
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None,
                  keys: Optional[List[str]] = None,
-                 pixel_size: float = 1
+                 pixel_size: Optional[float] = None
                  ) -> None:
         self.default_assert_uniqueness = True
         # self.default_skip_multipolygons = True # MultiPolygons are not allowed in regions
@@ -805,67 +815,84 @@ class ImageData(DeepCopyMixin, GetMixin):
         name: str,
         axes: Optional[str] = None, # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
         pixel_size: Optional[Number] = None,
-        ome_meta: Optional[dict] = None
+        ome_meta: Optional[dict] = None,
+        overwrite: bool = False
         ):
+        if name in self.names:
+            if not overwrite:
+                print(f"`ImageData` object contains already an image with name '{name}'. Image is not added.")
+                do_addition = False
+            else:
+                # remove attribute with current name
+                delattr(self, name)
 
-        # check if image is a path or a data array
-        if isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
-            assert axes is not None, "If `image` is numpy or dask array, `axes` needs to be set."
-            assert pixel_size is not None, "If `image` is numpy or dask array, `pixel_size` needs to be set."
+                # remove from name list and metadata
+                self.names = [elem for elem in self.names if elem != name]
+                self.metadata.pop(name, None)
 
+                do_addition = True
+        else:
+            do_addition = True
+
+        if do_addition:
+            # check if image is a path or a data array
+            if isinstance(image, da.core.Array) or isinstance(image, np.ndarray):
+                assert axes is not None, "If `image` is numpy or dask array, `axes` needs to be set."
+                assert pixel_size is not None, "If `image` is numpy or dask array, `pixel_size` needs to be set."
+
+                try:
+                    # convert to dask array before addition
+                    img = da.from_array(image)
+                except ValueError:
+                    # in this case the array was already a dask array
+                    img = image
+                filename = None
+
+            elif Path(str(image)).exists():
+                # read path
+                image = Path(image)
+                image = image.resolve() # resolve relative path
+                filename = image.name
+                img, ome_meta, axes = read_image(image)
+
+            else:
+                raise ValueError(f"`image` is neither a dask array nor an existing path.")
+
+            # set attribute and add names to object
+            setattr(self, name, img)
+            self.names.append(name)
+
+            # retrieve metadata
+            img_shape = img[0].shape if isinstance(img, list) else img.shape
+            img_max = img[0].max() if isinstance(img, list) else img.max()
+            img_max = int(img_max)
+
+            # save metadata
+            self.metadata[name] = {}
+            self.metadata[name]["filename"] = filename
+            self.metadata[name]["shape"] = img_shape  # store shape
+            self.metadata[name]["axes"] = axes
+            self.metadata[name]["OME"] = ome_meta
+
+            # add universal pixel size to metadata
             try:
-                # convert to dask array before addition
-                img = da.from_array(image)
-            except ValueError:
-                # in this case the array was already a dask array
-                img = image
-            filename = None
+                self.metadata[name]['pixel_size'] = float(ome_meta['Image']['Pixels']['PhysicalSizeX'])
+            except KeyError:
+                self.metadata[name]['pixel_size'] = float(ome_meta['PhysicalSizeX'])
 
-        elif Path(str(image)).exists():
-            # read path
-            image = Path(image)
-            image = image.resolve() # resolve relative path
-            filename = image.name
-            img, ome_meta, axes = read_image(image)
+            # check whether the image is RGB or not
+            if len(img_shape) == 3:
+                self.metadata[name]["rgb"] = True
+            elif len(img_shape) == 2:
+                self.metadata[name]["rgb"] = False
+            else:
+                raise ValueError(f"Unknown image shape: {img_shape}")
 
-        else:
-            raise ValueError(f"`image` is neither a dask array nor an existing path.")
-
-        # set attribute and add names to object
-        setattr(self, name, img)
-        self.names.append(name)
-
-        # retrieve metadata
-        img_shape = img[0].shape if isinstance(img, list) else img.shape
-        img_max = img[0].max() if isinstance(img, list) else img.max()
-        img_max = int(img_max)
-
-        # save metadata
-        self.metadata[name] = {}
-        self.metadata[name]["filename"] = filename
-        #self.metadata[n]["file"] = Path(relpath(impath, self.path)).as_posix() # store file information
-        #self.metadata[n]["file"] = f # store file information
-        self.metadata[name]["shape"] = img_shape  # store shape
-        #self.metadata[n]["subresolutions"] = len(img) - 1 # store number of subresolutions of pyramid
-        self.metadata[name]["axes"] = axes
-        self.metadata[name]["OME"] = ome_meta
-
-        # check whether the image is RGB or not
-        if len(img_shape) == 3:
-            self.metadata[name]["rgb"] = True
-        elif len(img_shape) == 2:
-            self.metadata[name]["rgb"] = False
-        else:
-            raise ValueError(f"Unknown image shape: {img_shape}")
-
-        # get image contrast limits
-        if self.metadata[name]["rgb"]:
-            self.metadata[name]["contrast_limits"] = (0, 255)
-        else:
-            self.metadata[name]["contrast_limits"] = (0, img_max)
-
-        # add universal pixel size to metadata
-        self.metadata[name]['pixel_size'] = pixel_size
+            # get image contrast limits
+            if self.metadata[name]["rgb"]:
+                self.metadata[name]["contrast_limits"] = (0, 255)
+            else:
+                self.metadata[name]["contrast_limits"] = (0, img_max)
 
 
     def load(self,
@@ -923,7 +950,8 @@ class ImageData(DeepCopyMixin, GetMixin):
              save_pyramid: bool = True,
              compression: Literal['jpeg', 'LZW', 'jpeg2000', 'ZLIB', None] = 'ZLIB', # jpeg2000 or ZLIB are recommended in the Xenium documentation - ZLIB is faster
              return_savepaths: bool = False,
-             overwrite: bool = False
+             overwrite: bool = False,
+             max_resolution: Optional[Number] = None # in µm per pixel
              ):
         """
         Save images to the specified output folder in either Zarr or OME-TIFF format.
@@ -965,6 +993,38 @@ class ImageData(DeepCopyMixin, GetMixin):
             if n in keys_to_save:
                 # extract image
                 img = getattr(self, n)
+                new_img_metadata = img_metadata.copy()
+
+                axes = new_img_metadata['axes']
+                pixel_size = new_img_metadata['pixel_size'] # in µm per pixel
+
+                if max_resolution is not None:
+                    if max_resolution == pixel_size:
+                        warnings.warn(f"`max_pixel_size` ({max_resolution}) equal to `pixel_size` ({pixel_size}). Skipped resizing.")
+                        pass
+                    if max_resolution < pixel_size:
+                        warnings.warn(f"`max_pixel_size` ({max_resolution}) smaller than `pixel_size` ({pixel_size}). Skipped resizing.")
+                        pass
+                    else:
+                        # downscale image
+                        if isinstance(img, list):
+                            img = img[0]
+                        downscale_factor = max_resolution / pixel_size
+                        print(f"Downscale image to {max_resolution} µm per pixel by factor {downscale_factor}")
+                        img = resize_image(img, scale_factor=1/downscale_factor, axes=axes)
+                        img = da.from_array(img)
+
+                        # change metadata
+                        new_img_metadata['pixel_size'] = max_resolution
+                        try:
+                            new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeX'] = str(max_resolution)
+                        except KeyError:
+                            new_img_metadata['OME']['PhysicalSizeX'] = str(max_resolution)
+
+                        try:
+                            new_img_metadata['OME']['Image']['Pixels']['PhysicalSizeY'] = str(max_resolution)
+                        except KeyError:
+                            new_img_metadata['OME']['PhysicalSizeY'] = str(max_resolution)
 
                 if as_zarr:
                     # generate filename
@@ -978,32 +1038,36 @@ class ImageData(DeepCopyMixin, GetMixin):
                     # write to zarr
                     img_path = output_folder / filename
                     write_zarr(image=img, file=img_path,
-                               img_metadata=img_metadata,
-                               save_pyramid=save_pyramid)
-
+                               img_metadata=new_img_metadata,
+                               save_pyramid=save_pyramid,
+                               axes=axes
+                               )
                 else:
                     # get file name for saving
                     #filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
                     filename = n + ".ome.tif"
                     # retrieve image metadata for saving
-                    photometric = 'rgb' if img_metadata['rgb'] else 'minisblack'
-                    axes = img_metadata['axes']
+                    photometric = 'rgb' if new_img_metadata['rgb'] else 'minisblack'
+
 
                     # retrieve OME metadata
-                    ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY", "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
+                    ome_meta_to_retrieve = ["SignificantBits", "PhysicalSizeX", "PhysicalSizeY",
+                                            "PhysicalSizeXUnit", "PhysicalSizeYUnit"]
 
                     try:
-                        pixel_meta = img_metadata["OME"]["Image"]["Pixels"]
+                        pixel_meta = new_img_metadata["OME"]["Image"]["Pixels"]
                     except KeyError:
-                        pixel_meta = img_metadata["OME"]
+                        pixel_meta = new_img_metadata["OME"]
 
                     selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
 
+                    print("start saving")
                     # write images as OME-TIFF
                     write_ome_tiff(image=img, file=output_folder / filename,
                                 photometric=photometric, axes=axes,
                                 compression=compression,
                                 metadata=selected_metadata, overwrite=False)
+                    print("end saving")
 
                 if return_savepaths:
                     # collect savepaths

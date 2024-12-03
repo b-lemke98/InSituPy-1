@@ -46,6 +46,7 @@ FORBIDDEN_ANNOTATION_NAMES = ["rest"]
 palettes = CustomPalettes()
 DEFAULT_CATEGORICAL_CMAP = palettes.tab20_mod
 REGION_CMAP = matplotlib.colormaps["tab10"]
+DEFAULT_CONTINUOUS_CMAP = "viridis"
 
 # font size
 def _init_mpl_fontsize(scale_factor=1):

@@ -17,7 +17,6 @@ from insitupy import __version__
 from .._exceptions import InvalidFileTypeError
 from ..images.utils import create_img_pyramid
 from ..utils.utils import convert_to_list
-from .utils import resize_image
 
 
 def read_zarr(path):
@@ -86,6 +85,7 @@ def read_image(
 def write_zarr(image, file,
                img_metadata: dict,
                save_pyramid: bool = True,
+               axes: str = "YXS", # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
                overwrite: bool = False
                ):
 
@@ -106,20 +106,24 @@ def write_zarr(image, file,
     # decide whether to save as pyramid or not
     if isinstance(image, list):
         if not save_pyramid:
-            image = image[0]
+            image_data = image[0]
+        else:
+            image_data = image
     else:
         if save_pyramid:
             # create img pyramid
-            image = create_img_pyramid(img=image, nsubres=6)
+            image_data = create_img_pyramid(img=image, nsubres=6, axes=axes)
+        else:
+            image_data = image
 
     with zarr.ZipStore(file, mode="w") if zipped else zarr.DirectoryStore(file) as dirstore:
         # check whether to save the image as pyramid or not
         if save_pyramid:
-            for i, im in enumerate(image):
+            for i, im in enumerate(image_data):
                 im.to_zarr(dirstore, component=str(i))
         else:
             # save image data in zipstore without pyramid
-            image.to_zarr(dirstore)
+            image_data.to_zarr(dirstore)
 
         # open zarr store save metadata in zarr store
         store = zarr.open(dirstore, mode="a")
@@ -132,7 +136,7 @@ def write_ome_tiff(
     file: Union[str, os.PathLike, Path],
     axes: str = "YXS", # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
     metadata: dict = {},
-    subresolutions = 7,
+    subresolutions = 6,
     subres_steps: int = 2,
     pixelsize: Optional[float] = 1, # defaults to Xenium settings.
     pixelunit: Optional[str] = None, # usually µm
@@ -152,19 +156,14 @@ def write_ome_tiff(
     # check if the image is an image pyramid
     if isinstance(image, list):
         # if it is a pyramid, select only the highest resolution image
-        image = image[0]
-
-    # check dtype of image
-    if image.dtype not in [np.dtype('uint16'), np.dtype('uint8')]:
-        warnings.warn("Image does not have dtype 'uint8' or 'uint16'. Is converted to 'uint16'.")
-
-        if image.dtype == np.dtype('int8'):
-            image = image.astype('uint8')
-        else:
-            image = image.astype('uint16')
+        first_image = image[0]
+        image_pyramid = image
+    elif isinstance(image, np.ndarray) or isinstance(image, da.core.Array):
+        first_image = image
+        image_pyramid = create_img_pyramid(img=image, nsubres=subresolutions, axes=axes)
 
     # determine significant bits variable - is important that Xenium explorer correctly distinguishes between 8 bit and 16 bit
-    if image.dtype == np.dtype('uint8'):
+    if first_image.dtype == np.dtype('uint8'):
         significant_bits = 8
     else:
         significant_bits = 16
@@ -210,7 +209,7 @@ def write_ome_tiff(
             resolutionunit='CENTIMETER',
         )
         tif.write(
-            image,
+            image_pyramid[0],
             subifds=subresolutions,
             resolution=(1e4 / pixelsize, 1e4 / pixelsize),
             metadata=metadata,
@@ -218,11 +217,12 @@ def write_ome_tiff(
         )
 
         scale = 1
-        for i in range(subresolutions):
-            scale /= subres_steps
-            image = resize_image(image, scale_factor=1/subres_steps, axes=axes)
+        for i in range(1, subresolutions+1):
+            img = image_pyramid[i]
+            #scale /= subres_steps
+            #img = resize_image(img, scale_factor=1/subres_steps, axes=axes)
             tif.write(
-                image,
+                img,
                 subfiletype=1,
                 resolution=(1e4 / scale / pixelsize,1e4 / scale / pixelsize),
                 **options

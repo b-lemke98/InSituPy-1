@@ -33,7 +33,7 @@ def plot_colorlegend(
     values = layer.properties["value"]
 
     # create color mapping
-    rgba_list, mapping = _data_to_rgba(values, return_mapping=True)
+    rgba_list, mapping, cmap = _data_to_rgba(values)
 
     if isinstance(mapping, dict):
         # categorical colorbar
