@@ -115,12 +115,14 @@ if WITH_NAPARI:
                 value={'choices': config.genes, 'label': "Value:"},
                 size={'label': 'Size [µm]'},
                 recent={'choices': [""], 'label': "Recent:"},
+                update_layer={'label': 'Update'}
                 )
             def add_cells_widget(
                 key="genes",
                 value=None,
                 size=6,
                 recent=None,
+                update_layer=True,
                 viewer=viewer
                 ) -> napari.types.LayerDataTuple:
 
@@ -181,14 +183,28 @@ if WITH_NAPARI:
                         return gene_layer
                         #layers_to_add.append(gene_layer)
                     else:
-                        #print(f"Key '{gene}' already in layer list.", flush=True)
-                        # update the existing points layer
-                        layer = viewer.layers[layer_names_for_current_data[0]]
-                        _update_points_layer(
-                            layer=layer,
-                            new_color_values=color_value,
-                            new_name=new_layer_name,
-                        )
+                        if update_layer:
+                            #print(f"Key '{gene}' already in layer list.", flush=True)
+                            # update the existing points layer
+                            layer = viewer.layers[layer_names_for_current_data[0]]
+                            _update_points_layer(
+                                layer=layer,
+                                new_color_values=color_value,
+                                new_name=new_layer_name,
+                            )
+                        else:
+                            # create new points layer for genes
+                            gene_layer = _create_points_layer(
+                                points=config.points,
+                                color_values=color_value,
+                                #name=f"{config.current_data_name}-{gene}",
+                                name=new_layer_name,
+                                point_names=cell_names,
+                                point_size=size,
+                                upper_climit_pct=99
+                            )
+                            return gene_layer
+
 
             @add_cells_widget.key.changed.connect
             @add_cells_widget.call_button.changed.connect
