@@ -12,6 +12,8 @@ from insitupy.io.plots import save_and_show_figure
 
 
 def volcano_plot(data,
+                 logfoldchanges_column: str = 'logfoldchanges',
+                 pval_column: str = 'neg_log10_pvals',
                  significance_threshold: Number = 0.05,
                  fold_change_threshold: Number = 1,
                  title: str = "Volcano Plot",
@@ -23,16 +25,19 @@ def volcano_plot(data,
                  ):
     """
     Create a volcano plot from the DataFrame and label the top 20 most significant up and down-regulated genes.
+    For the generation of the input data `insitupy.utils.deg.create_deg_dataframe` can be used
 
     Args:
         data (pd.DataFrame): DataFrame containing gene names, log fold changes, and p-values.
+        logfoldchanges_column (str): Column name for log fold changes (default is 'logfoldchanges').
+        pval_column (str): Column name for negative log10 p-values (default is 'neg_log10_pvals').
         significance_threshold (float): P-value threshold for significance (default is 0.05).
         fold_change_threshold (float): Log2 fold change threshold for up/down regulation (default is 1).
         title (str): Title of the plot (default is "Volcano Plot").
         savepath (Union[str, os.PathLike, Path], optional): Path to save the plot (default is None).
         save_only (bool): If True, only save the plot without displaying it (default is False).
         dpi_save (int): Dots per inch (DPI) for saving the plot (default is 300).
-        label_top_n (int): Specifying how many of the top up- and downregulated genes are labelled in the plot.
+        label_top_n (int): Number of top up- and downregulated genes to label in the plot (default is 20).
         figsize (Tuple[int, int]): Size of the figure in inches (default is (8, 6)).
 
     Returns:
@@ -44,9 +49,9 @@ def volcano_plot(data,
     colors = []
     for index, row in data.iterrows():
         if row['pvals'] < significance_threshold:
-            if row['logfoldchanges'] > fold_change_threshold:
+            if row[logfoldchanges_column] > fold_change_threshold:
                 colors.append('maroon')  # Up-regulated
-            elif row['logfoldchanges'] < -fold_change_threshold:
+            elif row[logfoldchanges_column] < -fold_change_threshold:
                 colors.append('royalblue')  # Down-regulated
             else:
                 colors.append('black')  # Not significant
@@ -54,7 +59,7 @@ def volcano_plot(data,
             colors.append('black')  # Not significant
 
     # Scatter plot
-    plt.scatter(data['logfoldchanges'], data['neg_log10_pvals'],
+    plt.scatter(data[logfoldchanges_column], data[pval_column],
                 alpha=0.5, color=colors)
 
     # Add labels and title
@@ -70,10 +75,10 @@ def volcano_plot(data,
     plt.axvline(x=-fold_change_threshold, color='black', linestyle='--')
 
     # # Calculate mixed score and get top 20 up and down-regulated genes
-    # volcano_data['mixed_score'] = -np.log10(volcano_data['pvals']) * volcano_data['logfoldchanges']
+    # volcano_data['mixed_score'] = -np.log10(volcano_data['pvals']) * volcano_data[logfoldchanges_column]
 
-    top_up_genes = data[data['logfoldchanges'] > fold_change_threshold].nlargest(label_top_n, 'scores')
-    top_down_genes = data[data['logfoldchanges'] < -fold_change_threshold].nsmallest(label_top_n, 'scores')
+    top_up_genes = data[data[logfoldchanges_column] > fold_change_threshold].nlargest(label_top_n, 'scores')
+    top_down_genes = data[data[logfoldchanges_column] < -fold_change_threshold].nsmallest(label_top_n, 'scores')
 
     # Combine top genes for annotation
     top_genes = pd.concat([top_up_genes, top_down_genes])
@@ -85,7 +90,7 @@ def volcano_plot(data,
     texts = []
     for i, row in top_genes.iterrows():
         texts.append(plt.annotate(row['gene'],
-                                   (row['logfoldchanges'], row['neg_log10_pvals']),
+                                   (row[logfoldchanges_column], row[pval_column]),
                                    fontsize=14,  # Increased font size
                                    alpha=0.75))
 
