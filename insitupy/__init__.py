@@ -15,7 +15,6 @@ from . import images as im
 from . import io
 from . import plotting as pl
 from . import utils
-from ._core._deprecated import XeniumData
 from ._core.dataclasses import AnnotationsData, BoundariesData, ImageData
 from ._core.insitudata import (InSituData, calc_distance_of_cells_from,
                                differential_gene_expression, register_images)

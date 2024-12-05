@@ -204,8 +204,13 @@ def read_celldata(
 def read_shapesdata(
     path: Union[str, os.PathLike, Path],
     mode: Literal["annotations", "regions", "shapes"],
+    scale_factor: Optional[Number] = None
 ):
     path = Path(path)
+
+    # e.g. when reading from a shapesdata object, it is assumed that it was saved as µm
+    if scale_factor is None:
+        scale_factor = 1
 
     # read metadata and retrieve keys and files from it
     metadata = read_json(path / "metadata.json")
@@ -227,7 +232,9 @@ def read_shapesdata(
     keys = convert_to_list(keys)
 
     for k, f in zip(keys, files):
-        data.add_data(data=f, key=k)
+        data.add_data(data=f, key=k,
+                      scale_factor=scale_factor
+                      )
 
     # overwrite metadata
     data.metadata = metadata
