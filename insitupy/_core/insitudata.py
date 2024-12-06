@@ -1553,7 +1553,7 @@ class InSituData:
 
             if show_points_widget is not None:
                 self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right")
-                show_points_widget.max_height = 130
+                show_points_widget.max_height = 150
                 show_points_widget.max_width = widgets_max_width
 
             if show_boundaries_widget is not None:
