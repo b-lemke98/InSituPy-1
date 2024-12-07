@@ -115,14 +115,14 @@ if WITH_NAPARI:
                 value={'choices': config.genes, 'label': "Value:"},
                 size={'label': 'Size [µm]'},
                 recent={'choices': [""], 'label': "Recent:"},
-                update_layer={'label': 'Update'}
+                add_new_layer={'label': 'Add new layer'}
                 )
             def add_cells_widget(
                 key="genes",
                 value=None,
                 size=6,
                 recent=None,
-                update_layer=True,
+                add_new_layer=False,
                 viewer=viewer
                 ) -> napari.types.LayerDataTuple:
 
@@ -183,7 +183,7 @@ if WITH_NAPARI:
                         return gene_layer
                         #layers_to_add.append(gene_layer)
                     else:
-                        if update_layer:
+                        if not add_new_layer:
                             #print(f"Key '{gene}' already in layer list.", flush=True)
                             # update the existing points layer
                             layer = viewer.layers[layer_names_for_current_data[0]]
