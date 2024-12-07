@@ -806,7 +806,7 @@ def _bin_qc_plot(
     plt.tight_layout()
     plt.show()
 
-def cell_abundance_along_obs_val(
+def cell_abundance_along_axis(
     adata: AnnData,
     axis: Union[str, Tuple[str, str]],
     groupby: Optional[str] = None,

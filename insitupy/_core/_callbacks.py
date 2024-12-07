@@ -1,7 +1,10 @@
 import math
 
+import numpy as np
+import pandas as pd
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
+from pandas.api.types import is_numeric_dtype
 
 import insitupy._core.config as config
 from insitupy import WITH_NAPARI
@@ -94,7 +97,6 @@ def _update_colorlegend():
     values = layer.properties["value"]
     color_values = layer.face_color
 
-    from pandas.api.types import is_numeric_dtype
 
     from insitupy.plotting._colors import continuous_data_to_rgba
     if is_numeric_dtype(values):
@@ -108,8 +110,9 @@ def _update_colorlegend():
                                   mapping=mapping,
                                   label=layer.name)
 
-
     else:
+        # substitute pd.NA with np.nan
+        values = pd.Series(values).fillna(np.nan).values
         # assume the data is categorical
         #mapping = {category: tuple(rgba) for category, rgba in zip(values, color_values)}
         unique_values = list(set(values))

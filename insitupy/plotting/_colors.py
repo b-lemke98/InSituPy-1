@@ -85,7 +85,6 @@ def _determine_climits(
     else:
         color_values_for_calc = color_values
     try:
-        print(color_values_for_calc)
         upper_climit = np.percentile(color_values_for_calc, upper_climit_pct)
     except IndexError:
         # if there were no color values above zero, a IndexError appears

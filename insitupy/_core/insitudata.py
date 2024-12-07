@@ -1179,6 +1179,9 @@ class InSituData:
             shutil.make_archive(path, 'zip', path, verbose=False)
             shutil.rmtree(path) # delete directory
 
+        # change path to the new one
+        self.path = path.resolve()
+
         print("Saved.") if verbose else None
 
     def save(self,
@@ -1744,7 +1747,7 @@ class InSituData:
                             self.regions.add_data(data=geom_df,
                                                   key=annot_key,
                                                   verbose=True,
-                                                  #scale_factor=scale
+                                                  scale_factor=scale[0]
                                                   )
                         else:
                             if not hasattr(self, "annotations"):
@@ -2208,10 +2211,11 @@ def calc_distance_of_cells_from(
     class_df = annot_df[annot_df["name"] == annotation_class]
 
     # calculate distance of cells to their closest point
-    scaled_geometries = [
-        scale_func(geometry, xfact=scale[0], yfact=scale[1], origin=(0,0))
-        for geometry, scale in zip(class_df["geometry"], class_df["scale"])
-        ]
+    # scaled_geometries = [
+    #     scale_func(geometry, xfact=scale[0], yfact=scale[1], origin=(0,0))
+    #     for geometry, scale in zip(class_df["geometry"], class_df["scale"])
+    #     ]
+    scaled_geometries = class_df["geometry"].tolist()
     dists = np.array([cells.distance(geometry) for geometry in scaled_geometries])
     min_dists = dists.min(axis=0)
 
