@@ -767,7 +767,7 @@ class InSituData:
     def import_annotations(self,
                            files: Optional[Union[str, os.PathLike, Path]],
                            keys: Optional[str],
-                           pixel_size: Number # µm/pixel - used to convert the pixel coordinates into µm coordinates
+                           scale_factor: Number # µm/pixel - can be used to convert the pixel coordinates into µm coordinates
                            ):
         '''
 
@@ -777,7 +777,6 @@ class InSituData:
         # add annotations object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        #pixel_size = self.metadata["xenium"]['pixel_size']
 
         if not hasattr(self, "annotations"):
             self.annotations = AnnotationsData()
@@ -786,12 +785,8 @@ class InSituData:
             # read annotation and store in dictionary
             self.annotations.add_data(data=file,
                                       key=key,
-                                      scale_factor=pixel_size
+                                      scale_factor=scale_factor
                                       )
-
-        # # check if anything really added to annotations and if not, remove it again
-        # if len(self.annotations.metadata) == 0:
-        #     self.remove_modality("annotations")
 
         self._remove_empty_modalities()
 
@@ -806,7 +801,7 @@ class InSituData:
     def import_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]],
                     keys: Optional[str],
-                    pixel_size: Number # µm/pixel - used to convert the pixel coordinates into µm coordinates
+                    scale_factor: Number # µm/pixel - used to convert the pixel coordinates into µm coordinates
                     ):
         print("Importing regions...", flush=True)
 
@@ -822,7 +817,7 @@ class InSituData:
             # read annotation and store in dictionary
             self.regions.add_data(data=file,
                                 key=key,
-                                scale_factor=pixel_size
+                                scale_factor=scale_factor
                                 )
 
         self._remove_empty_modalities()
