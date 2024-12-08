@@ -2021,6 +2021,12 @@ class InSituData:
                 table_types["table"] = "tables"
                 shape_type["cell_circles"] = "shapes"
 
+            if hasattr(xd, "alt"):
+                for key in xd.alt.keys():
+                    if hasattr(xd.alt[key], "matrix"):
+                        adata, circles = transform_anndata(xd.alt[key].matrix.copy())
+                        tables[key] = TableModel.parse(adata)
+
             if hasattr(xd, "annotations"):
                 for key in xd.annotations.metadata.keys():
                     gdf = ShapesModel.parse(xd.annotations.get(key), transformations={"global": Identity()})
