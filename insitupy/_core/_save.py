@@ -1,32 +1,31 @@
-import shutil
+import os
+from numbers import Number
 from os.path import relpath
 from pathlib import Path
+from typing import Optional, Union
 
-import zarr
 from parse import *
 
 from insitupy import __version__
+from insitupy._core.dataclasses import ImageData
 from insitupy.utils.utils import _generate_time_based_uid
 
-from ..image.io import write_ome_tiff
-from ..utils.geo import write_qupath_geojson
-from ..utils.io import write_dict_to_json
-from ._checks import check_zip
 
-
-def _save_images(imagedata,
-                 path,
-                 metadata,
-                 images_as_zarr,
-                 zipped
+def _save_images(imagedata: ImageData,
+                 path: Union[str ,os.PathLike],
+                 metadata: Optional[dict] = None,
+                 images_as_zarr: bool = True,
+                 zipped: bool = False,
+                 max_resolution: Optional[Number] = None # in µm per pixel
                  ):
     img_path = (path / "images")
 
     savepaths = imagedata.save(
-        path=img_path,
+        output_folder=img_path,
         as_zarr=images_as_zarr,
         zipped=zipped,
-        return_savepaths=True
+        return_savepaths=True,
+        max_resolution=max_resolution
         )
 
     if metadata is not None:

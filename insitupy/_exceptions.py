@@ -18,9 +18,9 @@ class ModuleNotFoundOnWindows(ModuleNotFoundError):
                        "This package could be problematic to install on Windows."
         super().__init__(self.message)
 
-class XeniumDataRepeatedCropError(Exception):
+class InSituDataRepeatedCropError(Exception):
     """Exception raised if it is attempted to crop a
-    XeniumData object multiple times with the same cropping window.
+    InSituData object multiple times with the same cropping window.
 
     Args:
         xlim:
@@ -32,13 +32,13 @@ class XeniumDataRepeatedCropError(Exception):
     def __init__(self, xlim, ylim):
         self.xlim = xlim
         self.ylim = ylim
-        self.message = f"\nXeniumData object has been cropped with the same limits before:\n" \
+        self.message = f"\nInSituData object has been cropped with the same limits before:\n" \
             f"xlim -> {xlim}\n" \
             f"ylim -> {ylim}"
         super().__init__(self.message)
 
-class XeniumDataMissingObject(Exception):
-    """Exception raised if a certain object is not available in the XeniumData object.
+class InSituDataMissingObject(Exception):
+    """Exception raised if a certain object is not available in the InSituData object.
     Maybe it has to be read first
 
     Args:
@@ -48,7 +48,7 @@ class XeniumDataMissingObject(Exception):
 
     def __init__(self, name):
         self.name = name
-        self.message = f"\nXeniumData object does not contain object `{name}`.\n" \
+        self.message = f"\nInSituData object does not contain object `{name}`.\n" \
             f"Consider running `.read_{name}()` first."
         super().__init__(self.message)
 
@@ -110,7 +110,7 @@ class NotEnoughFeatureMatchesError(Exception):
         super().__init__(self.message)
 
 class ModalityNotFoundError(Exception):
-    """Exception raised if a certain modality is not found by XeniumData read modules.
+    """Exception raised if a certain modality is not found by InSituData read modules.
 
     Args:
         modality:
@@ -129,6 +129,7 @@ class InvalidFileTypeError(Exception):
                  received_type: Type,
                  message: Optional[str] = None
                  ):
+        # allowed_types = [allowed_types] if isinstance(allowed_types, str) else list(allowed_types)
         allowed_types = convert_to_list(allowed_types)
         allowed_types = [str(elem) for elem in allowed_types]
         received_type = str(received_type)
@@ -143,6 +144,7 @@ class InvalidDataTypeError(Exception):
                  received_type: Type,
                  message: Optional[str] = None
                  ):
+        # allowed_types = [allowed_types] if isinstance(allowed_types, str) else list(allowed_types)
         allowed_types = convert_to_list(allowed_types)
         allowed_types = [str(elem) for elem in allowed_types]
         received_type = str(received_type)

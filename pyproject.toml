@@ -1,15 +1,16 @@
 [tool.poetry]
 name = "insitupy"
-version = "1.4.0" # <<COOKIETEMPLE_FORCE_BUMP>>
-description = "Package introducing the XeniumData structure to read an analyze Xenium in situ data in a structured manner."
+version = "v0.3.0" # <<COOKIETEMPLE_FORCE_BUMP>>
+description = "Package introducing the InSituPy framework to comprehensively analyze In Situ Sequencing data."
 license = "BSD-3-Clause"
 authors = ["jwrth <j.wirth@tum.de>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 # mandatory dependencies
-python = "3.9"
-scanpy = "1.9.5"
+python = "^3.9.18"
+scanpy = "1.10.3" #"1.9.5"
+numpy = "1.26.4"
 dask-image = "2023.8.1"
 parse = "1.19.1"
 dask = {extras = ["diagnostics"], version = "2023.9.2"}
@@ -32,6 +33,9 @@ loompy = "3.0.7"
 
 # optional dependencies
 napari = {extras = ["all"], version = "0.4.18", optional = true}
+scikit-misc = "0.3.1"
+adjusttext = "^1.2.0"
+toml = "^0.10.2"
 
 [tool.poetry.extras]
 napari = ["napari"]
