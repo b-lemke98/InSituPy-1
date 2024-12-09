@@ -1,12 +1,14 @@
 import math
 
+import numpy as np
+import pandas as pd
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
+from pandas.api.types import is_numeric_dtype
 
 import insitupy._core.config as config
 from insitupy import WITH_NAPARI
 from insitupy._constants import POINTS_SYMBOL
-from insitupy.plotting._colors import _data_to_rgba
 
 if WITH_NAPARI:
     import napari
@@ -76,7 +78,7 @@ def _update_continuous_legend(static_canvas, mapping, label):
     axes.set_axis_off()
     static_canvas.draw()  # Redraw the canvas
 
-def _update_colorbar():
+def _update_colorlegend():
 
     #layer = viewer.layers[-1]
 
@@ -93,17 +95,44 @@ def _update_colorbar():
 
     # get values
     values = layer.properties["value"]
+    color_values = layer.face_color
 
-    # create color mapping
-    rgba_list, mapping = _data_to_rgba(values, return_mapping=True)
 
-    if isinstance(mapping, dict):
-        _update_categorical_legend(static_canvas=config.static_canvas,
-                                   mapping=mapping, label=layer.name)
-    else:
+    from insitupy.plotting._colors import continuous_data_to_rgba
+    if is_numeric_dtype(values):
+        rgba_list, mapping = continuous_data_to_rgba(data=values,
+                                cmap=layer.face_colormap.name,
+                                #upper_climit_pct=upper_climit_pct,
+                                return_mapping=True
+                                )
+
         _update_continuous_legend(static_canvas=config.static_canvas,
                                   mapping=mapping,
                                   label=layer.name)
+
+    else:
+        # substitute pd.NA with np.nan
+        values = pd.Series(values).fillna(np.nan).values
+        # assume the data is categorical
+        #mapping = {category: tuple(rgba) for category, rgba in zip(values, color_values)}
+        unique_values = list(set(values))
+        mapping = {v: tuple(color_values[list(values).index(v)]) for v in unique_values}
+        # sort mapping dict
+        mapping = {elem: mapping[elem] for elem in sorted(mapping.keys())}
+
+        _update_categorical_legend(static_canvas=config.static_canvas,
+                                   mapping=mapping, label=layer.name)
+
+    # # create color mapping
+    # rgba_list, mapping = _data_to_rgba(values, return_mapping=True)
+
+    # if isinstance(mapping, dict):
+    #     _update_categorical_legend(static_canvas=config.static_canvas,
+    #                                mapping=mapping, label=layer.name)
+    # else:
+    #     _update_continuous_legend(static_canvas=config.static_canvas,
+    #                               mapping=mapping,
+    #                               label=layer.name)
 
 
 def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget):

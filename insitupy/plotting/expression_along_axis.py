@@ -521,6 +521,8 @@ def cell_expression_along_axis(
             # remove values axis from histogram
             axes[0, col].get_yaxis().set_visible(False)
             axes[0, col].spines['left'].set_visible(False)
+            axes[0, col].spines['right'].set_visible(False)
+            axes[0, col].spines['top'].set_visible(False)
 
         # set xlabel in the last row
         if row == num_rows:
@@ -593,11 +595,13 @@ def cell_expression_along_axis(
         # remove values axis from histogram
         axes[row, col+1].get_xaxis().set_visible(False)
         axes[row, col+1].spines['bottom'].set_visible(False)
+        axes[row, col+1].spines['right'].set_visible(False)
+        axes[row, col+1].spines['top'].set_visible(False)
 
         # Set labels
         #axes[row, col].set_ylabel(f"{gene} in '{cell_type}'")
         #axes[row, col].set_ylabel(f"{gene}")
-        axes[row, col].set_title(f"{gene}", y=0.95#pad=-2
+        axes[row, col].set_title(f"{gene}", y=1.0#pad=-2
                                  )
 
     plt.suptitle(f"Gene expression in '{cell_type}'")
@@ -806,7 +810,7 @@ def _bin_qc_plot(
     plt.tight_layout()
     plt.show()
 
-def cell_abundance_along_obs_val(
+def cell_abundance_along_axis(
     adata: AnnData,
     axis: Union[str, Tuple[str, str]],
     groupby: Optional[str] = None,

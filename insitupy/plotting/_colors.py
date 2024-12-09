@@ -6,9 +6,10 @@ import numpy as np
 import pandas as pd
 from matplotlib import cm
 from matplotlib.colors import ListedColormap
-from pandas.api.types import is_numeric_dtype
+from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
-from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
+from insitupy._constants import (DEFAULT_CATEGORICAL_CMAP,
+                                 DEFAULT_CONTINUOUS_CMAP)
 from insitupy.palettes import CustomPalettes
 
 
@@ -97,13 +98,13 @@ def _determine_climits(
 def continuous_data_to_rgba(
     data,
     cmap: Union[str, ListedColormap],
-    upper_climit_pct: int = 95,
+    upper_climit_pct: int = 99,
     lower_climit: Optional[int] = None,
     clip = False,
     nan_val: tuple = (1,1,1,0),
     return_mapping: bool = False
     ):
-    if np.any(np.isnan(data)):
+    if np.any(pd.isna(data)):
         contains_nans = True
         # Convert the numpy array to a pandas Series
         value_series = pd.Series(data)
@@ -148,19 +149,29 @@ def continuous_data_to_rgba(
 
 def _data_to_rgba(
     data,
-    continuous_cmap: Union[str, ListedColormap] = "viridis",
+    continuous_cmap: Union[str, ListedColormap] = DEFAULT_CONTINUOUS_CMAP,
     categorical_cmap: Union[str, ListedColormap] = None,
     upper_climit_pct: int = 99,
-    return_mapping: bool = False,
+    #return_all: bool = False,
     nan_val: tuple = (1,1,1,0),
     ):
-    if is_numeric_dtype(data):
-        return continuous_data_to_rgba(data=data, cmap=continuous_cmap, upper_climit_pct=upper_climit_pct, return_mapping=return_mapping)
-    else:
+    if not is_numeric_dtype(data) or is_bool_dtype(data):
+        if is_bool_dtype(data):
+            # in case of boolean data it is important to convert it to object type
+            # also pandas NAs have to be substituted with numpy NaNs
+            data = data.astype('object').replace({pd.NA: np.nan})
         if categorical_cmap is None:
             # pal = CustomPalettes()
             # categorical_cmap = pal.tab20_mod
             categorical_cmap = DEFAULT_CATEGORICAL_CMAP
-        return categorical_data_to_rgba(data=data, cmap=categorical_cmap,
-                                        return_mapping=return_mapping,
+        rgba_list, mapping = categorical_data_to_rgba(data=data, cmap=categorical_cmap,
+                                        return_mapping=True,
                                         nan_val=nan_val)
+        cmap = categorical_cmap
+    else:
+        rgba_list, mapping = continuous_data_to_rgba(data=data, cmap=continuous_cmap,
+                                       upper_climit_pct=upper_climit_pct,
+                                       return_mapping=True)
+        cmap = continuous_cmap
+
+    return rgba_list, mapping, cmap

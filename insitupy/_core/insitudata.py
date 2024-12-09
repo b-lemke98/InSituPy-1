@@ -50,9 +50,9 @@ from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
 from insitupy.utils.utils import convert_to_list, get_nrows_maxcols
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
-from .._exceptions import (ModalityNotFoundError, NotOneElementError,
-                           WrongNapariLayerTypeError, XeniumDataMissingObject,
-                           XeniumDataRepeatedCropError)
+from .._exceptions import (InSituDataMissingObject,
+                           InSituDataRepeatedCropError, ModalityNotFoundError,
+                           NotOneElementError, WrongNapariLayerTypeError)
 from ..images.utils import create_img_pyramid
 from ..io.files import check_overwrite_and_remove_if_true, read_json
 from ..plotting import expr_along_obs_val
@@ -247,15 +247,17 @@ class InSituData:
             # iterate through names
             for n in geom_names:
                 polygons = geom_df[geom_df["name"] == n]["geometry"].tolist()
-                scales = geom_df[geom_df["name"] == n]["scale"].tolist()
+                #scales = geom_df[geom_df["name"] == n]["scale"].tolist()
 
-                in_poly = []
-                for poly, scale in zip(polygons, scales):
-                    # scale the polygon
-                    poly = scale_func(poly, xfact=scale[0], yfact=scale[1], origin=(0,0))
+                # in_poly = []
+                # for poly, scale in zip(polygons, scales):
+                #     # scale the polygon
+                #     poly = scale_func(poly, xfact=scale[0], yfact=scale[1], origin=(0,0))
 
-                    # check if which of the points are inside the current annotation polygon
-                    in_poly.append(poly.contains(cells))
+                #     # check if which of the points are inside the current annotation polygon
+                #     in_poly.append(poly.contains(cells))
+
+                in_poly = [poly.contains(cells) for poly in polygons]
 
                 # check if points were in any of the polygons
                 in_poly_res = np.array(in_poly).any(axis=0)
@@ -353,7 +355,7 @@ class InSituData:
 
     def copy(self):
         '''
-        Function to generate a deep copy of the XeniumData object.
+        Function to generate a deep copy of the InSituData object.
         '''
         from copy import deepcopy
         had_viewer = False
@@ -376,17 +378,16 @@ class InSituData:
 
     def crop(self,
              region_tuple: Optional[Tuple[str, str]] = None,
-             layer_name: Optional[str] = None,
              xlim: Optional[Tuple[int, int]] = None,
              ylim: Optional[Tuple[int, int]] = None,
              inplace: bool = False
+             #layer_name: Optional[str] = None,
             ):
         """
         Crop the data based on the provided parameters.
 
         Args:
             region_tuple (Optional[Tuple[str, str]]): A tuple specifying the region to crop.
-            layer_name (Optional[str]): The name of the layer to use for cropping.
             xlim (Optional[Tuple[int, int]]): The x-axis limits for cropping.
             ylim (Optional[Tuple[int, int]]): The y-axis limits for cropping.
             inplace (bool): If True, modify the data in place. Otherwise, return a new cropped data.
@@ -394,11 +395,13 @@ class InSituData:
         Raises:
             ValueError: If none of region_tuple, layer_name, or xlim/ylim are provided.
         """
-        if layer_name is None and region_tuple is None and (xlim is None or ylim is None):
-            raise ValueError("At least one of shape_layer, region_tuple, or xlim/ylim must be provided.")
+        # if layer_name is None and region_tuple is None and (xlim is None or ylim is None):
+        #     raise ValueError("At least one of shape_layer, region_tuple, or xlim/ylim must be provided.")
+        if region_tuple is None and (xlim is None or ylim is None):
+            raise ValueError("At least one of `region_tuple` or `xlim`/`ylim` must be provided.")
 
         # retrieve pixel size of data
-        pixel_size = self.metadata["xenium"]["pixel_size"]
+        #pixel_size = self.metadata["xenium"]["pixel_size"]
 
         if region_tuple is not None:
 
@@ -412,45 +415,45 @@ class InSituData:
 
             use_shape = True
 
-        elif layer_name is not None:
-            try:
-                # extract shape layer for cropping from napari viewer
-                layer = self.viewer.layers[layer_name]
-            except KeyError:
-                raise KeyError(f"Shape layer selected for cropping ('{layer_name}') was not found in layers.")
+        # elif layer_name is not None:
+        #     try:
+        #         # extract shape layer for cropping from napari viewer
+        #         layer = self.viewer.layers[layer_name]
+        #     except KeyError:
+        #         raise KeyError(f"Shape layer selected for cropping ('{layer_name}') was not found in layers.")
 
-            # check the type of the element
-            if not isinstance(layer, napari.layers.Shapes):
-                raise WrongNapariLayerTypeError(found=type(layer), wanted=napari.layers.Shapes)
+        #     # check the type of the element
+        #     if not isinstance(layer, napari.layers.Shapes):
+        #         raise WrongNapariLayerTypeError(found=type(layer), wanted=napari.layers.Shapes)
 
-            # make sure the layer contains only one element
-            if len(layer.data) != 1:
-                raise NotOneElementError(layer.data)
+        #     # make sure the layer contains only one element
+        #     if len(layer.data) != 1:
+        #         raise NotOneElementError(layer.data)
 
-            # select the shape from list
-            crop_window = layer.data[0].copy()
-            # crop_window *= pixel_size
-            shape_type = layer.shape_type[0]
+        #     # select the shape from list
+        #     crop_window = layer.data[0].copy()
+        #     # crop_window *= pixel_size
+        #     shape_type = layer.shape_type[0]
 
-            geometry = convert_napari_shape_to_polygon_or_line(
-                napari_shape_data=crop_window,
-                shape_type=shape_type
-                )
+        #     geometry = convert_napari_shape_to_polygon_or_line(
+        #         napari_shape_data=crop_window,
+        #         shape_type=shape_type
+        #         )
 
-            use_shape = True
+        #     use_shape = True
 
         else:
             # if xlim or ylim is not none, assert that both are not None
-            if xlim is not None or ylim is not None:
-                assert np.all([elem is not None for elem in [xlim, ylim]])
-                use_shape = False
+            #if xlim is not None or ylim is not None:
+            assert np.all([elem is not None for elem in [xlim, ylim]]), "If `region_tuple` is None, both `xlim` and `ylim` need to be set instead."
+            use_shape = False
 
         # # assert that either shape_layer is given or xlim/ylim
         # assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
 
         if use_shape:
             # convert to metric unit (normally µm)
-            geometry = scale_func(geometry, xfact=pixel_size, yfact=pixel_size, origin=(0,0))
+            #geometry = scale_func(geometry, xfact=pixel_size, yfact=pixel_size, origin=(0,0))
 
             # extract x and y limits from the geometry
             bounding_box = geometry.bounds # (minx, miny, maxx, maxy)
@@ -474,7 +477,7 @@ class InSituData:
         if np.all([elem in _self.metadata["xenium"].keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
             # test whether the limits are identical
             if (xlim == _self.metadata["xenium"]["cropping_xlim"]) & (ylim == _self.metadata["xenium"]["cropping_ylim"]):
-                raise XeniumDataRepeatedCropError(xlim, ylim)
+                raise InSituDataRepeatedCropError(xlim, ylim)
 
         try:
             # infer mask from cell coordinates
@@ -539,14 +542,18 @@ class InSituData:
         if hasattr(_self, "annotations"):
 
             _self.annotations.crop(
-                xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
-                ylim=tuple([elem / pixel_size for elem in ylim])
+                xlim=tuple([elem for elem in xlim]),
+                ylim=tuple([elem for elem in ylim])
+                # xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
+                # ylim=tuple([elem / pixel_size for elem in ylim])
                 )
 
         if hasattr(_self, "regions"):
             _self.regions.crop(
-                xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
-                ylim=tuple([elem / pixel_size for elem in ylim])
+                xlim=tuple([elem for elem in xlim]),
+                ylim=tuple([elem for elem in ylim])
+                # xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
+                # ylim=tuple([elem / pixel_size for elem in ylim])
             )
 
         # add information about cropping to metadata
@@ -727,7 +734,7 @@ class InSituData:
                                     right_index=True
                                     )
 
-                # add resulting dataframe to XeniumData
+                # add resulting dataframe to InSituData
                 setattr(self, trans_attr_name, trans_attr)
 
 
@@ -787,14 +794,17 @@ class InSituData:
 
     def import_annotations(self,
                            files: Optional[Union[str, os.PathLike, Path]],
-                           keys: Optional[str]
+                           keys: Optional[str],
+                           scale_factor: Number # µm/pixel - can be used to convert the pixel coordinates into µm coordinates
                            ):
+        '''
+
+        '''
         print("Importing annotations...", flush=True)
 
         # add annotations object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        pixel_size = self.metadata["xenium"]['pixel_size']
 
         if not hasattr(self, "annotations"):
             self.annotations = AnnotationsData()
@@ -803,12 +813,8 @@ class InSituData:
             # read annotation and store in dictionary
             self.annotations.add_data(data=file,
                                       key=key,
-                                      scale_factor=(pixel_size, pixel_size)
+                                      scale_factor=scale_factor
                                       )
-
-        # # check if anything really added to annotations and if not, remove it again
-        # if len(self.annotations.metadata) == 0:
-        #     self.remove_modality("annotations")
 
         self._remove_empty_modalities()
 
@@ -822,14 +828,15 @@ class InSituData:
 
     def import_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]],
-                    keys: Optional[str]
+                    keys: Optional[str],
+                    scale_factor: Number # µm/pixel - used to convert the pixel coordinates into µm coordinates
                     ):
         print("Importing regions...", flush=True)
 
         # add regions object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        pixel_size = self.metadata["xenium"]['pixel_size']
+        #pixel_size = self.metadata["xenium"]['pixel_size']
 
         if not hasattr(self, "regions"):
             self.regions = RegionsData()
@@ -838,7 +845,7 @@ class InSituData:
             # read annotation and store in dictionary
             self.regions.add_data(data=file,
                                 key=key,
-                                scale_factor=(pixel_size, pixel_size),
+                                scale_factor=scale_factor
                                 )
 
         self._remove_empty_modalities()
@@ -887,13 +894,14 @@ class InSituData:
     def load_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
                     nuclei_type: Literal["focus", "mip", ""] = "mip",
-                    load_cell_segmentation_images: bool = True
+                    load_cell_segmentation_images: bool = True,
+                    reload: bool = False
                     ):
         # load image into ImageData object
         print("Loading images...", flush=True)
 
         if self.from_insitudata:
-            # check if matrix data is stored in this XeniumData
+            # check if matrix data is stored in this InSituData
             if "images" not in self.metadata["data"]:
                 raise ModalityNotFoundError(modality="images")
 
@@ -901,8 +909,6 @@ class InSituData:
                 img_names = list(self.metadata["data"]["images"].keys())
             else:
                 img_names = convert_to_list(names)
-
-            print(img_names)
 
             # get file paths and names
             img_files = [v for k,v in self.metadata["data"]["images"].items() if k in img_names]
@@ -963,13 +969,18 @@ class InSituData:
 
         # create imageData object
         img_paths = [self.path / elem for elem in img_files]
-        self.images = ImageData(img_paths, img_names, pixel_size=self.metadata["xenium"]['pixel_size'])
+
+        if not hasattr(self, "images"):
+            self.images = ImageData(img_paths, img_names)
+        else:
+            for im, n in zip(img_paths, img_names):
+                self.images.add_image(im, n, overwrite=reload)
 
     def load_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
                         ):
         if self.from_insitudata:
-            # check if matrix data is stored in this XeniumData
+            # check if matrix data is stored in this InSituData
             if "transcripts" not in self.metadata["data"]:
                 raise ModalityNotFoundError(modality="transcripts")
 
@@ -1059,10 +1070,11 @@ class InSituData:
             zip_output: bool = False,
             images_as_zarr: bool = True,
             zarr_zipped: bool = False,
+            images_max_resolution: Optional[Number] = None, # in µm per pixel
             verbose: bool = True
             ):
         '''
-        Function to save the XeniumData object.
+        Function to save the InSituData object.
 
         Args:
             path: Path to save the data to.
@@ -1089,6 +1101,8 @@ class InSituData:
         # clean old entries in data metadata
         self.metadata["data"] = {}
 
+        #pixel_size = self.metadata['xenium']['pixel_size']
+
         # save images
         try:
             images = self.images
@@ -1100,8 +1114,16 @@ class InSituData:
                 path=path,
                 metadata=self.metadata,
                 images_as_zarr=images_as_zarr,
-                zipped=zarr_zipped
+                zipped=zarr_zipped,
+                max_resolution=images_max_resolution
                 )
+
+            # if images_max_resolution is not None:
+            #     if images_max_resolution <= pixel_size:
+            #         warn(f"`max_pixel_size` ({images_max_resolution}) smaller than `pixel_size` ({pixel_size}). Skipped resizing.")
+            #         pass
+            #     else:
+            #         self.metadata['xenium']['pixel_size'] = images_max_resolution
 
         # save cells
         try:
@@ -1179,6 +1201,9 @@ class InSituData:
         if zip_output:
             shutil.make_archive(path, 'zip', path, verbose=False)
             shutil.rmtree(path) # delete directory
+
+        # change path to the new one
+        self.path = path.resolve()
 
         print("Saved.") if verbose else None
 
@@ -1421,32 +1446,36 @@ class InSituData:
         # annotation_keys: Optional[str] = None,
         point_size: int = 6,
         scalebar: bool = True,
-        pixel_size: float = None, # if none, extract from metadata
+        #pixel_size: float = None, # if none, extract from metadata
         unit: str = "µm",
         # cmap_annotations: str ="Dark2",
         grayscale_colormap: List[str] = ["red", "green", "cyan", "magenta", "yellow", "gray"],
         return_viewer: bool = False,
         widgets_max_width: int = 500
         ):
-        # get information about pixel size
-        if (pixel_size is None) & (scalebar):
-            # extract pixel_size
-            pixel_size = float(self.metadata["xenium"]["pixel_size"])
-        else:
-            pixel_size = 1
+        # # get information about pixel size
+        # if (pixel_size is None) & (scalebar):
+        #     # extract pixel_size
+        #     pixel_size = float(self.metadata["xenium"]["pixel_size"])
+        # else:
+        #     pixel_size = 1
 
         # create viewer
         self.viewer = napari.Viewer(title=f"{self.slide_id}: {self.sample_id}")
 
         try:
-            image_keys = self.images.metadata.keys()
+            #image_keys = self.images.metadata.keys()
+            images_attr = self.images
         except AttributeError:
             warn("No attribute `.images` found.")
         else:
+            n_images = len(images_attr.metadata)
             n_grayscales = 0 # number of grayscale images
-            for i, img_name in enumerate(image_keys):
-                img = getattr(self.images, img_name)
-                is_visible = False if i < len(image_keys) - 1 else True # only last image is set visible
+            for i, (img_name, img_metadata) in enumerate(images_attr.metadata.items()):
+            #for i, img_name in enumerate(image_keys):
+                img = getattr(images_attr, img_name)
+                is_visible = False if i < n_images - 1 else True # only last image is set visible
+                pixel_size = img_metadata['pixel_size']
 
                 # check if the current image is RGB
                 is_rgb = self.images.metadata[img_name]["rgb"]
@@ -1487,7 +1516,7 @@ class InSituData:
             try:
                 cells = self.cells
             except AttributeError:
-                raise XeniumDataMissingObject("cells")
+                raise InSituDataMissingObject("cells")
             else:
                 # convert keys to list
                 keys = convert_to_list(keys)
@@ -1550,7 +1579,7 @@ class InSituData:
 
             if show_points_widget is not None:
                 self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right")
-                show_points_widget.max_height = 130
+                show_points_widget.max_height = 150
                 show_points_widget.max_width = widgets_max_width
 
             if show_boundaries_widget is not None:
@@ -1644,7 +1673,7 @@ class InSituData:
                          ):
         """
         Extracts geometric layers from shapes and points layers in the napari viewer
-        and stores them in the XeniumData object as annotations or regions.
+        and stores them in the InSituData object as annotations or regions.
 
         Args:
             name_pattern (str): A format string used to parse the layer names.
@@ -1663,7 +1692,7 @@ class InSituData:
             - It extracts the geometric data, colors, and other relevant properties
             to create a GeoDataFrame.
             - The GeoDataFrame is then added to the annotations or regions of the
-            XeniumData object based on the type of layer.
+            InSituData object based on the type of layer.
             - If the layer is classified as a region but is a point layer, a warning
             is issued, and the layer is skipped.
         """
@@ -1683,7 +1712,7 @@ class InSituData:
                     annot_key = name_parsed.named["annot_key"]
                     class_name = name_parsed.named["class_name"]
 
-                    # if the XeniumData object does not has an annotations attribute, initialize it
+                    # if the InSituData object does not has an annotations attribute, initialize it
                     if not hasattr(self, "annotations"):
                         self.annotations = AnnotationsData() # initialize empty object
 
@@ -1741,7 +1770,8 @@ class InSituData:
                             self.regions.add_data(data=geom_df,
                                                   key=annot_key,
                                                   verbose=True,
-                                                  scale_factor=scale)
+                                                  scale_factor=scale[0]
+                                                  )
                         else:
                             if not hasattr(self, "annotations"):
                                 self.annotations = AnnotationsData()
@@ -1750,7 +1780,8 @@ class InSituData:
                             self.annotations.add_data(data=geom_df,
                                                       key=annot_key,
                                                       verbose=True,
-                                                      scale_factor=scale)
+                                                      scale_factor=scale[0]
+                                                      )
 
             else:
                 pass
@@ -1914,7 +1945,7 @@ def register_images(
     min_good_matches: int = 20
     ):
     '''
-    Register images stored in XeniumData object.
+    Register images stored in InSituData object.
     '''
 
     # if image type is IF, the channel name for registration needs to be given
@@ -1963,7 +1994,7 @@ def register_images(
     if len(image.shape) == 4:
         image = image[0]
 
-    # read images in XeniumData object
+    # read images in InSituData object
     data.load_images(names=template_image_name, load_cell_segmentation_images=False)
     template = data.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
 
@@ -2203,10 +2234,11 @@ def calc_distance_of_cells_from(
     class_df = annot_df[annot_df["name"] == annotation_class]
 
     # calculate distance of cells to their closest point
-    scaled_geometries = [
-        scale_func(geometry, xfact=scale[0], yfact=scale[1], origin=(0,0))
-        for geometry, scale in zip(class_df["geometry"], class_df["scale"])
-        ]
+    # scaled_geometries = [
+    #     scale_func(geometry, xfact=scale[0], yfact=scale[1], origin=(0,0))
+    #     for geometry, scale in zip(class_df["geometry"], class_df["scale"])
+    #     ]
+    scaled_geometries = class_df["geometry"].tolist()
     dists = np.array([cells.distance(geometry) for geometry in scaled_geometries])
     min_dists = dists.min(axis=0)
 

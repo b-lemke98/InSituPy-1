@@ -255,6 +255,7 @@ class InSituExperiment:
             savepath: Union[str, os.PathLike, Path] = None,
             save_only: bool = False,
             dpi_save: int = 300,
+            **kwargs
             ):
         """
         Wrapper function for performing differential gene expression analysis within an `InSituExperiment` object.
@@ -343,6 +344,7 @@ class InSituExperiment:
             savepath = savepath,
             save_only = save_only,
             dpi_save = dpi_save,
+            **kwargs
         )
         if not plot_volcano:
             return dge_res
@@ -418,7 +420,7 @@ class InSituExperiment:
         """Create a plot with UMAPs of all datasets as subplots using scanpy's pl.umap function.
 
         Args:
-            color (str or list of str, optional): Keys for annotations of observations/cells or variables/genes to color the plot. Defaults to None.
+            color (str, optional): Keys for annotations of observations/cells or variables/genes to color the plot. Defaults to None.
             title_columns (str or list of str, optional): List of column names from metadata to use for subplot titles. Defaults to None.
             max_cols (int, optional): Maximum number of columns for subplots. Defaults to 4.
             **kwargs: Additional keyword arguments to pass to sc.pl.umap.
@@ -432,6 +434,8 @@ class InSituExperiment:
         num_datasets = len(self._data)
         n_plots, n_rows, max_cols = get_nrows_maxcols(len(self._data), max_cols)
         fig, axes = plt.subplots(n_rows, max_cols, figsize=(figsize[0]*max_cols, figsize[1]*n_rows))
+        if n_plots > 1:
+            axes = axes.ravel()
 
         # make sure title_columns is a list
         if title_columns is not None:
@@ -448,7 +452,6 @@ class InSituExperiment:
                 ax.set_title(title, fontdict={"fontsize": title_size})
             else:
                 ax.set_title(f"Dataset {idx + 1}", fontdict={"fontsize": title_size})
-
 
         remove_empty_subplots(
             axes, n_plots, n_rows, max_cols
@@ -678,7 +681,7 @@ class InSituExperiment:
 
     def saveas(self, path: Union[str, os.PathLike, Path],
                overwrite: bool = False,
-               verbose: bool = False):
+               verbose: bool = False, **kwargs):
         """Save all datasets to a specified folder.
 
         Args:
@@ -695,7 +698,7 @@ class InSituExperiment:
         # Iterate over the datasets and save each one in a numbered subfolder
         for index, dataset in enumerate(self._data):
             subfolder_path = path / f"data-{str(index).zfill(3)}"
-            dataset.saveas(subfolder_path, verbose=False)
+            dataset.saveas(subfolder_path, verbose=False, **kwargs)
 
         # Optionally, save the metadata as a CSV file
         metadata_path = os.path.join(path, "metadata.csv")

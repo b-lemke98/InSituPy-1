@@ -54,7 +54,7 @@ def _read_matrix_from_xenium(path) -> AnnData:
 
 def _read_boundaries_from_xenium(
     path: Union[str, os.PathLike, Path],
-    pixel_size: Number = 1,
+    pixel_size: Number,
     mode: Literal["dataframe", "mask"] = "mask"
     ) -> BoundariesData:
     # # read boundaries data
