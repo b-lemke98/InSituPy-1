@@ -2610,3 +2610,133 @@ def differential_gene_expression(
             "results": df,
             "params": adata_combined.uns["rank_genes_groups"]["params"]
         }
+
+
+def load_fromspatialdata(spatialdata_path, pixel_size):
+
+    import os
+    import pandas as pd
+    import zarr
+    from pathlib import Path
+    from anndata import read_zarr
+    from insitupy._core.dataclasses import CellData, ImageData, BoundariesData
+    from dask.dataframe import read_parquet
+    import numpy as np
+    from ome_zarr.io import ZarrLocation
+    from ome_zarr.reader import Label, Multiscales, Reader
+    from dask.array import transpose
+
+
+    def read_helper_images_labels(f_elem_store, type):
+        nodes = []
+        image_loc = ZarrLocation(f_elem_store)
+        if image_loc.exists():
+            image_reader = Reader(image_loc)()
+            image_nodes = list(image_reader)
+            if len(image_nodes):
+                for node in image_nodes:
+                    if np.any([isinstance(spec, Multiscales) for spec in node.specs]) and (
+                        type == "image"
+                        and np.all([not isinstance(spec, Label) for spec in node.specs])
+                        or type == "labels"
+                        and np.any([isinstance(spec, Label) for spec in node.specs])
+                    ):
+                        nodes.append(node)
+        assert len(nodes) == 1
+        node = nodes[0]
+        datasets = node.load(Multiscales).datasets
+        multiscales = node.load(Multiscales).zarr.root_attrs["multiscales"]
+        axes = [i["name"] for i in node.metadata["axes"]]
+        assert len(multiscales) == 1
+        if len(datasets) >= 1:
+            multiscale_image = []
+            for _, d in enumerate(datasets):
+                data = node.load(Multiscales).array(resolution=d, version=None)
+                if data.shape[0] == 1:
+                    data = data.reshape(data.shape[1:])
+                    axes = axes[1:]
+                elif data.shape[0] == 3:
+                    data = transpose(data, (1, 2, 0))
+                multiscale_image.append(data)
+            return multiscale_image, axes
+
+    xd = InSituData(Path("./data1"), {"metadata_file": "meta.txt", "xenium":{"pixel_size": pixel_size}}, "", "", "")
+    path = Path(spatialdata_path)
+    f = zarr.open(path, mode="r")
+
+
+    if "labels" in f:
+        group = f["labels"]
+        boundaries_dict = {}
+        for name in group:
+            if Path(name).name.startswith("."):
+                continue
+            f_elem = group[name]
+            f_elem_store = os.path.join(f.store.path, f_elem.path)
+            image, axes = read_helper_images_labels(f_elem_store, "labels")
+            boundaries_dict[name] = image[0]
+        bd = BoundariesData(None, None)
+        bd.add_boundaries(boundaries_dict, pixel_size=pixel_size)
+
+    if "tables" in f:
+        group = f["tables"]
+        i = 0
+        for name in group:
+            f_elem = group[name]
+            f_elem_store = os.path.join(f.store.path, f_elem.path)
+            cdata = CellData(read_zarr(f_elem_store), bd)
+            if len(group) == 1 or i == 0:
+                setattr(xd, "cells", cdata)
+            else:
+                xd.add_alt(cdata, key_to_add=name)
+            i += 1
+
+    if "points" in f:
+        group = f["points"]
+        for name in group:
+            if name == "transcripts":
+                f_elem = group[name]
+                f_elem_store = os.path.join(f.store.path, f_elem.path)
+                points = read_parquet(f_elem_store)
+                pdf = points.compute()
+
+                # Rename columns to match the new structure
+                pdf = pdf.rename(columns={
+                    'x': 'x',
+                    'y': 'y',
+                    'z': 'z',
+                    'feature_name': 'gene',
+                    'qv': 'qv',
+                    'overlaps_nucleus': 'overlaps_nucleus',
+                    'cell_id': 'xenium',
+                    'transcript_id': 'transcript_id'
+                })
+
+                # Reorder columns to match the new structure
+                pdf = pdf[['x', 'y', 'z', 'gene', 'qv', 'overlaps_nucleus', 'xenium', 'transcript_id']]
+
+                # Set 'transcript_id' as the index
+                pdf = pdf.set_index('transcript_id')
+
+                # Set the MultiIndex for columns
+                pdf.columns = pd.MultiIndex.from_tuples([
+                    ('coordinates', 'x'),
+                    ('coordinates', 'y'),
+                    ('coordinates', 'z'),
+                    ('properties', 'gene'),
+                    ('properties', 'qv'),
+                    ('properties', 'overlaps_nucleus'),
+                    ('cell_id', 'xenium')
+                ])
+                setattr(xd, "transcripts", pdf)
+    if "images" in f:
+        group = f["images"]
+        setattr(xd, "images", ImageData())
+        for name in group:
+            if Path(name).name.startswith("."):
+                continue
+            f_elem = group[name]
+            f_elem_store = os.path.join(f.store.path, f_elem.path)
+            image, axes = read_helper_images_labels(f_elem_store, "image")
+            xd.images.add_image(image[0], name=name, axes=axes, pixel_size=pixel_size, ome_meta={'PhysicalSizeX': pixel_size})
+    return xd
