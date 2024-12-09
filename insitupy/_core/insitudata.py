@@ -195,11 +195,12 @@ class InSituData:
                           keys: Union[str, Literal["all"]] = "all",
                           add_masks: bool = False,
                           add_to_obs: bool = False,
-                          overwrite: bool = True
+                          overwrite: bool = True,
+                          alt_layer: str = None
                           ):
         '''
-        Function to assign the annotations to the anndata object in InSituData.matrix.
-        Annotation information is added to the DataFrame in `.obs`.
+        Function to assign geometries (annotations or regions) to the anndata object in
+        InSituData.cells.matrix. Assignment information is added to the DataFrame in `.obs`.
         '''
         # assert that prerequisites are met
         try:
@@ -207,10 +208,18 @@ class InSituData:
         except AttributeError:
             raise ModalityNotFoundError(modality=geometry_type)
 
-        try:
-            cell_attr = self.cells
-        except AttributeError:
-            raise ModalityNotFoundError("cells")
+        if alt_layer is None:
+            try:
+                cell_attr = self.cells
+                name = ".cells"
+            except AttributeError:
+                raise ModalityNotFoundError("cells")
+        else:
+            try:
+                cell_attr = self.alt[alt_layer]
+                name = f".alt[{alt_layer}]"
+            except AttributeError:
+                raise ModalityNotFoundError(f"alt[{alt_layer}]")
 
         if keys == "all":
             keys = geom_attr.metadata.keys()
@@ -268,36 +277,37 @@ class InSituData:
                 col_name = f"{geometry_type}-{key}"
                 data[col_name] = column_to_add
 
-                if col_name in self.cells.matrix.obs:
+                if col_name in cell_attr.matrix.obs:
                     if overwrite:
-                        self.cells.matrix.obs.drop(col_name, axis=1, inplace=True)
+                        cell_attr.matrix.obs.drop(col_name, axis=1, inplace=True)
                         print(f'Existing column "{col_name}" is overwritten.', flush=True)
                         add = True
                     else:
-                        warn(f'Column "{col_name}" exists already in `xd.cells.matrix.obs`. Assignment of key "{key}" was skipped. To force assignment, select `overwrite=True`.')
+                        warn(f'Column "{col_name}" exists already in `{name}.matrix.obs`. Assignment of key "{key}" was skipped. To force assignment, select `overwrite=True`.')
                         add = False
 
                 if add:
                     if add_masks:
-                        self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=data, left_index=True, right_index=True)
+                        cell_attr.matrix.obs = pd.merge(left=cell_attr.matrix.obs, right=data, left_index=True, right_index=True)
                     else:
-                        self.cells.matrix.obs = pd.merge(left=self.cells.matrix.obs, right=data.iloc[:, -1], left_index=True, right_index=True)
+                        cell_attr.matrix.obs = pd.merge(left=cell_attr.matrix.obs, right=data.iloc[:, -1], left_index=True, right_index=True)
 
                     # save that the current key was analyzed
                     geom_attr.metadata[key]["analyzed"] = tf.TICK
             else:
                 # add to obsm
-                obsm_keys = self.cells.matrix.obsm.keys()
+                obsm_keys = cell_attr.matrix.obsm.keys()
                 if geometry_type not in obsm_keys:
                     # add empty pandas dataframe with obs_names as index
-                    self.cells.matrix.obsm[geometry_type] = pd.DataFrame(index=self.cells.matrix.obs_names)
+                    cell_attr.matrix.obsm[geometry_type] = pd.DataFrame(index=cell_attr.matrix.obs_names)
 
-                self.cells.matrix.obsm[geometry_type][key] = column_to_add
+                cell_attr.matrix.obsm[geometry_type][key] = column_to_add
 
                 # save that the current key was analyzed
                 geom_attr.metadata[key]["analyzed"] = tf.TICK
 
-                print(f'Added results to `.cells.matrix.obsm["{geometry_type}"]', flush=True)
+                print(f"Added results to `{name}.matrix.obsm[{geometry_type}]", flush=True)
+
 
     def assign_annotations(
         self,
@@ -311,6 +321,15 @@ class InSituData:
             add_masks=add_masks,
             overwrite=overwrite
         )
+        if hasattr(self, "alt"):
+            for key in self.alt.keys():
+                self.assign_geometries(
+                    geometry_type="annotations",
+                    keys=keys,
+                    add_masks=add_masks,
+                    overwrite=overwrite,
+                    alt_layer=key
+                )
 
     def assign_regions(
         self,
@@ -324,6 +343,15 @@ class InSituData:
             add_masks=add_masks,
             overwrite=overwrite
         )
+        if hasattr(self, "alt"):
+            for key in self.alt.keys():
+                self.assign_geometries(
+                    geometry_type="regions",
+                    keys=keys,
+                    add_masks=add_masks,
+                    overwrite=overwrite,
+                    alt_layer=key
+                )
 
     def copy(self):
         '''
