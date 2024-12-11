@@ -43,7 +43,6 @@ from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_celldata, read_shapesdata)
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting import volcano_plot
-from insitupy.utils import create_deg_dataframe
 from insitupy.utils.deg import create_deg_dataframe
 from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
                                           reduce_dimensions_anndata)
