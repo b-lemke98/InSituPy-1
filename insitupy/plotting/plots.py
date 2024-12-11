@@ -74,7 +74,7 @@ def plot_colorlegend(
 
 
 
-def plot_cell_composition(
+def plot_cellular_composition(
     data,
     cell_type_col: str,
     key: str,
