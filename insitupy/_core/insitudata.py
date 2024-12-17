@@ -81,12 +81,11 @@ class InSituData:
     from ._deprecated import (read_all, read_annotations, read_cells,
                               read_images, read_regions, read_transcripts)
 
-    def __init__(self,
-                 path: Union[str, os.PathLike, Path],
-                 metadata: dict,
-                 slide_id: str,
-                 sample_id: str,
-                 from_insitudata: bool,
+    def __init__(path: Union[str, os.PathLike, Path] = None,
+                 metadata: dict = None,
+                 slide_id: str = None,
+                 sample_id: str = None,
+                 from_insitudata: bool = None,
                  ):
         """_summary_
 
@@ -98,97 +97,234 @@ class InSituData:
         Raises:
             FileNotFoundError: _description_
         """
-        self.path = path
-        self.metadata = metadata
-        self.slide_id = slide_id
-        self.sample_id = sample_id
-        self.from_insitudata = from_insitudata
+        self._path = path
+        self._metadata = metadata
+        self._slide_id = slide_id
+        self._sample_id = sample_id
+        self._from_insitudata = from_insitudata
+        self._images = None
+        self._cells = None
+        self._alt = None
+        self._annotations = None
+        self._transcripts = None
+        self._regions = None
+        self._viewer = None
+        self._quicksave_dir = None
 
     def __repr__(self):
         try:
-            method = self.metadata["method"]
+            method = self._metadata["method"]
         except KeyError:
             method = "unknown"
 
         repr = (
             f"{tf.Bold+tf.Red}InSituData{tf.ResetAll}\n"
             f"{tf.Bold}Method:{tf.ResetAll}\t\t{method}\n"
-            f"{tf.Bold}Slide ID:{tf.ResetAll}\t{self.slide_id}\n"
-            f"{tf.Bold}Sample ID:{tf.ResetAll}\t{self.sample_id}\n"
-            f"{tf.Bold}Path:{tf.ResetAll}\t\t{self.path.resolve()}\n"
+            f"{tf.Bold}Slide ID:{tf.ResetAll}\t{self._slide_id}\n"
+            f"{tf.Bold}Sample ID:{tf.ResetAll}\t{self._sample_id}\n"
+            f"{tf.Bold}Path:{tf.ResetAll}\t\t{self._path.resolve()}\n"
         )
 
-        mfile = self.metadata["metadata_file"]
+        mfile = self._metadata["metadata_file"]
 
         repr += f"{tf.Bold}Metadata file:{tf.ResetAll}\t{mfile}"
 
-        if hasattr(self, "images"):
-            images_repr = self.images.__repr__()
+        if self._images is not None:
+            images_repr = self._images.__repr__()
             repr = (
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + images_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
 
-        if hasattr(self, "cells"):
-            cells_repr = self.cells.__repr__()
+        if self._cells is not None:
+            cells_repr = self._cells.__repr__()
             repr = (
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} cells{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
 
-        if hasattr(self, "transcripts"):
-            trans_repr = f"DataFrame with shape {self.transcripts.shape[0]} x {self.transcripts.shape[1]}"
+        if self._transcripts is not None:
+            trans_repr = f"DataFrame with shape {self._transcripts.shape[0]} x {self._transcripts.shape[1]}"
 
             repr = (
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Purple+tf.Bold} transcripts{tf.ResetAll}\n{tf.SPACER}   " + trans_repr
             )
 
-        if hasattr(self, "annotations"):
-            annot_repr = self.annotations.__repr__()
+        if self._annotations is not None:
+            annot_repr = self._annotations.__repr__()
             repr = (
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + annot_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
 
-        if hasattr(self, "regions"):
-            region_repr = self.regions.__repr__()
+        if self._regions is not None:
+            region_repr = self._regions.__repr__()
             repr = (
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + region_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
 
-        if hasattr(self, "alt"):
-            cells_repr = self.alt.__repr__()
-            altseg_keys = self.alt.keys()
+        if self._alt is not None:
+            cells_repr = self._alt.__repr__()
+            altseg_keys = self._alt.keys()
             repr = (
                 #repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n"
                 f"{tf.SPACER}   Alternative CellData objects with following keys: {','.join(altseg_keys)}"
             )
         return repr
+    
+
+    @property
+    def path(self):
+        """Return save path of the InSituData object.
+        Returns:
+            str: Save path.
+        """
+        return self._path
+
+    @property
+    def metadata(self):
+        """Return metadata of the InSituData object.
+        Returns:
+            dict: Metadata.
+        """
+        return self._metadata
+
+    @metadata.setter
+    def metadata(self, metadata: dict):
+        self._metadata = metadata
+
+    @property
+    def slide_id(self):
+        """Return slide id of the InSituData object.
+        Returns:
+            str: Slide id.
+        """
+        return self._slide_id
+
+    @property
+    def sample_id(self):
+        """Return sample id of the InSituData object.
+        Returns:
+            str: Sample id.
+        """
+        return self._sample_id
+
+    @property
+    def from_insitudata(self):
+        return self._from_insitudata
+
+    @property
+    def images(self):
+        """Return images of the InSituData object.
+        Returns:
+            insitupy._core.dataclasses.ImageData: Images.
+        """
+        return self._images
+
+    @images.setter
+    def images(self, images: ImageData):
+        self._images = images
+
+    @images.deleter
+    def images(self):
+        self._images = None
+
+    @property
+    def cells(self):
+        """Return images of the InSituData object.
+        Returns:
+            insitupy._core.dataclasses.ImageData: Images.
+        """
+        return self._cells
+
+    @cells.setter
+    def cells(self, value: CellData):
+        self._cells = value
+
+    @cells.deleter
+    def cells(self):
+        self._cells = None
+
+    @property
+    def transcripts(self):
+        """Return transcripts of the InSituData object.
+        Returns:
+            pd.DataFrame: Transcripts.
+        """
+        return self._transcripts
+
+    @transcripts.setter
+    def transcripts(self, value: pd.DataFrame):
+        self._transcripts = value
+
+    @transcripts.deleter
+    def transcripts(self):
+        self._transcripts = None
+
+    @property
+    def viewer(self):
+        return self._viewer
+
+    @viewer.setter
+    def viewer(self, value):
+        self._viewer = value
+
+    @viewer.deleter
+    def viewer(self):
+        self._viewer = None
+
+    @property
+    def annotations(self):
+        return self._annotations
+
+    @annotations.setter
+    def annotations(self, value: AnnotationsData):
+        self._annotations = value
+
+    @annotations.deleter
+    def annotations(self):
+        self._annotations = None
+
+    @property
+    def alt(self):
+        return self._alt
+
+    @alt.deleter
+    def alt(self):
+        self._alt = None
+
+    @property
+    def regions(self):
+        return self._regions
+
+    @regions.deleter
+    def regions(self):
+        self._regions = None
 
     def _save_metadata_after_registration(self,
                       metadata_path: Union[str, os.PathLike, Path] = None
                       ):
         # if there is no specific path given, the metadata is written to the default path for modified metadata
         if metadata_path is None:
-            metadata_path = self.path / "experiment_modified.xenium"
+            metadata_path = self._path / "experiment_modified.xenium"
 
         # write to json file
-        metadata_json = json.dumps(self.metadata["xenium"], indent=4)
+        metadata_json = json.dumps(self._metadata["xenium"], indent=4)
         print(f"\t\tSave metadata to {metadata_path}", flush=True)
         with open(metadata_path, "w") as metafile:
             metafile.write(metadata_json)
 
-    def _remove_empty_modalities(self):
-        try:
-            # check if anything really added to regions and if not, remove it again
-            if len(self.regions.metadata) == 0:
-                self.remove_modality("regions")
-        except AttributeError:
-            pass
-        try:
-            # check if anything really added to annotations and if not, remove it again
-            if len(self.annotations.metadata) == 0:
-                self.remove_modality("annotations")
-        except AttributeError:
-            pass
+#    def _remove_empty_modalities(self):
+#        try:
+#            # check if anything really added to regions and if not, remove it again
+#            if len(self.regions.metadata) == 0:
+#                self.remove_modality("regions")
+#        except AttributeError:
+#            pass
+#        try:
+#            # check if anything really added to annotations and if not, remove it again
+#            if len(self.annotations.metadata) == 0:
+#                self.remove_modality("annotations")
+#        except AttributeError:
+#            pass
 
     def assign_geometries(self,
                           geometry_type: Literal["annotations", "regions"],
@@ -209,16 +345,17 @@ class InSituData:
             raise ModalityNotFoundError(modality=geometry_type)
 
         if alt_layer is None:
-            try:
-                cell_attr = self.cells
+            if self._cells is not None:
+                cell_attr = self._cells
                 name = ".cells"
-            except AttributeError:
+            else:
                 raise ModalityNotFoundError("cells")
         else:
-            try:
-                cell_attr = self.alt[alt_layer]
+            #TODO
+            if self._alt is not None:
+                cell_attr = self._alt[alt_layer]
                 name = f".alt[{alt_layer}]"
-            except AttributeError:
+            else:
                 raise ModalityNotFoundError(f"alt[{alt_layer}]")
 
         if keys == "all":
@@ -236,7 +373,7 @@ class InSituData:
         for key in keys:
             print(f"Assigning key '{key}'...")
             # extract pandas dataframe of current key
-            geom_df = getattr(geom_attr, key)
+            geom_df = geom_attr[key]
 
             # get unique list of annotation names
             geom_names = geom_df.name.unique()
@@ -321,7 +458,7 @@ class InSituData:
             add_masks=add_masks,
             overwrite=overwrite
         )
-        if hasattr(self, "alt"):
+        if self._alt is not None:
             for key in self.alt.keys():
                 self.assign_geometries(
                     geometry_type="annotations",
@@ -343,7 +480,7 @@ class InSituData:
             add_masks=add_masks,
             overwrite=overwrite
         )
-        if hasattr(self, "alt"):
+        if self._alt is not None:
             for key in self.alt.keys():
                 self.assign_geometries(
                     geometry_type="regions",
@@ -359,20 +496,20 @@ class InSituData:
         '''
         from copy import deepcopy
         had_viewer = False
-        if hasattr(self, "viewer"):
+        if self._viewer is not None:
             had_viewer = True
 
             # make copy of viewer to add it later again
-            viewer_copy = self.viewer.copy()
+            viewer_copy = self._viewer.copy()
             # remove viewer because there is otherwise a error during deepcopy
-            del self.viewer
+            self.viewer = None
 
         # make copy
         self_copy = deepcopy(self)
 
         # add viewer again to original object if necessary
         if had_viewer:
-            self.viewer = viewer_copy
+            self._viewer = viewer_copy
 
         return self_copy
 
@@ -408,7 +545,7 @@ class InSituData:
             # extract regions dataframe
             region_key = region_tuple[0]
             region_name = region_tuple[1]
-            region_df = self.regions.get(region_key)
+            region_df = self._regions[region_key]
 
             # extract geometry
             geometry = region_df[region_df["name"] == region_name]["geometry"].item()
@@ -501,10 +638,8 @@ class InSituData:
             # shift coordinates to correct for change of coordinates during cropping
             _self.cells.shift(x=-xlim[0], y=-ylim[0])
 
-        try:
+        if _self.alt is not None:
             alt = _self.alt
-        except AttributeError:
-            pass
         else:
             for k, cells in alt.items():
                 cell_coords = cells.matrix.obsm['spatial'].copy()
@@ -523,7 +658,7 @@ class InSituData:
                 # shift coordinates to correct for change of coordinates during cropping
                 cells.shift(x=-xlim[0], y=-ylim[0])
 
-        if hasattr(_self, "transcripts"):
+        if _self.transcripts is not None:
             # infer mask for selection
             xmask = (_self.transcripts["coordinates", "x"] >= xlim[0]) & (_self.transcripts["coordinates", "x"] <= xlim[1])
             ymask = (_self.transcripts["coordinates", "y"] >= ylim[0]) & (_self.transcripts["coordinates", "y"] <= ylim[1])
@@ -536,10 +671,10 @@ class InSituData:
             _self.transcripts["coordinates", "x"] -= xlim[0]
             _self.transcripts["coordinates", "y"] -= ylim[0]
 
-        if hasattr(_self, "images"):
+        if self._images is not None:
             _self.images.crop(xlim=xlim, ylim=ylim)
 
-        if hasattr(_self, "annotations"):
+        if self._annotations is not None:
 
             _self.annotations.crop(
                 xlim=tuple([elem for elem in xlim]),
@@ -548,7 +683,7 @@ class InSituData:
                 # ylim=tuple([elem / pixel_size for elem in ylim])
                 )
 
-        if hasattr(_self, "regions"):
+        if self._regions is not None:
             _self.regions.crop(
                 xlim=tuple([elem for elem in xlim]),
                 ylim=tuple([elem for elem in ylim])
@@ -581,7 +716,7 @@ class InSituData:
         _self._remove_empty_modalities()
 
         if inplace:
-            if hasattr(self, "viewer"):
+            if self._viewer is not None:
                 del _self.viewer # delete viewer
         else:
             return _self
@@ -634,7 +769,7 @@ class InSituData:
         else:
             print("Calculate highly-variable genes per batch key {} using {} flavor...".format(hvg_batch_key, hvg_flavor)) if verbose else None
 
-        sc.pp.highly_variable_genes(self.cells.matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
+        sc.pp.highly_variable_genes(self._cells.matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
 
 
     def normalize_and_transform(self,
@@ -662,9 +797,9 @@ class InSituData:
             None: This method modifies the input matrix in place, normalizing the data based on the specified method.
                 It does not return any value.
         """
-        try:
-            cells = self.cells
-        except AttributeError:
+        if self._cells is not None:
+            cells = self._cells
+        else:
             raise ModalityNotFoundError(modality="cells")
 
         normalize_and_transform_anndata(
@@ -673,10 +808,8 @@ class InSituData:
             target_sum=target_sum,
             verbose=verbose)
 
-        try:
-            alt = self.alt
-        except AttributeError:
-            pass
+        if self._alt is not None:
+            alt = self._alt
         else:
             print("Found `.alt` modality.")
             for k, cells in alt.items():
@@ -688,15 +821,18 @@ class InSituData:
                 key_to_add: str
                 ) -> None:
         # check if the current self has already an alt object and add a empty one if not
-        alt_attr_name = "alt"
-        try:
-            alt_attr = getattr(self, alt_attr_name)
-        except AttributeError:
-            setattr(self, alt_attr_name, {})
-            alt_attr = getattr(self, alt_attr_name)
+        #alt_attr_name = "alt"
+        #try:
+        #    alt_attr = getattr(self, alt_attr_name)
+        #except AttributeError:
+        #    setattr(self, alt_attr_name, {})
+        #    alt_attr = getattr(self, alt_attr_name)
+
+        if self._alt is None:
+            self.alt = {}
 
         # add the celldata to the given key
-        alt_attr[key_to_add] = celldata_to_add
+        self._alt[key_to_add] = celldata_to_add
 
     def add_baysor(self,
                    path: Union[str, os.PathLike, Path],
@@ -715,13 +851,11 @@ class InSituData:
         self.add_alt(celldata_to_add=celldata, key_to_add=key_to_add)
 
         if read_transcripts:
-            trans_attr_name = "transcripts"
-            try:
-                trans_attr = getattr(self, trans_attr_name)
-            except AttributeError:
+            #trans_attr_name = "transcripts"
+            if self._transcripts is None:
                 print("No transcript layer found. Addition of Baysor transcript data is skipped.", flush=True)
-                pass
             else:
+                trans_attr = self._transcripts
                 # read baysor transcripts
                 baysor_results = read_baysor_transcripts(baysor_output=path)
                 baysor_results = baysor_results[["cell"]]
@@ -735,7 +869,7 @@ class InSituData:
                                     )
 
                 # add resulting dataframe to InSituData
-                setattr(self, trans_attr_name, trans_attr)
+                self._transcripts = trans_attr
 
 
     def plot_dimred(self, save: Optional[str] = None):
@@ -743,7 +877,7 @@ class InSituData:
         Read dimensionality reduction plots.
         '''
         # construct paths
-        analysis_path = self.path / "analysis"
+        analysis_path = self._path / "analysis"
         umap_file = analysis_path / "umap" / "gene_expression_2_components" / "projection.csv"
         pca_file = analysis_path / "pca" / "gene_expression_10_components" / "projection.csv"
         cluster_file = analysis_path / "clustering" / "gene_expression_graphclust" / "clusters.csv"
@@ -786,10 +920,10 @@ class InSituData:
     def load_annotations(self):
         print("Loading annotations...", flush=True)
         try:
-            p = self.metadata["data"]["annotations"]
+            p = self._metadata["data"]["annotations"]
         except KeyError:
             raise ModalityNotFoundError(modality="annotations")
-        self.annotations = read_shapesdata(path=self.path / p, mode="annotations")
+        self._annotations = read_shapesdata(path=self._path / p, mode="annotations")
 
 
     def import_annotations(self,
@@ -806,25 +940,25 @@ class InSituData:
         files = convert_to_list(files)
         keys = convert_to_list(keys)
 
-        if not hasattr(self, "annotations"):
-            self.annotations = AnnotationsData()
+        if self._annotations is None:
+            self._annotations = AnnotationsData()
 
         for key, file in zip(keys, files):
             # read annotation and store in dictionary
-            self.annotations.add_data(data=file,
+            self._annotations.add_data(data=file,
                                       key=key,
                                       scale_factor=scale_factor
                                       )
 
-        self._remove_empty_modalities()
+        #self._remove_empty_modalities()
 
     def load_regions(self):
         print("Loading regions...", flush=True)
         try:
-            p = self.metadata["data"]["regions"]
+            p = self._metadata["data"]["regions"]
         except KeyError:
             raise ModalityNotFoundError(modality="regions")
-        self.regions = read_shapesdata(path=self.path / p, mode="regions")
+        self._regions = read_shapesdata(path=self._path / p, mode="regions")
 
     def import_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]],
@@ -838,54 +972,54 @@ class InSituData:
         keys = convert_to_list(keys)
         #pixel_size = self.metadata["xenium"]['pixel_size']
 
-        if not hasattr(self, "regions"):
-            self.regions = RegionsData()
+        if self._regions is None:
+            self._regions = RegionsData()
 
         for key, file in zip(keys, files):
             # read annotation and store in dictionary
-            self.regions.add_data(data=file,
+            self._regions.add_data(data=file,
                                 key=key,
                                 scale_factor=scale_factor
                                 )
 
-        self._remove_empty_modalities()
+        #self._remove_empty_modalities()
 
 
     def load_cells(self):
         print("Loading cells...", flush=True)
-        pixel_size = self.metadata["xenium"]["pixel_size"]
-        if self.from_insitudata:
+        pixel_size = self._metadata["xenium"]["pixel_size"]
+        if self._from_insitudata:
             try:
-                cells_path = self.metadata["data"]["cells"]
+                cells_path = self._metadata["data"]["cells"]
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
             else:
-                self.cells = read_celldata(path=self.path / cells_path)
+                self._cells = read_celldata(path=self._path / cells_path)
 
             # check if alt data is there and read if yes
             try:
-                alt_path_dict = self.metadata["data"]["alt"]
+                alt_path_dict = self._metadata["data"]["alt"]
             except KeyError:
                 print("\tNo alternative cells found...")
             else:
                 print("\tFound alternative cells...")
                 alt_dict = {}
                 for k, p in alt_path_dict.items():
-                    alt_dict[k] = read_celldata(path=self.path / p)
+                    alt_dict[k] = read_celldata(path=self._path / p)
 
                 # add attribute
-                setattr(self, "alt", alt_dict)
+                self._alt = alt_dict
 
         else:
             # read celldata
-            matrix = matrix = _read_matrix_from_xenium(path=self.path)
-            boundaries = _read_boundaries_from_xenium(path=self.path, pixel_size=pixel_size)
-            self.cells = CellData(matrix=matrix, boundaries=boundaries)
+            matrix = _read_matrix_from_xenium(path=self._path)
+            boundaries = _read_boundaries_from_xenium(path=self._path, pixel_size=pixel_size)
+            self._cells = CellData(matrix=matrix, boundaries=boundaries)
 
             try:
                 # read binned expression
-                arr = _read_binned_expression(path=self.path, gene_names_to_select=self.cells.matrix.var_names)
-                self.cells.matrix.varm["binned_expression"] = arr
+                arr = _read_binned_expression(path=self._path, gene_names_to_select=self._cells.matrix.var_names)
+                self._cells.matrix.varm["binned_expression"] = arr
             except ValueError:
                 warn("Loading of binned expression did not work. Skipped it.")
                 pass
@@ -900,26 +1034,26 @@ class InSituData:
         # load image into ImageData object
         print("Loading images...", flush=True)
 
-        if self.from_insitudata:
+        if self._from_insitudata:
             # check if matrix data is stored in this InSituData
-            if "images" not in self.metadata["data"]:
+            if "images" not in self._metadata["data"]:
                 raise ModalityNotFoundError(modality="images")
 
             if names == "all":
-                img_names = list(self.metadata["data"]["images"].keys())
+                img_names = list(self._metadata["data"]["images"].keys())
             else:
                 img_names = convert_to_list(names)
 
             # get file paths and names
-            img_files = [v for k,v in self.metadata["data"]["images"].items() if k in img_names]
-            img_names = [k for k,v in self.metadata["data"]["images"].items() if k in img_names]
+            img_files = [v for k,v in self._metadata["data"]["images"].items() if k in img_names]
+            img_names = [k for k,v in self._metadata["data"]["images"].items() if k in img_names]
         else:
             nuclei_file_key = f"morphology_{nuclei_type}_filepath"
 
             # In v2.0 the "mip" image was removed due to better focusing of the machine.
             # For <v2.0 the function still tries to retrieve the "mip" image but in case this is not found
             # it will retrieve the "focus" image
-            if nuclei_type == "mip" and nuclei_file_key not in self.metadata["xenium"]["images"].keys():
+            if nuclei_type == "mip" and nuclei_file_key not in self._metadata["xenium"]["images"].keys():
                 warn(
                     f"Nuclei image type '{nuclei_type}' not found. Used 'focus' instead. This is the normal behavior for data analyzed with Xenium Ranger >=v2.0",
                     UserWarning, stacklevel=2
@@ -933,7 +1067,7 @@ class InSituData:
                 img_names = ["nuclei"]
             else:
                 # get available keys for registered images in metadata
-                img_keys = [elem for elem in self.metadata["xenium"]["images"] if elem.startswith("registered")]
+                img_keys = [elem for elem in self._metadata["xenium"]["images"] if elem.startswith("registered")]
 
                 # extract image names from keys and add nuclei
                 img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
@@ -950,11 +1084,11 @@ class InSituData:
                     img_names = [elem for m, elem in zip(mask, img_names) if m]
 
             # get path of image files
-            img_files = [self.metadata["xenium"]["images"][k] for k in img_keys]
+            img_files = [self._metadata["xenium"]["images"][k] for k in img_keys]
 
             if load_cell_segmentation_images:
                 # get cell segmentation images if available
-                if "morphology_focus/" in self.metadata["xenium"]["images"][nuclei_file_key]:
+                if "morphology_focus/" in self._metadata["xenium"]["images"][nuclei_file_key]:
                     seg_files = ["morphology_focus/morphology_focus_0001.ome.tif",
                                  "morphology_focus/morphology_focus_0002.ome.tif",
                                  "morphology_focus/morphology_focus_0003.ome.tif"
@@ -962,37 +1096,37 @@ class InSituData:
                     seg_names = ["cellseg1", "cellseg2", "cellseg3"]
 
                     # check which segmentation files exist and append to image list
-                    seg_file_exists_list = [(self.path / f).is_file() for f in seg_files]
+                    seg_file_exists_list = [(self._path / f).is_file() for f in seg_files]
                     #print(seg_file_exists_list)
                     img_files += [f for f, exists in zip(seg_files, seg_file_exists_list) if exists]
                     img_names += [n for n, exists in zip(seg_names, seg_file_exists_list) if exists]
 
         # create imageData object
-        img_paths = [self.path / elem for elem in img_files]
+        img_paths = [self._path / elem for elem in img_files]
 
-        if not hasattr(self, "images"):
-            self.images = ImageData(img_paths, img_names)
+        if self._images is None:
+            self._images = ImageData(img_paths, img_names)
         else:
             for im, n in zip(img_paths, img_names):
-                self.images.add_image(im, n, overwrite=reload)
+                self._images.add_image(im, n, overwrite=reload)
 
     def load_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
                         ):
-        if self.from_insitudata:
+        if self._from_insitudata:
             # check if matrix data is stored in this InSituData
-            if "transcripts" not in self.metadata["data"]:
+            if "transcripts" not in self._metadata["data"]:
                 raise ModalityNotFoundError(modality="transcripts")
 
             # read transcripts
             print("Loading transcripts...", flush=True)
-            self.transcripts = pd.read_parquet(self.path / self.metadata["data"]["transcripts"])
+            self._transcripts = pd.read_parquet(self._path / self._metadata["data"]["transcripts"])
         else:
             # read transcripts
             print("Loading transcripts...", flush=True)
-            transcript_dataframe = pd.read_parquet(self.path / transcript_filename)
+            transcript_dataframe = pd.read_parquet(self._path / transcript_filename)
 
-            self.transcripts = _restructure_transcripts_dataframe(transcript_dataframe)
+            self._transcripts = _restructure_transcripts_dataframe(transcript_dataframe)
 
 
     def reduce_dimensions(self,
@@ -1034,10 +1168,10 @@ class InSituData:
             None: This method modifies the input matrix in place, reducing its dimensionality using specified techniques and
                 batch correction if applicable. It does not return any value.
         """
-        try:
-            cells = self.cells
-        except AttributeError:
+        if self._cells is None:
             raise ModalityNotFoundError(modality="cells")
+        else:
+            cells = self._cells
 
         reduce_dimensions_anndata(adata=cells.matrix,
                                   umap=umap, tsne=tsne, layer=layer,
@@ -1047,10 +1181,8 @@ class InSituData:
                                   tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
                                   )
 
-        try:
-            alt = self.alt
-        except AttributeError:
-            pass
+        if self._alt is not None:
+            alt = self._alt
         else:
             print("Found `.alt` modality.")
             for k, cells in alt.items():
@@ -1095,24 +1227,22 @@ class InSituData:
         path.mkdir(parents=True, exist_ok=True)
 
         # store basic information about experiment
-        self.metadata["slide_id"] = self.slide_id
-        self.metadata["sample_id"] = self.sample_id
+        self._metadata["slide_id"] = self._slide_id
+        self._metadata["sample_id"] = self._sample_id
 
         # clean old entries in data metadata
-        self.metadata["data"] = {}
+        self._metadata["data"] = {}
 
         #pixel_size = self.metadata['xenium']['pixel_size']
 
         # save images
-        try:
-            images = self.images
-        except AttributeError:
-            pass
+        if self._images is not None:
+            images = self._images
         else:
             _save_images(
                 imagedata=images,
                 path=path,
-                metadata=self.metadata,
+                metadata=self._metadata,
                 images_as_zarr=images_as_zarr,
                 zipped=zarr_zipped,
                 max_resolution=images_max_resolution
@@ -1126,76 +1256,66 @@ class InSituData:
             #         self.metadata['xenium']['pixel_size'] = images_max_resolution
 
         # save cells
-        try:
-            cells = self.cells
-        except AttributeError:
-            pass
+        if self._cells is not None:
+            cells = self._cells
         else:
             _save_cells(
                 cells=cells,
                 path=path,
-                metadata=self.metadata,
+                metadata=self._metadata,
                 boundaries_zipped=zarr_zipped
             )
 
         # save alternative cell data
-        try:
-            alt = self.alt
-        except AttributeError:
-            pass
+        if self._alt is not None:
+            alt = self._alt
         else:
             _save_alt(
                 attr=alt,
                 path=path,
-                metadata=self.metadata,
+                metadata=self._metadata,
                 boundaries_zipped=zarr_zipped
             )
 
         # save transcripts
-        try:
-            transcripts = self.transcripts
-        except AttributeError:
-            pass
+        if self._transcripts is not None:
+            transcripts = self._transcripts
         else:
             _save_transcripts(
                 transcripts=transcripts,
                 path=path,
-                metadata=self.metadata
+                metadata=self._metadata
                 )
 
         # save annotations
-        try:
-            annotations = self.annotations
-        except AttributeError:
-            pass
+        if self._annotations is not None:
+            annotations = self._annotations
         else:
             _save_annotations(
                 annotations=annotations,
                 path=path,
-                metadata=self.metadata
+                metadata=self._metadata
             )
 
         # save regions
-        try:
-            regions = self.regions
-        except AttributeError:
-            pass
+        if self._regions is not None:
+            regions = self._regions
         else:
             _save_regions(
                 regions=regions,
                 path=path,
-                metadata=self.metadata
+                metadata=self._metadata
             )
 
         # save version of InSituPy
-        self.metadata["version"] = __version__
+        self._metadata["version"] = __version__
 
         # move xenium key to end of metadata
-        self.metadata["xenium"] = self.metadata.pop("xenium")
+        self._metadata["xenium"] = self._metadata.pop("xenium")
 
         # write Xeniumdata metadata to json file
         xd_metadata_path = path / ISPY_METADATA_FILE
-        write_dict_to_json(dictionary=self.metadata, file=xd_metadata_path)
+        write_dict_to_json(dictionary=self._metadata, file=xd_metadata_path)
 
         # Optionally: zip the resulting directory
         if zip_output:
@@ -1203,7 +1323,7 @@ class InSituData:
             shutil.rmtree(path) # delete directory
 
         # change path to the new one
-        self.path = path.resolve()
+        self._path = path.resolve()
 
         print("Saved.") if verbose else None
 
@@ -1216,8 +1336,8 @@ class InSituData:
         if path is not None:
             path = Path(path)
         else:
-            if self.from_insitudata:
-                path = Path(self.metadata["path"])
+            if self._from_insitudata:
+                path = Path(self._metadata["path"])
             else:
                 warn(
                     f"Data as not loaded from an InSituPy project. "
@@ -1238,7 +1358,7 @@ class InSituData:
 
                 # check uid
                 project_uid = project_meta["uids"][-1]  # [-1] to select latest uid
-                current_uid = self.metadata["uids"][-1]
+                current_uid = self._metadata["uids"][-1]
                 if current_uid == project_uid:
                     self._update_to_existing_project(path=path, zarr_zipped=zarr_zipped)
 
@@ -1286,69 +1406,61 @@ class InSituData:
         print(f"Updating project in {path}")
 
         # save cells
-        try:
-            cells = self.cells
-        except AttributeError:
-            pass
+        if self._cells is not None:
+            cells = self._cells
         else:
             print("\tUpdating cells...", flush=True)
             _save_cells(
                 cells=cells,
                 path=path,
-                metadata=self.metadata,
+                metadata=self._metadata,
                 boundaries_zipped=zarr_zipped,
                 overwrite=True
             )
 
         # save alternative cell data
-        try:
-            alt = self.alt
-        except AttributeError:
-            pass
+        if self._alt is not None:
+            alt = self._alt
         else:
             print("\tUpdating alternative segmentations...", flush=True)
             _save_alt(
                 attr=alt,
                 path=path,
-                metadata=self.metadata,
+                metadata=self._metadata,
                 boundaries_zipped=zarr_zipped
             )
 
         # save annotations
-        try:
-            annotations = self.annotations
-        except AttributeError:
-            pass
+        if self._annotations is not None:
+            annotations = self._annotations
         else:
             print("\tUpdating annotations...", flush=True)
             _save_annotations(
                 annotations=annotations,
                 path=path,
-                metadata=self.metadata
+                metadata=self._metadata
             )
 
         # save regions
-        try:
-            regions = self.regions
-        except AttributeError:
-            pass
+        if self._regions is not None:
+            regions = self._regions
         else:
             print("\tUpdating regions...", flush=True)
             _save_regions(
                 regions=regions,
                 path=path,
-                metadata=self.metadata
+                metadata=self._metadata
             )
 
         # save version of InSituPy
-        self.metadata["version"] = __version__
+        self._metadata["version"] = __version__
 
         # move xenium key to end of metadata
-        self.metadata["xenium"] = self.metadata.pop("xenium")
+        self._metadata["xenium"] = self._metadata.pop("xenium")
 
         # write Xeniumdata metadata to json file
         xd_metadata_path = path / ISPY_METADATA_FILE
-        write_dict_to_json(dictionary=self.metadata, file=xd_metadata_path)
+        write_dict_to_json(dictionary=self._metadata, file=xd_metadata_path)
 
         print("Saved.")
 
@@ -1357,25 +1469,23 @@ class InSituData:
                   note: Optional[str] = None
                   ):
         # create quicksave directory if it does not exist already
-        self.quicksave_dir = CACHE / "quicksaves"
-        self.quicksave_dir.mkdir(parents=True, exist_ok=True)
+        self._quicksave_dir = CACHE / "quicksaves"
+        self._quicksave_dir.mkdir(parents=True, exist_ok=True)
 
         # save annotations
-        try:
-            annotations = self.annotations
-        except AttributeError:
+        if self._annotations is None:
             print("No annotations found. Quicksave skipped.", flush=True)
-            pass
         else:
+            annotations = self._annotations
             # create filename
             current_datetime = datetime.now().strftime("%y%m%d_%H-%M-%S")
-            slide_id = self.slide_id
-            sample_id = self.sample_id
+            slide_id = self._slide_id
+            sample_id = self._sample_id
             uid = str(uuid4())[:8]
 
             # create output directory
             outname = f"{slide_id}__{sample_id}__{current_datetime}__{uid}"
-            outdir = self.quicksave_dir / outname
+            outdir = self._quicksave_dir / outname
 
             _save_annotations(
                 annotations=annotations,
@@ -1403,7 +1513,7 @@ class InSituData:
             "uid": [],
             "note": []
         }
-        for d in self.quicksave_dir.glob("*"):
+        for d in self._quicksave_dir.glob("*"):
             parse_res = parse(pattern, d.stem).named
             for key, value in parse_res.items():
                 res[key].append(value)
@@ -1422,7 +1532,7 @@ class InSituData:
                        uid: str
                        ):
         # find files with the uid
-        files = list(self.quicksave_dir.glob(f"*{uid}*"))
+        files = list(self._quicksave_dir.glob(f"*{uid}*"))
 
         if len(files) == 1:
             ad = read_shapesdata(files[0] / "annotations", mode="annotations")
@@ -1432,13 +1542,12 @@ class InSituData:
             raise ValueError(f"More than one quicksave with uid '{uid}' found.")
 
         # add annotations to existing annotations attribute or add a new one
-        try:
-            annotations = self.annotations
-        except AttributeError:
-            annotations = self.annotations = AnnotationsData()
+        if self._annotations is None:
+            self._annotations = AnnotationsData()
         else:
+            annotations = self._annotations
             for k in ad.metadata.keys():
-                annotations.add_data(getattr(ad, k), k, verbose=True)
+                annotations.add_data(ad[k], k, verbose=True)
 
 
     def show(self,
@@ -1461,24 +1570,22 @@ class InSituData:
         #     pixel_size = 1
 
         # create viewer
-        self.viewer = napari.Viewer(title=f"{self.slide_id}: {self.sample_id}")
+        self._viewer = napari.Viewer(title=f"{self._slide_id}: {self._sample_id}")
 
-        try:
-            #image_keys = self.images.metadata.keys()
-            images_attr = self.images
-        except AttributeError:
+        if self._images is None:
             warn("No attribute `.images` found.")
         else:
+            images_attr = self._images
             n_images = len(images_attr.metadata)
             n_grayscales = 0 # number of grayscale images
             for i, (img_name, img_metadata) in enumerate(images_attr.metadata.items()):
             #for i, img_name in enumerate(image_keys):
-                img = getattr(images_attr, img_name)
+                img = images_attr[img_name]
                 is_visible = False if i < n_images - 1 else True # only last image is set visible
                 pixel_size = img_metadata['pixel_size']
 
                 # check if the current image is RGB
-                is_rgb = self.images.metadata[img_name]["rgb"]
+                is_rgb = self._images.metadata[img_name]["rgb"]
 
                 if is_rgb:
                     cmap = None  # default value of cmap
@@ -1499,13 +1606,13 @@ class InSituData:
                     img_pyramid = img
 
                 # add img pyramid to napari viewer
-                self.viewer.add_image(
+                self._viewer.add_image(
                         img_pyramid,
                         name=img_name,
                         colormap=cmap,
                         blending=blending,
                         rgb=is_rgb,
-                        contrast_limits=self.images.metadata[img_name]["contrast_limits"],
+                        contrast_limits=self._images.metadata[img_name]["contrast_limits"],
                         scale=(pixel_size, pixel_size),
                         visible=is_visible
                     )
@@ -1513,11 +1620,10 @@ class InSituData:
         # optionally: add cells as points
         #if show_cells or keys is not None:
         if keys is not None:
-            try:
-                cells = self.cells
-            except AttributeError:
+            if self._cells is None:
                 raise InSituDataMissingObject("cells")
             else:
+                cells = self._cells
                 # convert keys to list
                 keys = convert_to_list(keys)
 
@@ -1556,39 +1662,38 @@ class InSituData:
 
                     # add layer programmatically - does not work for all types of layers
                     # see: https://forum.image.sc/t/add-layerdatatuple-to-napari-viewer-programmatically/69878
-                    self.viewer.add_layer(Layer.create(*layer))
+                    self._viewer.add_layer(Layer.create(*layer))
 
         # WIDGETS
-        try:
-            cells = self.cells
-        except AttributeError:
+        if self._cells is None:
             # add annotation widget to napari
             add_geom_widget = add_new_geometries_widget()
             add_geom_widget.max_height = 100
             add_geom_widget.max_width = widgets_max_width
-            self.viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
+            self._viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
         else:
+            cells = self._cells
             # initialize the widgets
             show_points_widget, locate_cells_widget, show_geometries_widget, show_boundaries_widget, select_data = _initialize_widgets(xdata=self)
 
             # add widgets to napari window
             if select_data is not None:
-                self.viewer.window.add_dock_widget(select_data, name="Select data", area="right")
+                self._viewer.window.add_dock_widget(select_data, name="Select data", area="right")
                 select_data.max_height = 50
                 select_data.max_width = widgets_max_width
 
             if show_points_widget is not None:
-                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right")
+                self._viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right")
                 show_points_widget.max_height = 150
                 show_points_widget.max_width = widgets_max_width
 
             if show_boundaries_widget is not None:
-                self.viewer.window.add_dock_widget(show_boundaries_widget, name="Show boundaries", area="right")
+                self._viewer.window.add_dock_widget(show_boundaries_widget, name="Show boundaries", area="right")
                 show_boundaries_widget.max_height = 80
                 show_boundaries_widget.max_width = widgets_max_width
 
             if locate_cells_widget is not None:
-                self.viewer.window.add_dock_widget(locate_cells_widget, name="Navigate to cell", area="right")
+                self._viewer.window.add_dock_widget(locate_cells_widget, name="Navigate to cell", area="right")
                 #locate_cells_widget.max_height = 130
                 locate_cells_widget.max_width = widgets_max_width
 
@@ -1596,7 +1701,7 @@ class InSituData:
             add_geom_widget = add_new_geometries_widget()
             #annot_widget.max_height = 100
             add_geom_widget.max_width = widgets_max_width
-            self.viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
+            self._viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
 
             # if show_region_widget is not None:
             #     self.viewer.window.add_dock_widget(show_region_widget, name="Show regions", area="right")
@@ -1604,7 +1709,7 @@ class InSituData:
             #     show_region_widget.max_width = widgets_max_width
 
             if show_geometries_widget is not None:
-                self.viewer.window.add_dock_widget(show_geometries_widget, name="Show geometries", area="right", tabify=True)
+                self._viewer.window.add_dock_widget(show_geometries_widget, name="Show geometries", area="right", tabify=True)
                 #show_annotations_widget.max_height = 100
                 show_geometries_widget.max_width = widgets_max_width
 
@@ -1626,7 +1731,7 @@ class InSituData:
                     raise ValueError("Unexpected value '{event.action}' for `event.action`. Expected 'add' or 'remove'.")
 
         # Assign the function to data of all existing layers
-        for layer in self.viewer.layers:
+        for layer in self._viewer.layers:
             if isinstance(layer, Shapes) or isinstance(layer, Points):
                 layer.events.data.connect(_update_uid)
 
@@ -1638,13 +1743,13 @@ class InSituData:
                     layer.events.data.connect(_update_uid)
 
         # Connect the function to any new layers added to the viewer
-        self.viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
+        self._viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
 
         # add color legend widget
         import insitupy._core.config as config
         from insitupy._core.config import init_colorlegend_canvas
         init_colorlegend_canvas()
-        self.viewer.window.add_dock_widget(config.static_canvas, area='left', name='Color legend')
+        self._viewer.window.add_dock_widget(config.static_canvas, area='left', name='Color legend')
 
         # def update_colorlegend(event):
         #     # if event.type == "inserted":
@@ -1660,12 +1765,12 @@ class InSituData:
         # NAPARI SETTINGS
         if scalebar:
             # add scale bar
-            self.viewer.scale_bar.visible = True
-            self.viewer.scale_bar.unit = unit
+            self._viewer.scale_bar.visible = True
+            self._viewer.scale_bar.unit = unit
 
         napari.run()
         if return_viewer:
-            return self.viewer
+            return self._viewer
 
     def store_geometries(self,
                          name_pattern = "{type_symbol} {class_name} ({annot_key})",
@@ -1696,10 +1801,10 @@ class InSituData:
             - If the layer is classified as a region but is a point layer, a warning
             is issued, and the layer is skipped.
         """
-        try:
-            viewer = self.viewer
-        except AttributeError as e:
-            print(f"{str(e)}. Use `.show()` first to open a napari viewer.")
+        if self._viewer is not None:
+            viewer = self._viewer
+        else:
+            print("Use `.show()` first to open a napari viewer.")
 
         # iterate through layers and save them as annotation or region if they meet requirements
         layers = viewer.layers
@@ -1713,8 +1818,8 @@ class InSituData:
                     class_name = name_parsed.named["class_name"]
 
                     # if the InSituData object does not has an annotations attribute, initialize it
-                    if not hasattr(self, "annotations"):
-                        self.annotations = AnnotationsData() # initialize empty object
+                    if self._annotations is None:
+                        self._annotations = AnnotationsData() # initialize empty object
 
                     # extract shapes coordinates and colors
                     layer_data = layer.data
@@ -1763,21 +1868,21 @@ class InSituData:
                         geom_df = GeoDataFrame(geom_df, geometry="geometry")
 
                         if is_region_layer:
-                            if not hasattr(self, "regions"):
-                                self.regions = RegionsData()
+                            if self._regions is None:
+                                self._regions = RegionsData()
 
                             # add regions
-                            self.regions.add_data(data=geom_df,
+                            self._regions.add_data(data=geom_df,
                                                   key=annot_key,
                                                   verbose=True,
                                                   scale_factor=scale[0]
                                                   )
                         else:
-                            if not hasattr(self, "annotations"):
-                                self.annotations = AnnotationsData()
+                            if self._annotations is None:
+                                self._annotations = AnnotationsData()
 
                             # add annotations
-                            self.annotations.add_data(data=geom_df,
+                            self._annotations.add_data(data=geom_df,
                                                       key=annot_key,
                                                       verbose=True,
                                                       scale_factor=scale[0]
@@ -1786,7 +1891,7 @@ class InSituData:
             else:
                 pass
 
-        self._remove_empty_modalities()
+        #self._remove_empty_modalities()
 
     def plot_binned_expression(
         self,
@@ -1800,8 +1905,8 @@ class InSituData:
         fontsize: int = 28
         ):
         # extract binned expression matrix and gene names
-        binex = self.cells.matrix.varm["binned_expression"]
-        gene_names = self.cells.matrix.var_names
+        binex = self._cells.matrix.varm["binned_expression"]
+        gene_names = self._cells.matrix.var_names
 
         genes = convert_to_list(genes)
 
@@ -1857,7 +1962,7 @@ class InSituData:
         **kwargs
         ):
         # retrieve anndata object from InSituData
-        adata = self.cells.matrix
+        adata = self._cells.matrix
 
         results = expr_along_obs_val(
             adata=adata,
@@ -1875,8 +1980,8 @@ class InSituData:
             return results
 
     def reload(self):
-        data_meta = self.metadata["data"]
-        current_modalities = [m for m in MODALITIES if hasattr(self, m) and m in data_meta]
+        data_meta = self._metadata["data"]
+        current_modalities = [m for m in MODALITIES if getattr(self, m) is not None and m in data_meta]
         # # check if there is a path for the modalities in self.metadata
         # data_meta = self.metadata["data"]
         # print(data_meta)
@@ -1904,7 +2009,7 @@ class InSituData:
         for cat in ["annotations", "cells", "regions"]:
             dirs_to_remove = []
             #if hasattr(self, cat):
-            files = sorted((self.path / cat).glob("*"))
+            files = sorted((self._path / cat).glob("*"))
             if len(files) > 1:
                 dirs_to_remove = files[:-1]
 
@@ -2230,7 +2335,7 @@ def calc_distance_of_cells_from(
     cells = gpd.points_from_xy(x, y)
 
     # retrieve annotation information
-    annot_df = data.annotations.get(annotation_key)
+    annot_df = data.annotations[annotation_key]
     class_df = annot_df[annot_df["name"] == annotation_class]
 
     # calculate distance of cells to their closest point

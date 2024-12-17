@@ -235,8 +235,8 @@ class InSituExperiment:
             InSituExperiment: A new InSituExperiment object that is a deep copy of the current object.
         """
         for xd in self._data:
-            if hasattr(xd, "viewer"):
-                del xd.viewer
+            if xd.viewer is not None:
+                xd.viewer = None
         return deepcopy(self)
 
     def dge(self,
@@ -856,10 +856,10 @@ class InSituExperiment:
         list_gene_count = []
         list_transcript_count = []
         for _, data in self.iterdata():
-            if not hasattr(data, "cells"):
+            if data.cells is None:
                 warnings.warn("Counts were not loaded. Loading.")
                 data.load_cells()
-            if not hasattr(data, "cells") or not hasattr(data.cells, "matrix"):
+            if data.cells is None or data.cells.matrix is None:
                 warnings.warn("Counts are not defined or loaded.")
                 list_gene_count.append(0)
                 list_transcript_count.append(0)
