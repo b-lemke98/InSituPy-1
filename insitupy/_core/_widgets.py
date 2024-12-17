@@ -51,7 +51,6 @@ if WITH_NAPARI:
             data_names = ["main"]
             if xdata.alt is not None:
                 alt = xdata.alt
-            else:
                 for k in alt.keys():
                     data_names.append(k)
 

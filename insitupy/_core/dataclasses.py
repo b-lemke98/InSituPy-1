@@ -172,16 +172,14 @@ class ShapesData(DeepCopyMixin):
         keys = convert_to_list(keys)
         keys_to_remove = []
         for key in keys:
-            try:
-                # retrieve dataframe
-                annot_df = self[key]
-            except AttributeError:
+            if self[key] is None:
                 self._metadata.pop(key)
                 if verbose:
                     print(f'Removed {key}', flush=True)
             else:
+                annot_df = self[key]
                 # record metadata information
-                self._metadata[key][f"n_{self.shape_name}"] = len(annot_df)  # number of annotations
+                self._metadata[key][f"n_{self._shape_name}"] = len(annot_df)  # number of annotations
 
                 try:
                     self._metadata[key]["classes"] = annot_df['name'].unique().tolist()  # annotation classes
@@ -320,15 +318,15 @@ class ShapesData(DeepCopyMixin):
 
                 # update metadata
                 new_metadata[n] = {}
-                new_metadata[n][f"n_{self.shape_name}"] = len(shapesdf)
+                new_metadata[n][f"n_{self._shape_name}"] = len(shapesdf)
                 new_metadata[n]["classes"] = shapesdf.name.unique().tolist()
-                new_metadata[n]["analyzed"] = self.metadata[n]["analyzed"]  # analyzed information is just copied
+                new_metadata[n]["analyzed"] = self._metadata[n]["analyzed"]  # analyzed information is just copied
 
             else:
                 # delete annotations
                 del self._data[n]
 
-        self.metadata = new_metadata
+        self._metadata = new_metadata
 
         self._update_metadata()
 

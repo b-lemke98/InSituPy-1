@@ -81,7 +81,8 @@ class InSituData:
     from ._deprecated import (read_all, read_annotations, read_cells,
                               read_images, read_regions, read_transcripts)
 
-    def __init__(path: Union[str, os.PathLike, Path] = None,
+    def __init__(self,
+                 path: Union[str, os.PathLike, Path] = None,
                  metadata: dict = None,
                  slide_id: str = None,
                  sample_id: str = None,
@@ -616,12 +617,9 @@ class InSituData:
             if (xlim == _self.metadata["xenium"]["cropping_xlim"]) & (ylim == _self.metadata["xenium"]["cropping_ylim"]):
                 raise InSituDataRepeatedCropError(xlim, ylim)
 
-        try:
+        if _self.cells is not None:
             # infer mask from cell coordinates
             cells = _self.cells
-        except AttributeError:
-            pass
-        else:
             cell_coords = cells.matrix.obsm['spatial'].copy()
             xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
             ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
@@ -640,7 +638,6 @@ class InSituData:
 
         if _self.alt is not None:
             alt = _self.alt
-        else:
             for k, cells in alt.items():
                 cell_coords = cells.matrix.obsm['spatial'].copy()
                 xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
@@ -713,7 +710,7 @@ class InSituData:
 
         # sometimes modalities like annotations or regions can be empty in the meantime
         # here such empty modalities are removed
-        _self._remove_empty_modalities()
+        #_self.remove_empty_modalities()
 
         if inplace:
             if self._viewer is not None:
@@ -810,7 +807,6 @@ class InSituData:
 
         if self._alt is not None:
             alt = self._alt
-        else:
             print("Found `.alt` modality.")
             for k, cells in alt.items():
                 print(f"\tNormalizing {k}...")
@@ -829,7 +825,7 @@ class InSituData:
         #    alt_attr = getattr(self, alt_attr_name)
 
         if self._alt is None:
-            self.alt = {}
+            self._alt = dict()
 
         # add the celldata to the given key
         self._alt[key_to_add] = celldata_to_add
@@ -1183,7 +1179,6 @@ class InSituData:
 
         if self._alt is not None:
             alt = self._alt
-        else:
             print("Found `.alt` modality.")
             for k, cells in alt.items():
                 print(f"\tReducing dimensions in `.alt['{k}']...")
@@ -1238,7 +1233,6 @@ class InSituData:
         # save images
         if self._images is not None:
             images = self._images
-        else:
             _save_images(
                 imagedata=images,
                 path=path,
@@ -1258,7 +1252,6 @@ class InSituData:
         # save cells
         if self._cells is not None:
             cells = self._cells
-        else:
             _save_cells(
                 cells=cells,
                 path=path,
@@ -1269,7 +1262,6 @@ class InSituData:
         # save alternative cell data
         if self._alt is not None:
             alt = self._alt
-        else:
             _save_alt(
                 attr=alt,
                 path=path,
@@ -1280,7 +1272,6 @@ class InSituData:
         # save transcripts
         if self._transcripts is not None:
             transcripts = self._transcripts
-        else:
             _save_transcripts(
                 transcripts=transcripts,
                 path=path,
@@ -1290,7 +1281,6 @@ class InSituData:
         # save annotations
         if self._annotations is not None:
             annotations = self._annotations
-        else:
             _save_annotations(
                 annotations=annotations,
                 path=path,
@@ -1300,7 +1290,6 @@ class InSituData:
         # save regions
         if self._regions is not None:
             regions = self._regions
-        else:
             _save_regions(
                 regions=regions,
                 path=path,
@@ -1421,7 +1410,6 @@ class InSituData:
         # save alternative cell data
         if self._alt is not None:
             alt = self._alt
-        else:
             print("\tUpdating alternative segmentations...", flush=True)
             _save_alt(
                 attr=alt,
@@ -1433,7 +1421,6 @@ class InSituData:
         # save annotations
         if self._annotations is not None:
             annotations = self._annotations
-        else:
             print("\tUpdating annotations...", flush=True)
             _save_annotations(
                 annotations=annotations,
@@ -1444,7 +1431,6 @@ class InSituData:
         # save regions
         if self._regions is not None:
             regions = self._regions
-        else:
             print("\tUpdating regions...", flush=True)
             _save_regions(
                 regions=regions,
@@ -2101,7 +2087,7 @@ def register_images(
 
     # read images in InSituData object
     data.load_images(names=template_image_name, load_cell_segmentation_images=False)
-    template = data.images.nuclei[0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
+    template = data.images["nuclei"][0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
 
     # extract OME metadata
     ome_metadata_template = data.images.metadata["nuclei"]["OME"]
