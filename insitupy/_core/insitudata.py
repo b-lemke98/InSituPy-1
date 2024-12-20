@@ -1411,7 +1411,6 @@ class InSituData:
         # save cells
         if self._cells is not None:
             cells = self._cells
-        else:
             print("\tUpdating cells...", flush=True)
             _save_cells(
                 cells=cells,
