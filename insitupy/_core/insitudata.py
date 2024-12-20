@@ -292,6 +292,10 @@ class InSituData:
 
     @property
     def alt(self):
+        """Return alternative cell data of the InSituData object.
+        Returns:
+            dict: A dictionary containing `insitupy._core.dataclasses.CellData` objects..
+        """
         return self._alt
 
     @alt.deleter

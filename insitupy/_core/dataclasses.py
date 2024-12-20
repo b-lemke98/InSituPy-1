@@ -338,7 +338,7 @@ class ShapesData(DeepCopyMixin):
             del self._data[key_to_remove]
         else:
             classes_to_remove = convert_to_list(classes_to_remove)
-            geom_df = self.get(key_to_remove)
+            geom_df = self[key_to_remove]
             self._data[key_to_remove] = geom_df[~geom_df.name.isin(classes_to_remove)]
 
         self._update_metadata()
