@@ -635,7 +635,7 @@ class InSituExperiment:
                     ):
 
         # Retrieve the regions dataframe
-        region_df = data.regions.get(region_key)
+        region_df = data.regions[region_key]
 
         # check which region names are allowed
         if region_names is None:
