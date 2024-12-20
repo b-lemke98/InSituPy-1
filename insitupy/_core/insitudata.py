@@ -230,9 +230,9 @@ class InSituData:
 
     @property
     def cells(self):
-        """Return images of the InSituData object.
+        """Return cell data of the InSituData object.
         Returns:
-            insitupy._core.dataclasses.ImageData: Images.
+            insitupy._core.dataclasses.CellData: Cell data.
         """
         return self._cells
 
@@ -262,6 +262,8 @@ class InSituData:
 
     @property
     def viewer(self):
+        """Return viewer of the InSituData object.
+        """
         return self._viewer
 
     @viewer.setter
@@ -274,6 +276,10 @@ class InSituData:
 
     @property
     def annotations(self):
+        """Return annotations of the InSituData object.
+        Returns:
+            insitupy._core.dataclasses.AnnotationsData: Annotations.
+        """
         return self._annotations
 
     @annotations.setter
@@ -294,6 +300,10 @@ class InSituData:
 
     @property
     def regions(self):
+        """Return regions of the InSituData object.
+        Returns:
+            insitupy._core.dataclasses.RegionsData: Regions.
+        """
         return self._regions
 
     @regions.deleter
