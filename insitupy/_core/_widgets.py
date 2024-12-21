@@ -222,17 +222,9 @@ if WITH_NAPARI:
                 reset: bool = False,
                 viewer=viewer
             ):
-
-                # # find currently visible layer
-                # visible_points_layers = [l for l in viewer.layers if l.visible and isinstance(l, napari.layers.points.points.Points)]
-
-                # if len(visible_points_layers) > 0:
-                #     current_layer = visible_points_layers[-1]
-
                 # find currently selected layer
                 layers = viewer.layers
                 selected_layers = list(layers.selection)
-                #assert isinstance(current_layer, napari.layers.points.points.Points), "Selected layer is not a points layer."
 
                 if not reset:
                     # create filtering mask
