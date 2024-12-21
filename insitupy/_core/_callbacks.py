@@ -80,59 +80,60 @@ def _update_continuous_legend(static_canvas, mapping, label):
 
 def _update_colorlegend():
 
-    #layer = viewer.layers[-1]
+    # # automatically get layer
+    # candidate_layers = [l for l in config.viewer.layers if l.name.startswith(f"{config.current_data_name}")]
+    # try:
+    #     # always choose the candidate layer that is on top
+    #     layer_name = candidate_layers[-1].name
+    # except IndexError:
+    #     raise ValueError("No layer with cellular transcriptomic data found. First add a layer using the 'Show Data' widget.")
 
-    # automatically get layer
-    candidate_layers = [l for l in config.viewer.layers if l.name.startswith(f"{config.current_data_name}")]
-    try:
-        # always choose the candidate layer that is on top
-        layer_name = candidate_layers[-1].name
-    except IndexError:
-        raise ValueError("No layer with cellular transcriptomic data found. First add a layer using the 'Show Data' widget.")
+    # # extract layer
+    # layer = config.viewer.layers[layer_name]
 
-    # extract layer
-    layer = config.viewer.layers[layer_name]
+    layer = config.viewer.layers.selection.active
 
-    # get values
-    values = layer.properties["value"]
-    color_values = layer.face_color
+    if isinstance(layer, napari.layers.points.points.Points):
+        # get values
+        values = layer.properties["value"]
+        color_values = layer.face_color
 
 
-    from insitupy.plotting._colors import continuous_data_to_rgba
-    if is_numeric_dtype(values):
-        rgba_list, mapping = continuous_data_to_rgba(data=values,
-                                cmap=layer.face_colormap.name,
-                                #upper_climit_pct=upper_climit_pct,
-                                return_mapping=True
-                                )
+        from insitupy.plotting._colors import continuous_data_to_rgba
+        if is_numeric_dtype(values):
+            rgba_list, mapping = continuous_data_to_rgba(data=values,
+                                    cmap=layer.face_colormap.name,
+                                    #upper_climit_pct=upper_climit_pct,
+                                    return_mapping=True
+                                    )
 
-        _update_continuous_legend(static_canvas=config.static_canvas,
-                                  mapping=mapping,
-                                  label=layer.name)
+            _update_continuous_legend(static_canvas=config.static_canvas,
+                                    mapping=mapping,
+                                    label=layer.name)
 
-    else:
-        # substitute pd.NA with np.nan
-        values = pd.Series(values).fillna(np.nan).values
-        # assume the data is categorical
-        #mapping = {category: tuple(rgba) for category, rgba in zip(values, color_values)}
-        unique_values = list(set(values))
-        mapping = {v: tuple(color_values[list(values).index(v)]) for v in unique_values}
-        # sort mapping dict
-        mapping = {elem: mapping[elem] for elem in sorted(mapping.keys())}
+        else:
+            # substitute pd.NA with np.nan
+            values = pd.Series(values).fillna(np.nan).values
+            # assume the data is categorical
+            #mapping = {category: tuple(rgba) for category, rgba in zip(values, color_values)}
+            unique_values = list(set(values))
+            mapping = {v: tuple(color_values[list(values).index(v)]) for v in unique_values}
+            # sort mapping dict
+            mapping = {elem: mapping[elem] for elem in sorted(mapping.keys())}
 
-        _update_categorical_legend(static_canvas=config.static_canvas,
-                                   mapping=mapping, label=layer.name)
+            _update_categorical_legend(static_canvas=config.static_canvas,
+                                    mapping=mapping, label=layer.name)
 
-    # # create color mapping
-    # rgba_list, mapping = _data_to_rgba(values, return_mapping=True)
+        # # create color mapping
+        # rgba_list, mapping = _data_to_rgba(values, return_mapping=True)
 
-    # if isinstance(mapping, dict):
-    #     _update_categorical_legend(static_canvas=config.static_canvas,
-    #                                mapping=mapping, label=layer.name)
-    # else:
-    #     _update_continuous_legend(static_canvas=config.static_canvas,
-    #                               mapping=mapping,
-    #                               label=layer.name)
+        # if isinstance(mapping, dict):
+        #     _update_categorical_legend(static_canvas=config.static_canvas,
+        #                                mapping=mapping, label=layer.name)
+        # else:
+        #     _update_continuous_legend(static_canvas=config.static_canvas,
+        #                               mapping=mapping,
+        #                               label=layer.name)
 
 
 def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget, filter_widget):

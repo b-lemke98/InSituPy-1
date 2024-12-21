@@ -1531,7 +1531,7 @@ class InSituData:
                     X = cells.matrix.X
 
                 for i, k in enumerate(keys):
-                    pvis = False if i < len(keys) - 1 else True # only last image is set visible
+                    #pvis = False if i < len(keys) - 1 else True # only last image is set visible
                     # get expression values
                     if k in cells.matrix.obs.columns:
                         color_value = cells.matrix.obs[k].values
@@ -1550,7 +1550,7 @@ class InSituData:
                         name=k,
                         point_names=cell_names,
                         point_size=point_size,
-                        visible=pvis
+                        visible=True
                     )
 
                     # add layer programmatically - does not work for all types of layers

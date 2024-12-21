@@ -290,19 +290,25 @@ if WITH_NAPARI:
                 else:
                     print(f"Cell '{cell}' not found in `xeniumdata.cells.matrix.obs_names()`.")
 
-            def callback(event=None):
+            def callback_refresh(event=None):
                 # after the points widget is run, the widgets have to be refreshed to current data layer
                 _refresh_widgets_after_data_change(xdata,
                                                         points_widget=add_cells_widget,
                                                         boundaries_widget=add_boundaries_widget,
                                                         filter_widget=filter_cells_widget
                                                         )
+
+            def callback_update_legend(event=None):
                 _update_colorlegend()
 
             if add_cells_widget is not None:
-                add_cells_widget.call_button.clicked.connect(callback)
+                add_cells_widget.call_button.clicked.connect(callback_refresh)
+                add_cells_widget.call_button.clicked.connect(callback_update_legend)
             if add_boundaries_widget is not None:
-                add_boundaries_widget.call_button.clicked.connect(callback)
+                add_boundaries_widget.call_button.clicked.connect(callback_refresh)
+                add_boundaries_widget.call_button.clicked.connect(callback_update_legend)
+
+            viewer.layers.selection.events.active.connect(callback_update_legend)
 
         if not (hasattr(xdata, "annotations") | hasattr(xdata, "regions")):
             show_geometries_widget = None
