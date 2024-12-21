@@ -18,13 +18,13 @@ def create_cmap_mapping(data, cmap: Union[str, ListedColormap] = None):
     if cmap is None:
         pal = CustomPalettes()
         cmap = pal.tab20_mod
-
     try:
         unique_categories = data.cat.categories # in case of categorical pandas series
     except AttributeError:
         try:
             unique_categories = data.categories # in case of numpy categories
         except AttributeError:
+            data = np.array(data)
             try:
                 unique_categories = np.sort(data[~data.isna()].unique())
             except AttributeError:

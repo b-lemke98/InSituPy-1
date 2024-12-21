@@ -143,5 +143,6 @@ out/
 demo_dataset*/
 tmp/
 figures/
+data/
 
 .DS_Store

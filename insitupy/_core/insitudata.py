@@ -43,7 +43,6 @@ from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_celldata, read_shapesdata)
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting import volcano_plot
-from insitupy.utils import create_deg_dataframe
 from insitupy.utils.deg import create_deg_dataframe
 from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
                                           reduce_dimensions_anndata)
@@ -1532,7 +1531,7 @@ class InSituData:
                     X = cells.matrix.X
 
                 for i, k in enumerate(keys):
-                    pvis = False if i < len(keys) - 1 else True # only last image is set visible
+                    #pvis = False if i < len(keys) - 1 else True # only last image is set visible
                     # get expression values
                     if k in cells.matrix.obs.columns:
                         color_value = cells.matrix.obs[k].values
@@ -1551,7 +1550,7 @@ class InSituData:
                         name=k,
                         point_names=cell_names,
                         point_size=point_size,
-                        visible=pvis
+                        visible=True
                     )
 
                     # add layer programmatically - does not work for all types of layers
@@ -1569,7 +1568,7 @@ class InSituData:
             self.viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
         else:
             # initialize the widgets
-            show_points_widget, locate_cells_widget, show_geometries_widget, show_boundaries_widget, select_data = _initialize_widgets(xdata=self)
+            show_points_widget, locate_cells_widget, show_geometries_widget, show_boundaries_widget, select_data, filter_cells_widget = _initialize_widgets(xdata=self)
 
             # add widgets to napari window
             if select_data is not None:
@@ -1577,8 +1576,13 @@ class InSituData:
                 select_data.max_height = 50
                 select_data.max_width = widgets_max_width
 
+            if filter_cells_widget is not None:
+                self.viewer.window.add_dock_widget(filter_cells_widget, name="Filter cells", area="right")
+                filter_cells_widget.max_height = 150
+                show_points_widget.max_width = widgets_max_width
+
             if show_points_widget is not None:
-                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right")
+                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right", tabify=True)
                 show_points_widget.max_height = 150
                 show_points_widget.max_width = widgets_max_width
 
