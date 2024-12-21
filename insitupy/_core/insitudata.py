@@ -1568,7 +1568,7 @@ class InSituData:
             self.viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
         else:
             # initialize the widgets
-            show_points_widget, locate_cells_widget, show_geometries_widget, show_boundaries_widget, select_data = _initialize_widgets(xdata=self)
+            show_points_widget, locate_cells_widget, show_geometries_widget, show_boundaries_widget, select_data, filter_cells_widget = _initialize_widgets(xdata=self)
 
             # add widgets to napari window
             if select_data is not None:
@@ -1576,8 +1576,13 @@ class InSituData:
                 select_data.max_height = 50
                 select_data.max_width = widgets_max_width
 
+            if filter_cells_widget is not None:
+                self.viewer.window.add_dock_widget(filter_cells_widget, name="Filter cells", area="right")
+                filter_cells_widget.max_height = 150
+                show_points_widget.max_width = widgets_max_width
+
             if show_points_widget is not None:
-                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right")
+                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right", tabify=True)
                 show_points_widget.max_height = 150
                 show_points_widget.max_width = widgets_max_width
 

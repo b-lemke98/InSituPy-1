@@ -135,7 +135,7 @@ def _update_colorlegend():
     #                               label=layer.name)
 
 
-def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget):
+def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget, filter_widget):
     config.init_viewer_config(xdata)
 
     # set choices
@@ -148,6 +148,9 @@ def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget):
     points_widget.recent.choices = sorted(config.recent_selections)
     points_widget.recent.value = None
 
+    # update obs in filter widget
+    filter_widget.obs_key.choices = config.value_dict["obs"]
+
     # set only the last cell layer visible
     cell_layers = []
     for elem in xdata.viewer.layers:
@@ -158,6 +161,7 @@ def _refresh_widgets_after_data_change(xdata, points_widget, boundaries_widget):
     #point_layers = [elem for elem in xdata.viewer.layers if isinstance(elem, napari.layers.points.points.Points)]
     n_cell_layers = len(cell_layers)
 
-    for i, l in enumerate(cell_layers):
-        if i < n_cell_layers-1:
-            l.visible = False
+    # # make only last cell layer visible
+    # for i, l in enumerate(cell_layers):
+    #     if i < n_cell_layers-1:
+    #         l.visible = False
