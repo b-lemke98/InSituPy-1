@@ -865,7 +865,8 @@ class ImageData(DeepCopyMixin, GetMixin):
             # retrieve metadata
             img_shape = img[0].shape if isinstance(img, list) else img.shape
             img_max = img[0].max() if isinstance(img, list) else img.max()
-            img_max = int(img_max)
+            img_max = img_max.compute() if isinstance(img, da.Array) else img_max
+            #img_max = int(img_max)
 
             # save metadata
             self.metadata[name] = {}
