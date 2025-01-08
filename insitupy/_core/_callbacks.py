@@ -117,7 +117,7 @@ def _update_colorlegend():
             # assume the data is categorical
             #mapping = {category: tuple(rgba) for category, rgba in zip(values, color_values)}
             unique_values = list(set(values))
-            mapping = {v: tuple(color_values[list(values).index(v)]) for v in unique_values}
+            mapping = {str(v): tuple(color_values[list(values).index(v)]) for v in unique_values}
             # sort mapping dict
             mapping = {elem: mapping[elem] for elem in sorted(mapping.keys())}
 
