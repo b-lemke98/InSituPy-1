@@ -2799,6 +2799,7 @@ def load_fromspatialdata(spatialdata_path, pixel_size):
     xd = InSituData(Path("./data1"), {"metadata_file": "meta.txt", "xenium":{"pixel_size": pixel_size}}, "", "", "")
     path = Path(spatialdata_path)
     f = zarr.open(path, mode="r")
+    bd = BoundariesData(None, None)
 
 
     if "labels" in f:
@@ -2811,7 +2812,6 @@ def load_fromspatialdata(spatialdata_path, pixel_size):
             f_elem_store = os.path.join(f.store.path, f_elem.path)
             image, axes = read_helper_images_labels(f_elem_store, "labels")
             boundaries_dict[name] = image[0]
-        bd = BoundariesData(None, None)
         bd.add_boundaries(boundaries_dict, pixel_size=pixel_size)
 
     if "tables" in f:
