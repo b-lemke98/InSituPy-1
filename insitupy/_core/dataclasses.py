@@ -829,7 +829,7 @@ class MultiCellData(DeepCopyMixin):
             if key != self._key_main:
                 repr += f"{tf.Bold+'Alternative CellData: '+tf.ResetAll}"
                 repr += f"{key}\n"
-                repr += f"{self._data[self._key_main].__repr__()}\n"
+                repr += f"{self._data[key].__repr__()}\n"
         return repr
     
     def __getitem__(self, key):
