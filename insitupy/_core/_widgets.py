@@ -48,11 +48,7 @@ if WITH_NAPARI:
                                         )
             config.init_recent_selections()
 
-            data_names = ["main"]
-            if xdata.alt is not None:
-                alt = xdata.alt
-                for k in alt.keys():
-                    data_names.append(k)
+            data_names = xdata.cells.get_all_keys()
 
             @magicgui(
                 call_button=False,

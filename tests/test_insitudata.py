@@ -19,26 +19,26 @@ def test_read():
     assert len(xd.images.metadata) == n_images
     assert xd.images["nuclei"][0].shape == (image_x, image_y)
 
-    assert len(xd.cells.boundaries.metadata) == 2
-    assert xd.cells.boundaries["cellular"].shape == (image_x, image_y)
-    assert xd.cells.boundaries["nuclear"].shape == (image_x, image_y)
+    assert len(xd.cells["main"].boundaries.metadata) == 2
+    assert xd.cells["main"].boundaries["cellular"].shape == (image_x, image_y)
+    assert xd.cells["main"].boundaries["nuclear"].shape == (image_x, image_y)
 
     assert xd.transcripts.shape == (n_transripts, 9)
-    assert xd.cells.matrix.shape == (n_cells, n_genes)
+    assert xd.cells["main"].matrix.shape == (n_cells, n_genes)
 
 
 def test_baysor():
     xd = read_xenium(DATA_PATH)
     xd.load_all()
     xd.add_baysor(BAYSOR_PATH)
-    assert xd.alt is not None
-    assert len(xd.alt) == 1
-    assert "baysor" in xd.alt.keys()
-    assert xd.alt["baysor"].matrix is not None
-    assert xd.alt["baysor"].matrix.shape == (18, 11)
-    assert xd.alt["baysor"].boundaries is not None
-    assert xd.alt["baysor"].boundaries
-    assert 'cellular' in xd.alt["baysor"].boundaries.metadata.keys()
+    assert xd.cells is not None
+    assert len(xd.cells.get_all_keys()) == 2
+    assert "baysor" in xd.cells.get_all_keys()
+    assert xd.cells["baysor"].matrix is not None
+    assert xd.cells["baysor"].matrix.shape == (18, 11)
+    assert xd.cells["baysor"].boundaries is not None
+    assert xd.cells["baysor"].boundaries
+    assert 'cellular' in xd.cells["baysor"].boundaries.metadata.keys()
     
 
 def test_functions():
@@ -47,5 +47,5 @@ def test_functions():
     xd.normalize_and_transform(transformation_method="sqrt")
     xd.reduce_dimensions(umap=True, tsne=False)
     for key in ['spatial', 'X_pca', 'X_umap']:
-        assert key in xd.cells.matrix.obsm.keys()
-    assert "leiden" in xd.cells.matrix.obs.columns
+        assert key in xd.cells["main"].matrix.obsm.keys()
+    assert "leiden" in xd.cells["main"].matrix.obs.columns

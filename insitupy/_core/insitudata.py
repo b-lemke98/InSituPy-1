@@ -40,7 +40,7 @@ from insitupy._exceptions import UnknownOptionError
 from insitupy.images import ImageRegistration, deconvolve_he, resize_image
 from insitupy.io.files import read_json, write_dict_to_json
 from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
-                            read_celldata, read_shapesdata)
+                            read_multicelldata, read_shapesdata)
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting import volcano_plot
 from insitupy.utils import create_deg_dataframe
@@ -60,9 +60,9 @@ from ..utils.utils import (convert_napari_shape_to_polygon_or_line,
                            convert_to_list)
 from ..utils.utils import textformat as tf
 from ._layers import _create_points_layer
-from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
+from ._save import (_save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
-from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData
+from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData, MultiCellData
 
 # optional packages that are not always installed
 if WITH_NAPARI:
@@ -105,7 +105,6 @@ class InSituData:
         self._from_insitudata = from_insitudata
         self._images = None
         self._cells = None
-        self._alt = None
         self._annotations = None
         self._transcripts = None
         self._regions = None
@@ -161,14 +160,6 @@ class InSituData:
                 repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + region_repr.replace("\n", f"\n{tf.SPACER}   ")
             )
 
-        if self._alt is not None:
-            cells_repr = self._alt.__repr__()
-            altseg_keys = self._alt.keys()
-            repr = (
-                #repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n"
-                f"{tf.SPACER}   Alternative CellData objects with following keys: {','.join(altseg_keys)}"
-            )
         return repr
     
 
@@ -237,7 +228,7 @@ class InSituData:
         return self._cells
 
     @cells.setter
-    def cells(self, value: CellData):
+    def cells(self, value: MultiCellData):
         self._cells = value
 
     @cells.deleter
@@ -291,18 +282,6 @@ class InSituData:
         self._annotations = None
 
     @property
-    def alt(self):
-        """Return alternative cell data of the InSituData object.
-        Returns:
-            dict: A dictionary containing `insitupy._core.dataclasses.CellData` objects..
-        """
-        return self._alt
-
-    @alt.deleter
-    def alt(self):
-        self._alt = None
-
-    @property
     def regions(self):
         """Return regions of the InSituData object.
         Returns:
@@ -347,7 +326,7 @@ class InSituData:
                           add_masks: bool = False,
                           add_to_obs: bool = False,
                           overwrite: bool = True,
-                          alt_layer: str = None
+                          layer: str = None
                           ):
         '''
         Function to assign geometries (annotations or regions) to the anndata object in
@@ -359,19 +338,19 @@ class InSituData:
         except AttributeError:
             raise ModalityNotFoundError(modality=geometry_type)
 
-        if alt_layer is None:
-            if self._cells is not None:
-                cell_attr = self._cells
-                name = ".cells"
+        if layer is None:
+            if self._cells._key_main is not None:
+                cell_attr = self._cells["main"]
+                name = ".cells['main']"
             else:
-                raise ModalityNotFoundError("cells")
+                raise ModalityNotFoundError("cells['main']")
         else:
             #TODO
-            if self._alt is not None:
-                cell_attr = self._alt[alt_layer]
-                name = f".alt[{alt_layer}]"
-            else:
-                raise ModalityNotFoundError(f"alt[{alt_layer}]")
+            try:
+                cell_attr = self._cells[layer]
+                name = f".cells[{layer}]"
+            except:
+                raise ModalityNotFoundError(f"cells[{layer}]")
 
         if keys == "all":
             keys = geom_attr.metadata.keys()
@@ -467,21 +446,14 @@ class InSituData:
         add_masks: bool = False,
         overwrite: bool = True
     ):
-        self.assign_geometries(
-            geometry_type="annotations",
-            keys=keys,
-            add_masks=add_masks,
-            overwrite=overwrite
-        )
-        if self._alt is not None:
-            for key in self.alt.keys():
-                self.assign_geometries(
-                    geometry_type="annotations",
-                    keys=keys,
-                    add_masks=add_masks,
-                    overwrite=overwrite,
-                    alt_layer=key
-                )
+        for key in self._cells.get_all_keys():
+            self.assign_geometries(
+                geometry_type="annotations",
+                keys=keys,
+                add_masks=add_masks,
+                overwrite=overwrite,
+                layer=key
+            )
 
     def assign_regions(
         self,
@@ -489,21 +461,14 @@ class InSituData:
         add_masks: bool = False,
         overwrite: bool = True
     ):
-        self.assign_geometries(
-            geometry_type="regions",
-            keys=keys,
-            add_masks=add_masks,
-            overwrite=overwrite
-        )
-        if self._alt is not None:
-            for key in self.alt.keys():
-                self.assign_geometries(
-                    geometry_type="regions",
-                    keys=keys,
-                    add_masks=add_masks,
-                    overwrite=overwrite,
-                    alt_layer=key
-                )
+        for key in self._cells.get_all_keys():
+            self.assign_geometries(
+                geometry_type="regions",
+                keys=keys,
+                add_masks=add_masks,
+                overwrite=overwrite,
+                layer=key
+            )
 
     def copy(self):
         '''
@@ -631,43 +596,23 @@ class InSituData:
             if (xlim == _self.metadata["xenium"]["cropping_xlim"]) & (ylim == _self.metadata["xenium"]["cropping_ylim"]):
                 raise InSituDataRepeatedCropError(xlim, ylim)
 
-        if _self.cells is not None:
-            # infer mask from cell coordinates
-            cells = _self.cells
+        for key in _self.cells.get_all_keys():
+            cells = _self.cells[key]
             cell_coords = cells.matrix.obsm['spatial'].copy()
             xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
             ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
             mask = xmask & ymask
 
             # select
-            _self.cells.matrix = _self.cells.matrix[mask, :].copy()
+            cells.matrix = cells.matrix[mask, :].copy()
 
             # crop boundaries
-            _self.cells.boundaries.crop(
-                cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim
+            cells.boundaries.crop(
+                cell_ids=_self.cells[key].matrix.obs_names, xlim=xlim, ylim=ylim
                 )
 
             # shift coordinates to correct for change of coordinates during cropping
-            _self.cells.shift(x=-xlim[0], y=-ylim[0])
-
-        if _self.alt is not None:
-            alt = _self.alt
-            for k, cells in alt.items():
-                cell_coords = cells.matrix.obsm['spatial'].copy()
-                xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
-                ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
-                mask = xmask & ymask
-
-                # select
-                cells.matrix = cells.matrix[mask, :].copy()
-
-                # crop boundaries
-                cells.boundaries.crop(
-                    cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim
-                    )
-
-                # shift coordinates to correct for change of coordinates during cropping
-                cells.shift(x=-xlim[0], y=-ylim[0])
+            cells.shift(x=-xlim[0], y=-ylim[0])
 
         if _self.transcripts is not None:
             # infer mask for selection
@@ -780,7 +725,7 @@ class InSituData:
         else:
             print("Calculate highly-variable genes per batch key {} using {} flavor...".format(hvg_batch_key, hvg_flavor)) if verbose else None
 
-        sc.pp.highly_variable_genes(self._cells.matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
+        sc.pp.highly_variable_genes(self._cells["main"].matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
 
 
     def normalize_and_transform(self,
@@ -808,23 +753,13 @@ class InSituData:
             None: This method modifies the input matrix in place, normalizing the data based on the specified method.
                 It does not return any value.
         """
+
         if self._cells is not None:
-            cells = self._cells
+            for key in self._cells.get_all_keys():
+                print(f"\tNormalizing {key}...")
+                normalize_and_transform_anndata(adata=self._cells[key].matrix, transformation_method=transformation_method, target_sum=target_sum, verbose=verbose)
         else:
             raise ModalityNotFoundError(modality="cells")
-
-        normalize_and_transform_anndata(
-            adata=cells.matrix,
-            transformation_method=transformation_method,
-            target_sum=target_sum,
-            verbose=verbose)
-
-        if self._alt is not None:
-            alt = self._alt
-            print("Found `.alt` modality.")
-            for k, cells in alt.items():
-                print(f"\tNormalizing {k}...")
-                normalize_and_transform_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
 
     def add_alt(self,
                 celldata_to_add: CellData,
@@ -838,11 +773,11 @@ class InSituData:
         #    setattr(self, alt_attr_name, {})
         #    alt_attr = getattr(self, alt_attr_name)
 
-        if self._alt is None:
-            self._alt = dict()
+        if self._cells is None:
+            self._alt = MultiCellData()
 
         # add the celldata to the given key
-        self._alt[key_to_add] = celldata_to_add
+        self._cells.add_celldata(cd=celldata_to_add, key=key_to_add)
 
     def add_baysor(self,
                    path: Union[str, os.PathLike, Path],
@@ -1004,32 +939,34 @@ class InSituData:
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
             else:
-                self._cells = read_celldata(path=self._path / cells_path)
+                self._cells = read_multicelldata(path=self._path / cells_path)
 
             # check if alt data is there and read if yes
-            try:
-                alt_path_dict = self._metadata["data"]["alt"]
-            except KeyError:
-                print("\tNo alternative cells found...")
-            else:
-                print("\tFound alternative cells...")
-                alt_dict = {}
-                for k, p in alt_path_dict.items():
-                    alt_dict[k] = read_celldata(path=self._path / p)
+            #try:
+            #    alt_path_dict = self._metadata["data"]["alt"]
+            #except KeyError:
+            #    print("\tNo alternative cells found...")
+            #else:
+            #    print("\tFound alternative cells...")
+            #    alt_dict = {}
+            #    for k, p in alt_path_dict.items():
+            #        alt_dict[k] = read_celldata(path=self._path / p)
 
                 # add attribute
-                self._alt = alt_dict
+            #    self._alt = alt_dict
 
         else:
             # read celldata
             matrix = _read_matrix_from_xenium(path=self._path)
             boundaries = _read_boundaries_from_xenium(path=self._path, pixel_size=pixel_size)
-            self._cells = CellData(matrix=matrix, boundaries=boundaries)
+            self._cells = MultiCellData()
+            cells_main = CellData(matrix=matrix, boundaries=boundaries)
+            self._cells.add_celldata(cd=cells_main, key="main", is_main=True)
 
             try:
                 # read binned expression
-                arr = _read_binned_expression(path=self._path, gene_names_to_select=self._cells.matrix.var_names)
-                self._cells.matrix.varm["binned_expression"] = arr
+                arr = _read_binned_expression(path=self._path, gene_names_to_select=self._cells["main"].matrix.var_names)
+                self._cells["main"].matrix.varm["binned_expression"] = arr
             except ValueError:
                 warn("Loading of binned expression did not work. Skipped it.")
                 pass
@@ -1183,27 +1120,16 @@ class InSituData:
         else:
             cells = self._cells
 
-        reduce_dimensions_anndata(adata=cells.matrix,
-                                  umap=umap, tsne=tsne, layer=layer,
-                                  batch_correction_key=batch_correction_key,
-                                  perform_clustering=perform_clustering,
-                                  verbose=verbose,
-                                  tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
-                                  )
+        for key in cells.get_all_keys():
+            print(f"\tReducing dimensions in `.cells['{key}']...")
 
-        if self._alt is not None:
-            alt = self._alt
-            print("Found `.alt` modality.")
-            for k, cells in alt.items():
-                print(f"\tReducing dimensions in `.alt['{k}']...")
-
-                reduce_dimensions_anndata(adata=cells.matrix,
-                                        umap=umap, tsne=tsne, layer=layer,
-                                        batch_correction_key=batch_correction_key,
-                                        perform_clustering=perform_clustering,
-                                        verbose=verbose,
-                                        tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
-                                        )
+            reduce_dimensions_anndata(adata=cells[key].matrix,
+                                    umap=umap, tsne=tsne, layer=layer,
+                                    batch_correction_key=batch_correction_key,
+                                    perform_clustering=perform_clustering,
+                                    verbose=verbose,
+                                    tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
+                                    )
 
     def saveas(self,
             path: Union[str, os.PathLike, Path],
@@ -1273,15 +1199,6 @@ class InSituData:
                 boundaries_zipped=zarr_zipped
             )
 
-        # save alternative cell data
-        if self._alt is not None:
-            alt = self._alt
-            _save_alt(
-                attr=alt,
-                path=path,
-                metadata=self._metadata,
-                boundaries_zipped=zarr_zipped
-            )
 
         # save transcripts
         if self._transcripts is not None:
@@ -1420,16 +1337,6 @@ class InSituData:
                 overwrite=True
             )
 
-        # save alternative cell data
-        if self._alt is not None:
-            alt = self._alt
-            print("\tUpdating alternative segmentations...", flush=True)
-            _save_alt(
-                attr=alt,
-                path=path,
-                metadata=self._metadata,
-                boundaries_zipped=zarr_zipped
-            )
 
         # save annotations
         if self._annotations is not None:
@@ -1619,7 +1526,7 @@ class InSituData:
         # optionally: add cells as points
         #if show_cells or keys is not None:
         if keys is not None:
-            if self._cells is None:
+            if self._cells is None and self._cells.key_main is not None:
                 raise InSituDataMissingObject("cells")
             else:
                 cells = self._cells
@@ -1627,27 +1534,27 @@ class InSituData:
                 keys = convert_to_list(keys)
 
                 # get point coordinates
-                points = np.flip(cells.matrix.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
+                points = np.flip(cells["main"].matrix.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
                 #points *= pixel_size # convert to length unit (e.g. µm)
 
                 # get expression matrix
-                if issparse(cells.matrix.X):
-                    X = cells.matrix.X.toarray()
+                if issparse(cells["main"].matrix.X):
+                    X = cells["main"].matrix.X.toarray()
                 else:
-                    X = cells.matrix.X
+                    X = cells["main"].matrix.X
 
                 for i, k in enumerate(keys):
                     pvis = False if i < len(keys) - 1 else True # only last image is set visible
                     # get expression values
-                    if k in cells.matrix.obs.columns:
-                        color_value = cells.matrix.obs[k].values
+                    if k in cells["main"].matrix.obs.columns:
+                        color_value = cells["main"].matrix.obs[k].values
 
                     else:
-                        geneid = cells.matrix.var_names.get_loc(k)
+                        geneid = cells["main"].matrix.var_names.get_loc(k)
                         color_value = X[:, geneid]
 
                     # extract names of cells
-                    cell_names = cells.matrix.obs_names.values
+                    cell_names = cells["main"].matrix.obs_names.values
 
                     # create points layer
                     layer = _create_points_layer(
@@ -1904,8 +1811,8 @@ class InSituData:
         fontsize: int = 28
         ):
         # extract binned expression matrix and gene names
-        binex = self._cells.matrix.varm["binned_expression"]
-        gene_names = self._cells.matrix.var_names
+        binex = self._cells["main"].matrix.varm["binned_expression"]
+        gene_names = self._cells["main"].matrix.var_names
 
         genes = convert_to_list(genes)
 
@@ -1961,7 +1868,7 @@ class InSituData:
         **kwargs
         ):
         # retrieve anndata object from InSituData
-        adata = self._cells.matrix
+        adata = self._cells["main"].matrix
 
         results = expr_along_obs_val(
             adata=adata,
@@ -2306,7 +2213,7 @@ def calc_distance_of_cells_from(
         None
     """
     # extract anndata object
-    adata = data.cells.matrix
+    adata = data.cells["main"].matrix
 
     if region_name is None:
         print(f'Calculate the distance of cells from the annotation "{annotation_class}"')
@@ -2361,7 +2268,7 @@ def calc_distance_of_cells_from(
         adata.obsm["distance_from"] = pd.DataFrame(index=adata.obs_names)
 
     adata.obsm["distance_from"][key_to_save] = min_dists
-    print(f'Saved distances to `.cells.matrix.obsm["distance_from"]["{key_to_save}"]`')
+    print(f'Saved distances to `.cells["main"].matrix.obsm["distance_from"]["{key_to_save}"]`')
 
 def differential_gene_expression(
     data: InSituData,
@@ -2457,7 +2364,7 @@ def differential_gene_expression(
         _check_assignment(data=data, key=region_key, force_assignment=force_assignment, modality="regions")
 
     # extract main anndata
-    adata1 = data.cells.matrix.copy()
+    adata1 = data.cells["main"].matrix.copy()
 
     if region_tuple is not None:
         # select only one region
@@ -2498,7 +2405,7 @@ def differential_gene_expression(
         _check_assignment(data=ref_data, key=reference_key, force_assignment=force_assignment, modality="annotations")
 
         # extract reference anndata
-        adata2 = ref_data.cells.matrix.copy()
+        adata2 = ref_data.cells["main"].matrix.copy()
         # repeat the same as for adata1 for adata2
         col_with_id_ref = adata2.obsm["annotations"].apply(
             func=lambda row: _substitution_func(

@@ -444,7 +444,7 @@ class InSituExperiment:
         for idx, (metadata_row, dataset) in enumerate(self.iterdata()):
             ax = axes[idx] if num_datasets > 1 else axes
             # Assuming each dataset has an AnnData object or can be converted to one
-            adata = dataset.cells.matrix
+            adata = dataset.cells["main"].matrix
             sc.pl.umap(adata, ax=ax, color=color, show=False, **kwargs)
 
             if title_columns:
@@ -859,12 +859,12 @@ class InSituExperiment:
             if data.cells is None:
                 warnings.warn("Counts were not loaded. Loading.")
                 data.load_cells()
-            if data.cells is None or data.cells.matrix is None:
+            if data.cells is None or data.cells.key_main is None or data.cells["main"].matrix is None:
                 warnings.warn("Counts are not defined or loaded.")
                 list_gene_count.append(0)
                 list_transcript_count.append(0)
             else:
-                m_gene_counts, m_transcript_counts = calculate_metrics(data.cells.matrix, layer=layer)
+                m_gene_counts, m_transcript_counts = calculate_metrics(data.cells["main"].matrix, layer=layer)
                 list_gene_count.append(m_gene_counts)
                 list_transcript_count.append(m_transcript_counts)
 

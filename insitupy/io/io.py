@@ -13,7 +13,7 @@ from rasterio.features import rasterize
 from zarr.errors import ArrayNotFoundError
 
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
-                                        CellData, RegionsData, ShapesData)
+                                        CellData, RegionsData, ShapesData, MultiCellData)
 from insitupy.io.baysor import read_baysor_polygons
 from insitupy.io.files import read_json
 from insitupy.utils.utils import convert_to_list
@@ -104,6 +104,17 @@ def read_baysor_transcripts(
     baysor_transcript_dataframe = baysor_transcript_dataframe.set_index(transcript_id_col)
     return baysor_transcript_dataframe
 
+
+def read_multicelldata(
+        path: Union[str, os.PathLike, Path],
+    ) -> MultiCellData:
+    path = Path(path)
+    celldata_metadata = read_json(path / ".multicelldata")
+    mcd = MultiCellData()
+    for key in celldata_metadata["all_keys"]:
+        cd = read_celldata(path / key)
+        mcd.add_celldata(cd=cd, key=key, is_main=(key == celldata_metadata["key_main"]))
+    return mcd
 
 def read_celldata(
     path: Union[str, os.PathLike, Path],
