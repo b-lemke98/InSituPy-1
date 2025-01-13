@@ -123,7 +123,7 @@ if WITH_NAPARI:
             def add_cells_widget(
                 key="genes",
                 value=None,
-                size=6,
+                size=8,
                 recent=None,
                 add_new_layer=False,
                 viewer=viewer

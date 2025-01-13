@@ -1443,7 +1443,7 @@ class InSituData:
     def show(self,
         keys: Optional[str] = None,
         # annotation_keys: Optional[str] = None,
-        point_size: int = 6,
+        point_size: int = 8,
         scalebar: bool = True,
         #pixel_size: float = None, # if none, extract from metadata
         unit: str = "µm",
