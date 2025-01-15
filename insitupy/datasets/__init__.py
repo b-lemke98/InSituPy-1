@@ -1,2 +1,5 @@
+from ._datasets import (human_brain_cancer, human_breast_cancer,
+                        human_kidney_nondiseased, human_lung_cancer,
+                        human_lymph_node, human_lymph_node_5k,
+                        human_pancreatic_cancer, human_skin_melanoma)
 from .download import download_url
-from ._datasets import human_breast_cancer,human_brain_cancer,hskin_melanoma,nondiseased_kidney,human_lung_cancer,pancreatic_cancer,human_lymph_node_5k,human_lymph_node

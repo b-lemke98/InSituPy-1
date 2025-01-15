@@ -138,7 +138,7 @@ def human_breast_cancer(
 
 # xenium onboard analysis version 1.5.0
 # data from https://www.10xgenomics.com/resources/datasets/human-kidney-preview-data-xenium-human-multi-tissue-and-cancer-panel-1-standard
-def nondiseased_kidney(
+def human_kidney_nondiseased(
         overwrite: bool = False
 ) -> InSituData:
 
@@ -178,7 +178,7 @@ def nondiseased_kidney(
 
 # xenium onboard analysis version 1.6.0
 # data from https://www.10xgenomics.com/datasets/pancreatic-cancer-with-xenium-human-multi-tissue-and-cancer-panel-1-standard
-def pancreatic_cancer(
+def human_pancreatic_cancer(
         overwrite: bool = False
 
 ) -> InSituData:
@@ -226,7 +226,7 @@ def pancreatic_cancer(
 
 # xenium onboard analysis version 1.7.0
 # data from https://www.10xgenomics.com/resources/datasets/human-skin-preview-data-xenium-human-skin-gene-expression-panel-add-on-1-standard
-def hskin_melanoma(
+def human_skin_melanoma(
         overwrite: bool = False
 
 ) -> InSituData:
