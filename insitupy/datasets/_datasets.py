@@ -46,14 +46,7 @@ def md5sum_image_check(file_path : Path, expected_md5sum, overwrite):
     return download
 
 # function that checks data for md5sum, downloads and unpacks the data.
-def data_check_and_download(
-        xeniumdata_dir: Union[os.PathLike, Path],
-        zip_file: Union[os.PathLike, Path],
-        xeniumdata_url: str,
-        named_data_dir: Union[os.PathLike, Path],
-        expected_md5sum: Optional[str] = None,
-        overwrite: Optional[bool] = False
-        ):
+def data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir):
     # check if the unzipped xenium data exists
     download_xeniumdata = False
     if xeniumdata_dir.exists():
@@ -64,7 +57,7 @@ def data_check_and_download(
         else:
             print(f"This dataset exists already but is overwritten because of `overwrite=True`.")
             download_xeniumdata = True
-    elif expected_md5sum is not None:
+    else:
         # if unzipped xenium data does not exist, we need to check if a zip file exists, and if yes if its md5sum is correct
         if zip_file.exists():
             print("ZIP file exists. Checking md5sum...")
@@ -80,8 +73,6 @@ def data_check_and_download(
                 download_xeniumdata = True
         else:
             download_xeniumdata = True
-    else:
-        download_xeniumdata = True
 
     if download_xeniumdata:
         # download xenium data as zip file
@@ -98,6 +89,7 @@ def data_check_and_download(
 
         #remove zip file after unpacking
         os.remove(zip_file)
+
 
 # xenium onboard analysis version 1.0.1
 # data from https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast
@@ -126,8 +118,7 @@ def human_breast_cancer(
     if_file_name = "slide_id__hbreastcancer__CD20_HER2_DAPI__IF"
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
-    data_check_and_download(xeniumdata_dir, zip_file, xeniumdata_url, named_data_dir, expected_md5sum, overwrite)
-
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
     # load data into InSituData object
     data = read_xenium(xeniumdata_dir)
 
@@ -170,7 +161,7 @@ def nondiseased_kidney(
 
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
-    data_check_and_download(xeniumdata_dir, zip_file, xeniumdata_url, named_data_dir, expected_md5sum, overwrite)
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
 
      # load data into InSituData object
     data = read_xenium(xeniumdata_dir)
@@ -214,7 +205,7 @@ def pancreatic_cancer(
 
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data)
-    data_check_and_download(xeniumdata_dir, zip_file, xeniumdata_url, named_data_dir, expected_md5sum, overwrite)
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
 
     # load data into InSituData object
     data = read_xenium(xeniumdata_dir)
@@ -259,7 +250,7 @@ def hskin_melanoma(
 
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
-    data_check_and_download(xeniumdata_dir, zip_file, xeniumdata_url, named_data_dir, expected_md5sum, overwrite)
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
 
     # load data into InSituData object
     data = read_xenium(xeniumdata_dir)
@@ -300,7 +291,7 @@ def human_brain_cancer(
 
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
-    data_check_and_download(xeniumdata_dir, zip_file, xeniumdata_url, named_data_dir, expected_md5sum, overwrite)
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
 
     # load data into InSituData object
     data = read_xenium(xeniumdata_dir)
@@ -341,7 +332,7 @@ def human_lung_cancer(
 
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
-    data_check_and_download(xeniumdata_dir, zip_file, xeniumdata_url, named_data_dir, expected_md5sum, overwrite)
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
 
     # load data into InSituData object
     data = read_xenium(xeniumdata_dir)
@@ -382,7 +373,7 @@ def human_lymph_node_5k(
 
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
-    data_check_and_download(xeniumdata_dir, zip_file, xeniumdata_url, named_data_dir, expected_md5sum, overwrite)
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
 
     # load data into InSituData object
     data = read_xenium(xeniumdata_dir)
@@ -418,34 +409,7 @@ def human_lymph_node(
 
     # check if data exists (zipped or unzipped), if yes check md5sum
     # if necessary download data
-    data_check_and_download(xeniumdata_dir, zip_file, xeniumdata_url, named_data_dir, expected_md5sum, overwrite)
-
-    # load data into InSituData object
-    data = read_xenium(xeniumdata_dir)
-
-    print('For this dataset no image is available')
-
-    return data
-
-# xenium onboard analysis 3.0.0
-# data from https://cf.10xgenomics.com/samples/xenium/3.0.0/Xenium_Prime_Mouse_Ileum_tiny/Xenium_Prime_Mouse_Ileum_tiny_outs.zip
-# Mouse ileum, nuclear expansion
-def xenium_test_dataset(
-        overwrite: bool = False
-) -> InSituData:
-    # URLs for download
-    xeniumdata_url = "https://cf.10xgenomics.com/samples/xenium/3.0.0/Xenium_Prime_Mouse_Ileum_tiny/Xenium_Prime_Mouse_Ileum_tiny_outs.zip"
-
-    # set up paths
-    named_data_dir = DEMODIR / "xenium_test_dataset"
-    xeniumdata_dir = named_data_dir / "output-XETG00000__slide_id__xenium_test_dataset"
-    image_dir = named_data_dir / "unregistered_images"
-    zip_file = named_data_dir / Path(xeniumdata_url).name
-
-
-    # check if data exists (zipped or unzipped), if yes check md5sum
-    # if necessary download data
-    data_check_and_download(xeniumdata_dir, zip_file, xeniumdata_url, named_data_dir, expected_md5sum=None, overwrite=overwrite)
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
 
     # load data into InSituData object
     data = read_xenium(xeniumdata_dir)
