@@ -1,8 +1,6 @@
 from pathlib import Path
-from insitupy import read_xenium
+from insitupy.datasets._datasets import xenium_test_dataset
 
-
-DATA_PATH = Path("tests/data/Xenium_Prime_Mouse_Ileum_tiny_outs")
 BAYSOR_PATH = Path("tests/data/baysor_output-slide__region__20241212__134825__j1_b1_s1")
 image_x = 3522
 image_y = 5789
@@ -13,7 +11,7 @@ n_images = 1
 image_names = ["nuclei"]
 
 def test_read():
-    xd = read_xenium(DATA_PATH)
+    xd = xenium_test_dataset()
     xd.load_all()
 
     assert len(xd.images.metadata) == n_images
@@ -28,7 +26,7 @@ def test_read():
 
 
 def test_baysor():
-    xd = read_xenium(DATA_PATH)
+    xd = xenium_test_dataset()
     xd.load_all()
     xd.add_baysor(BAYSOR_PATH)
     assert xd.alt is not None
@@ -42,7 +40,7 @@ def test_baysor():
     
 
 def test_functions():
-    xd = read_xenium(DATA_PATH)
+    xd = xenium_test_dataset()
     xd.load_all()
     xd.normalize_and_transform(transformation_method="sqrt")
     xd.reduce_dimensions(umap=True, tsne=False)
