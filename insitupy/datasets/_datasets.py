@@ -417,3 +417,33 @@ def human_lymph_node(
     print('For this dataset no image is available')
 
     return data
+
+
+# xenium onboard analysis 3.0.0
+# data from https://cf.10xgenomics.com/samples/xenium/3.0.0/Xenium_Prime_Mouse_Ileum_tiny/Xenium_Prime_Mouse_Ileum_tiny_outs.zip
+# Mouse ileum, nuclear expansion
+def xenium_test_dataset(
+        overwrite: bool = False
+) -> InSituData:
+    # URLs for download
+    xeniumdata_url = "https://cf.10xgenomics.com/samples/xenium/3.0.0/Xenium_Prime_Mouse_Ileum_tiny/Xenium_Prime_Mouse_Ileum_tiny_outs.zip"
+
+    # set up paths
+    named_data_dir = DEMODIR / "xenium_test_dataset"
+    xeniumdata_dir = named_data_dir / "output-XETG00000__slide_id__xenium_test_dataset"
+    image_dir = named_data_dir / "unregistered_images"
+    zip_file = named_data_dir / Path(xeniumdata_url).name
+
+
+    # check if file exists and has correct md5sum
+    expected_md5sum = "0a7469a005576f2932e4f804dd9bc563"
+
+    # check if data exists (zipped or unzipped), if yes check md5sum
+    # if necessary download data
+    data_check_and_download(xeniumdata_dir, zip_file, expected_md5sum, overwrite, xeniumdata_url, named_data_dir)
+
+    # load data into InSituData object
+    data = read_xenium(xeniumdata_dir)
+
+    print('For this dataset no image is available')
+    return data
