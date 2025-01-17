@@ -2261,12 +2261,11 @@ def calc_distance_of_cells_from(
 
 def differential_gene_expression(
     data: InSituData,
-    data_annotation_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]]= None, # tuple of annotation key and names   # optional = None eingebaut
-    ref_data: Optional[InSituData] = None, # if comparing across two InSituData objects this argument can be used
-    ref_annotation_tuple: Optional[Union[Literal["rest"], Tuple[str, str], Tuple[str, str]] == "rest"] = None,   # optional  eingebaut
+    data_annotation_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
+    ref_data: Optional[InSituData] = None,
+    ref_annotation_tuple: Optional[Union[Literal["rest"], Tuple[str, str]]] = None,
     obs_tuple: Optional[Tuple[str, str]] = None,
     region_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
-    # reference: str = "rest",
     plot_volcano: bool = True,
     method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
     ignore_duplicate_assignments: bool = False,
@@ -2276,7 +2275,7 @@ def differential_gene_expression(
     save_only: bool = False,
     dpi_save: int = 300,
     **kwargs
-    ):
+):
     """
     Perform differential gene expression analysis on in situ sequencing data.
 
@@ -2337,7 +2336,7 @@ def differential_gene_expression(
         assert ref_data is None, "If `reference_tuple` is 'rest', `reference_data` must be None."
         reference_key = None
         reference_name = "rest"
-    elif isinstance(ref_annotation_tuple, tuple) & (len(ref_annotation_tuple) == 2):
+    elif isinstance(ref_annotation_tuple, tuple) and (len(ref_annotation_tuple) == 2):
         reference_key = ref_annotation_tuple[0]
         reference_name = ref_annotation_tuple[1]
     elif ref_annotation_tuple == None:
@@ -2425,8 +2424,8 @@ def differential_gene_expression(
             adata2.obs[comb_col_name] = col_with_id_ref
 
         if data_annotation_tuple is None and ref_annotation_tuple is None:
-            adata1['comb_col_name']=data.sample_id
-            adata2['comb_col_name']=ref_data.sample_id
+            adata1.obs[comb_col_name]=data.sample_id
+            adata2.obs[comb_col_name]=ref_data.sample_id
 
         # combine anndatas
         adata_combined = anndata.concat([adata1, adata2])
@@ -2458,26 +2457,33 @@ def differential_gene_expression(
         # filter for observation value
         adata_combined = adata_combined[adata_combined.obs[obs_tuple[0]] == obs_tuple[1]].copy()
         if data_annotation_tuple is None and ref_annotation_tuple is None:
-            rgg_groups = None
-            rgg_reference=ref_data.sample_id
+            rgg_groups = list(adata_combined.obs[comb_col_name].unique())
+            #rgg_reference=ref_data.sample_id
+            print(f"Calculate differentially expressed genes with Scanpy's `rank_genes_groups` using '{method}'.")
+            sc.tl.rank_genes_groups(adata=adata_combined,
+                                    groupby=comb_col_name,
+                                    method=method)
+             # create dataframe from results
+            res_dict = create_deg_dataframe(
+                adata=adata_combined, groups=rgg_groups)
+            df = res_dict[rgg_groups[0]]
 
     if data_annotation_tuple is not None and ref_annotation_tuple is not None:
         # add column to .obs for its use in rank_genes_groups()
         adata_combined.obs = adata_combined.obs.filter([comb_col_name]) # empty obs
         #adata_combined.obs[comb_col_name] = adata_combined.obsm["annotations"][comb_col_name]
-    print(f"Calculate differentially expressed genes with Scanpy's `rank_genes_groups` using '{method}'.")
-    sc.tl.rank_genes_groups(adata=adata_combined,
-                            groupby=comb_col_name,
-                            groups=rgg_groups,
-                            reference=rgg_reference,
-                            method=method,
-                            )
+        print(f"Calculate differentially expressed genes with Scanpy's `rank_genes_groups` using '{method}'.")
+        sc.tl.rank_genes_groups(adata=adata_combined,
+                                groupby=comb_col_name,
+                                groups=rgg_groups,
+                                reference=rgg_reference,
+                                method=method,
+                                )
 
-    # create dataframe from results
-    res_dict = create_deg_dataframe(
-        adata=adata_combined, groups=None,
-    )
-    df = res_dict[rgg_groups[0]]
+        # create dataframe from results
+        res_dict = create_deg_dataframe(
+            adata=adata_combined, groups=rgg_groups)
+        df = res_dict[rgg_groups[0]]
 
     if plot_volcano:
         volcano_plot(
