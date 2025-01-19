@@ -18,13 +18,13 @@ def create_cmap_mapping(data, cmap: Union[str, ListedColormap] = None):
     if cmap is None:
         pal = CustomPalettes()
         cmap = pal.tab20_mod
-
     try:
         unique_categories = data.cat.categories # in case of categorical pandas series
     except AttributeError:
         try:
             unique_categories = data.categories # in case of numpy categories
         except AttributeError:
+            data = np.array(data)
             try:
                 unique_categories = np.sort(data[~data.isna()].unique())
             except AttributeError:
@@ -60,9 +60,9 @@ def categorical_data_to_rgba(data,
 
     if nan_val is not None:
         # add key for nan
-        category_to_rgba[np.nan] = nan_val
+        category_to_rgba[str(np.nan)] = nan_val
 
-    res = np.array([category_to_rgba[category] for category in data])
+    res = np.array([category_to_rgba[str(category)] for category in data])
 
     if return_mapping:
         return res, category_to_rgba
@@ -148,7 +148,7 @@ def continuous_data_to_rgba(
 
 
 def _data_to_rgba(
-    data,
+    data: np.ndarray,
     continuous_cmap: Union[str, ListedColormap] = DEFAULT_CONTINUOUS_CMAP,
     categorical_cmap: Union[str, ListedColormap] = None,
     upper_climit_pct: int = 99,
@@ -158,8 +158,9 @@ def _data_to_rgba(
     if not is_numeric_dtype(data) or is_bool_dtype(data):
         if is_bool_dtype(data):
             # in case of boolean data it is important to convert it to object type
+            data = data.astype('object')
             # also pandas NAs have to be substituted with numpy NaNs
-            data = data.astype('object').replace({pd.NA: np.nan})
+            data = np.array([elem if pd.notna(elem) else np.nan for elem in data], dtype='object')
         if categorical_cmap is None:
             # pal = CustomPalettes()
             # categorical_cmap = pal.tab20_mod
