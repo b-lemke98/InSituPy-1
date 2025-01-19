@@ -1,5 +1,7 @@
 from pathlib import Path
 from insitupy import read_xenium
+import os
+import shutil
 
 
 DATA_PATH = Path("tests/data/Xenium_Prime_Mouse_Ileum_tiny_outs")
@@ -49,3 +51,20 @@ def test_functions():
     for key in ['spatial', 'X_pca', 'X_umap']:
         assert key in xd.cells["main"].matrix.obsm.keys()
     assert "leiden" in xd.cells["main"].matrix.obs.columns
+
+def test_save():
+
+    def delete_directory_if_exists(directory_path):
+        if os.path.exists(directory_path) and os.path.isdir(directory_path):
+            shutil.rmtree(directory_path)
+            return True
+
+    path_save = Path("./testsave")
+    xd = read_xenium(DATA_PATH)
+    xd.load_all()
+    xd.saveas(path=path_save, overwrite=True)
+    xd_new = read_xenium(path=path_save)
+    xd_new.load_all()
+    xd_new.normalize_and_transform(transformation_method="sqrt")
+    xd_new.save()
+    assert delete_directory_if_exists(path_save) is True

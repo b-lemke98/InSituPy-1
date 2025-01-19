@@ -661,11 +661,7 @@ class InSituData:
         # empty current data and data history entry in metadata
         _self.metadata["data"] = {}
         for k in _self.metadata["history"].keys():
-            if k != "alt":
-                _self.metadata["history"][k] = []
-            else:
-                empty_alt_hist_dict = {k: [] for k in _self.metadata["history"]["alt"].keys()}
-                _self.metadata["history"]["alt"] = empty_alt_hist_dict
+            _self.metadata["history"][k] = []
 
         # sometimes modalities like annotations or regions can be empty in the meantime
         # here such empty modalities are removed
