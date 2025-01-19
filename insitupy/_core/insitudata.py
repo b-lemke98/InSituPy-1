@@ -770,7 +770,7 @@ class InSituData:
         #    alt_attr = getattr(self, alt_attr_name)
 
         if self._cells is None:
-            self._alt = MultiCellData()
+            self._cells = MultiCellData()
 
         # add the celldata to the given key
         self._cells.add_celldata(cd=celldata_to_add, key=key_to_add)
@@ -926,8 +926,7 @@ class InSituData:
         #self._remove_empty_modalities()
 
 
-    def load_cells(self,
-                   old: Optional[bool] = False):
+    def load_cells(self):
         print("Loading cells...", flush=True)
         pixel_size = self._metadata["xenium"]["pixel_size"]
         if self._from_insitudata:
@@ -936,15 +935,7 @@ class InSituData:
             except KeyError:
                 raise ModalityNotFoundError(modality="cells")
             else:
-                if old:
-                    try:
-                        alt_path_dict = self.metadata["data"]["alt"]
-                        self._cells = read_multicelldata(path=self._path / cells_path, old=old, path_upper=self._path, alt_path_dict=alt_path_dict)
-                    except KeyError:
-                        print("\tNo alternative cells found...")
-                        self._cells = read_multicelldata(path=self._path / cells_path, old=old)
-                else:
-                    self._cells = read_multicelldata(path=self._path / cells_path)
+                self._cells = read_multicelldata(path=self._path / cells_path)
 
             # check if alt data is there and read if yes
             #try:
