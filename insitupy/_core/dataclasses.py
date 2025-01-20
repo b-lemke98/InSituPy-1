@@ -122,7 +122,7 @@ class ShapesData(DeepCopyMixin):
             s = ""
         repr = f"{self._repr_color}{tf.Bold}{self._shape_name}{tf.ResetAll}\n{s}"
         return repr
-    
+
 
     def __getitem__(self, key):
         return self._data.get(key)
@@ -438,7 +438,7 @@ class BoundariesData(DeepCopyMixin):
             for l in labels:
                 repr += f"\n{tf.SPACER+tf.Bold+l+tf.ResetAll}"
         return repr
-    
+
     def __getitem__(self, key):
         return self._data.get(key)
 
@@ -651,7 +651,7 @@ class CellData(DeepCopyMixin):
     @property
     def entries(self):
         return self._entries
-    
+
     def copy(self):
         '''
         Function to generate a deep copy of the current object.
@@ -852,7 +852,7 @@ class ImageData(DeepCopyMixin):
             s = "empty"
         repr = f"{tf.Blue+tf.Bold}images{tf.ResetAll}\n{s}"
         return repr
-    
+
     def __getitem__(self, key):
         return self._data.get(key)
 
@@ -920,8 +920,10 @@ class ImageData(DeepCopyMixin):
             # retrieve metadata
             img_shape = img[0].shape if isinstance(img, list) else img.shape
             img_max = img[0].max() if isinstance(img, list) else img.max()
-            img_max = img_max.compute() if isinstance(img, da.Array) else img_max
-            #img_max = int(img_max)
+            try:
+                img_max = int(img_max.compute())
+            except AttributeError:
+                img_max = int(img_max)
 
             # save metadata
             self._metadata[name] = {}
