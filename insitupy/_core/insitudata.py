@@ -1848,8 +1848,6 @@ class InSituData:
                         if not hasattr(self, "regions"):
                             self.regions = RegionsData() # initialize empty object
 
-                    print(object_type)
-
                     if checks_passed:
                         if isinstance(layer, Shapes):
                             # extract shape types
