@@ -13,8 +13,8 @@ import insitupy._core.config as config
 from insitupy import WITH_NAPARI
 from insitupy._core._layers import _create_points_layer, _update_points_layer
 
-from .._constants import (POINTS_SYMBOL, REGION_CMAP, REGIONS_SYMBOL,
-                          SHAPES_SYMBOL)
+from .._constants import (ANNOTATIONS_SYMBOL, POINTS_SYMBOL, REGION_CMAP,
+                          REGIONS_SYMBOL)
 from ..images.utils import create_img_pyramid
 from ._callbacks import (_refresh_widgets_after_data_change,
                          _set_show_names_based_on_geom_type,
@@ -123,7 +123,7 @@ if WITH_NAPARI:
             def add_cells_widget(
                 key="genes",
                 value=None,
-                size=6,
+                size=8,
                 recent=None,
                 add_new_layer=False,
                 viewer=viewer
@@ -403,7 +403,8 @@ if WITH_NAPARI:
                                 layer_name=layer_name,
                                 #scale_factor=scale_factor,
                                 rgb_color=rgb_color,
-                                show_names=show_names
+                                show_names=show_names,
+                                mode=geom_type
                             )
 
                 # connect key change with update function
@@ -438,7 +439,7 @@ if WITH_NAPARI:
             if key == "Geometric annotations":
                 # generate name
                 name = name_pattern.format(
-                    type_symbol=SHAPES_SYMBOL,
+                    type_symbol=ANNOTATIONS_SYMBOL,
                     class_name=class_name,
                     annot_key=annot_key
                     )

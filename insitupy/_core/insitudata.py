@@ -1443,7 +1443,7 @@ class InSituData:
     def show(self,
         keys: Optional[str] = None,
         # annotation_keys: Optional[str] = None,
-        point_size: int = 6,
+        point_size: int = 8,
         scalebar: bool = True,
         #pixel_size: float = None, # if none, extract from metadata
         unit: str = "µm",
@@ -1716,10 +1716,6 @@ class InSituData:
                     annot_key = name_parsed.named["annot_key"]
                     class_name = name_parsed.named["class_name"]
 
-                    # if the InSituData object does not has an annotations attribute, initialize it
-                    if not hasattr(self, "annotations"):
-                        self.annotations = AnnotationsData() # initialize empty object
-
                     # extract shapes coordinates and colors
                     layer_data = layer.data
                     colors = layer.edge_color.tolist()
@@ -1734,6 +1730,15 @@ class InSituData:
                         if isinstance(layer, Points):
                             warn(f'Layer "{layer.name}" is a point layer and at the same time classified as "Region". This is not allowed. Skipped this layer.')
                             checks_passed = False
+
+                    if object_type == "annotation":
+                        # if the InSituData object does not have an annotations attribute, initialize it
+                        if not hasattr(self, "annotations"):
+                            self.annotations = AnnotationsData() # initialize empty object
+                    else:
+                        # if the InSituData object does not have an regions attribute, initialize it
+                        if not hasattr(self, "regions"):
+                            self.regions = RegionsData() # initialize empty object
 
                     if checks_passed:
                         if isinstance(layer, Shapes):
