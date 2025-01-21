@@ -1,7 +1,7 @@
 import logging
 import sys
 from numbers import Number
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 from warnings import warn
 
 import matplotlib
@@ -13,9 +13,9 @@ from shapely import (LinearRing, LineString, MultiPoint, MultiPolygon, Point,
                      Polygon)
 
 from insitupy import WITH_NAPARI
-from insitupy._constants import (DEFAULT_CATEGORICAL_CMAP,
+from insitupy._constants import (ANNOTATIONS_SYMBOL, DEFAULT_CATEGORICAL_CMAP,
                                  DEFAULT_CONTINUOUS_CMAP, POINTS_SYMBOL,
-                                 REGION_CMAP, REGIONS_SYMBOL, SHAPES_SYMBOL)
+                                 REGION_CMAP, REGIONS_SYMBOL)
 from insitupy.palettes import CustomPalettes
 from insitupy.plotting._colors import _data_to_rgba, _determine_climits
 
@@ -33,7 +33,7 @@ if WITH_NAPARI:
         rgb_color: Optional[Tuple] = None,
         show_names: bool = False,
         allow_duplicate_layers: bool = False,
-        region_mode: bool = False
+        mode: Literal["Annotations", "Regions"] = "Annotations"
         ):
 
         # list to store information on shapes
@@ -161,10 +161,12 @@ if WITH_NAPARI:
             else:
                 text_dict = None
 
-            if region_mode:
+            if mode == "Regions":
                 layer_name_with_symbol = REGIONS_SYMBOL + " " + layer_name
+            elif mode == "Annotations":
+                layer_name_with_symbol = ANNOTATIONS_SYMBOL + " " + layer_name
             else:
-                layer_name_with_symbol = SHAPES_SYMBOL + " " + layer_name
+                raise ValueError(f"Unknown value for `mode`: {mode}")
 
             # add shapes to viewer
             if not layer_name_with_symbol in viewer.layers:

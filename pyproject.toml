@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "insitupy"
-version = "0.3.0"
+version = "0.4.0"#<<COOKIETEMPLE_FORCE_BUMP>>
 description = "Package introducing the InSituPy framework to comprehensively analyze In Situ Sequencing data."
 license = "BSD-3-Clause"
 authors = ["jwrth <j.wirth@tum.de>"]
@@ -17,6 +17,7 @@ dask = {extras = ["diagnostics"], version = "2023.9.2"}
 opencv-python = "4.8.0.76"
 scikit-image = "0.21.0"
 geopandas = "0.14.0"
+fiona = "1.9.6" # 1.10.0 can only be used with geopandas==0.14.4
 openpyxl = "3.1.2"
 leidenalg = "0.10.1"
 asciitree = "0.3.3"

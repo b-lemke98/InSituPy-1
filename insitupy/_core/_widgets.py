@@ -13,8 +13,8 @@ import insitupy._core.config as config
 from insitupy import WITH_NAPARI
 from insitupy._core._layers import _create_points_layer, _update_points_layer
 
-from .._constants import (POINTS_SYMBOL, REGION_CMAP, REGIONS_SYMBOL,
-                          SHAPES_SYMBOL)
+from .._constants import (ANNOTATIONS_SYMBOL, POINTS_SYMBOL, REGION_CMAP,
+                          REGIONS_SYMBOL)
 from ..images.utils import create_img_pyramid
 from ._callbacks import (_refresh_widgets_after_data_change,
                          _set_show_names_based_on_geom_type,
@@ -35,10 +35,11 @@ if WITH_NAPARI:
         # access viewer from xeniumdata
         viewer = xdata.viewer
 
-        if not hasattr(xdata, "cells"):
+        if xdata.cells is None:
             add_cells_widget = None
             move_to_cell_widget = None
-            add_boundaries_widget = None
+            add_boundaries_widget = None,
+            filter_cells_widget = None
         else:
             # initialize data_name of viewer
             config.init_data_name()
@@ -49,11 +50,8 @@ if WITH_NAPARI:
             config.init_recent_selections()
 
             data_names = ["main"]
-            try:
+            if xdata.alt is not None:
                 alt = xdata.alt
-            except AttributeError:
-                pass
-            else:
                 for k in alt.keys():
                     data_names.append(k)
 
@@ -72,7 +70,9 @@ if WITH_NAPARI:
                 config.current_data_name = select_data.data_name.value
                 insitupy._core._callbacks._refresh_widgets_after_data_change(xdata,
                                                     add_cells_widget,
-                                                    add_boundaries_widget)
+                                                    add_boundaries_widget,
+                                                    filter_cells_widget
+                                                    )
 
             if len(config.masks) > 0:
                 @magicgui(
@@ -86,7 +86,7 @@ if WITH_NAPARI:
 
                     if layer_name not in viewer.layers:
                         # get geopandas dataframe with regions
-                        mask = getattr(config.boundaries, key)
+                        mask = config.boundaries[key]
 
                         # get metadata for mask
                         metadata = config.boundaries.metadata
@@ -120,7 +120,7 @@ if WITH_NAPARI:
             def add_cells_widget(
                 key="genes",
                 value=None,
-                size=6,
+                size=8,
                 recent=None,
                 add_new_layer=False,
                 viewer=viewer
@@ -205,6 +205,47 @@ if WITH_NAPARI:
                             )
                             return gene_layer
 
+            @magicgui(
+                call_button='Filter',
+                obs_key={'choices': config.value_dict["obs"], 'label': "Obs:"},
+                operation_type={'choices': ["contains", "is equal to"], 'label': 'Operation:'},
+                obs_value={'label': 'Value:'},
+                reset={'label': 'Reset'}
+                )
+            def filter_cells_widget(
+                obs_key=None,
+                operation_type="contains",
+                obs_value: str = "",
+                reset: bool = False,
+                viewer=viewer
+            ):
+                # find currently selected layer
+                layers = viewer.layers
+                selected_layers = list(layers.selection)
+
+                if not reset:
+                    # create filtering mask
+                    if operation_type == "contains":
+                        mask = config.adata.obs[obs_key].str.contains(obs_value)
+                    elif operation_type == "is equal to":
+                        mask = config.adata.obs[obs_key] == obs_value
+                    else:
+                        raise ValueError(f"Unknown operation type: {operation_type}.")
+
+                    # iterate through selected layers
+                    for current_layer in selected_layers:
+                        if isinstance(current_layer, napari.layers.points.points.Points):
+                            # set visibility
+                            fc = current_layer.face_color.copy()
+                            fc[:, -1] = 0.
+                            fc[mask, -1] = 1.
+                            current_layer.face_color = fc
+                else:
+                    for current_layer in selected_layers:
+                        # reset visibility
+                        fc = current_layer.face_color.copy()
+                        fc[:, -1] = 1.
+                        current_layer.face_color = fc
 
             @add_cells_widget.key.changed.connect
             @add_cells_widget.call_button.changed.connect
@@ -246,26 +287,37 @@ if WITH_NAPARI:
                 else:
                     print(f"Cell '{cell}' not found in `xeniumdata.cells.matrix.obs_names()`.")
 
-            def callback(event=None):
+            def callback_refresh(event=None):
                 # after the points widget is run, the widgets have to be refreshed to current data layer
                 _refresh_widgets_after_data_change(xdata,
                                                         points_widget=add_cells_widget,
-                                                        boundaries_widget=add_boundaries_widget
+                                                        boundaries_widget=add_boundaries_widget,
+                                                        filter_widget=filter_cells_widget
                                                         )
+
+            def callback_update_legend(event=None):
                 _update_colorlegend()
 
             if add_cells_widget is not None:
-                add_cells_widget.call_button.clicked.connect(callback)
+                add_cells_widget.call_button.clicked.connect(callback_refresh)
+                add_cells_widget.call_button.clicked.connect(callback_update_legend)
             if add_boundaries_widget is not None:
-                add_boundaries_widget.call_button.clicked.connect(callback)
+                add_boundaries_widget.call_button.clicked.connect(callback_refresh)
+                add_boundaries_widget.call_button.clicked.connect(callback_update_legend)
 
-        if not (hasattr(xdata, "annotations") | hasattr(xdata, "regions")):
+            viewer.layers.selection.events.active.connect(callback_update_legend)
+
+        if xdata.annotations is None and xdata.regions is None:
             show_geometries_widget = None
         else:
             # check which geometries are available
-            choices = ["Annotations", "Regions"]
-            choices = [ch for ch in choices if hasattr(xdata, ch.lower())]
-
+            if xdata.annotations is not None:
+                if xdata.regions is not None:
+                    choices = ["Annotations", "Regions"]
+                else:
+                    choices = ["Annotations"]
+            else:
+                choices = ["Regions"]
             # extract geometry object
             geom = getattr(xdata, choices[0].lower())
 
@@ -295,11 +347,11 @@ if WITH_NAPARI:
 
                     if geom_type == "Annotations":
                         # get annotation dataframe
-                        annot_df = getattr(xdata.annotations, key)
+                        annot_df = xdata.annotations[key]
                         all_keys = list(xdata.annotations.metadata.keys())
                     elif geom_type == "Regions":
                         # get regions dataframe
-                        annot_df = getattr(xdata.regions, key)
+                        annot_df = xdata.regions[key]
                         all_keys = list(xdata.regions.metadata.keys())
                     else:
                         TypeError(f"Unknown geometry type: {geom_type}")
@@ -352,7 +404,8 @@ if WITH_NAPARI:
                                 layer_name=layer_name,
                                 #scale_factor=scale_factor,
                                 rgb_color=rgb_color,
-                                show_names=show_names
+                                show_names=show_names,
+                                mode=geom_type
                             )
 
                 # connect key change with update function
@@ -366,7 +419,7 @@ if WITH_NAPARI:
                     _update_classes_on_key_change(show_geometries_widget, xdata=xdata)
                     _set_show_names_based_on_geom_type(show_geometries_widget)
 
-        return add_cells_widget, move_to_cell_widget, show_geometries_widget, add_boundaries_widget, select_data #add_genes, add_observations
+        return add_cells_widget, move_to_cell_widget, show_geometries_widget, add_boundaries_widget, select_data, filter_cells_widget #add_genes, add_observations
 
 
     @magic_factory(
@@ -387,7 +440,7 @@ if WITH_NAPARI:
             if key == "Geometric annotations":
                 # generate name
                 name = name_pattern.format(
-                    type_symbol=SHAPES_SYMBOL,
+                    type_symbol=ANNOTATIONS_SYMBOL,
                     class_name=class_name,
                     annot_key=annot_key
                     )
