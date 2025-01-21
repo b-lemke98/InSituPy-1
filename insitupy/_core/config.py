@@ -76,7 +76,7 @@ if WITH_NAPARI:
         global masks
         masks = []
         for n in boundaries.metadata.keys():
-            b = getattr(boundaries, n)
+            b = boundaries[n]
             if isinstance(b, dask.array.core.Array) or np.all([isinstance(elem, dask.array.core.Array) for elem in b]):
                 masks.append(n)
 
