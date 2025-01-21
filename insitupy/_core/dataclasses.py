@@ -871,11 +871,12 @@ class ImageData(DeepCopyMixin):
         axes: Optional[str] = None, # channels - other examples: 'TCYXS'. S for RGB channels. 'YX' for grayscale image.
         pixel_size: Optional[Number] = None,
         ome_meta: Optional[dict] = None,
-        overwrite: bool = False
+        overwrite: bool = False,
+        verbose: bool = True
         ):
         if name in self._names:
             if not overwrite:
-                print(f"`ImageData` object contains already an image with name '{name}'. Image is not added.")
+                print(f"`ImageData` object contains already an image with name '{name}'. Image is not added.") if verbose else None
                 do_addition = False
             else:
                 # remove attribute with current name
@@ -921,9 +922,9 @@ class ImageData(DeepCopyMixin):
             img_shape = img[0].shape if isinstance(img, list) else img.shape
             img_max = img[0].max() if isinstance(img, list) else img.max()
             try:
-                img_max = int(img_max.compute())
+                img_max = img_max.compute()
             except AttributeError:
-                img_max = int(img_max)
+                img_max = img_max
 
             # save metadata
             self._metadata[name] = {}
@@ -948,7 +949,8 @@ class ImageData(DeepCopyMixin):
 
             # get image contrast limits
             if self._metadata[name]["rgb"]:
-                self._metadata[name]["contrast_limits"] = (0, 255)
+                #self._metadata[name]["contrast_limits"] = (0, 255)
+                self._metadata[name]["contrast_limits"] = (0, img_max)
             else:
                 self._metadata[name]["contrast_limits"] = (0, img_max)
 

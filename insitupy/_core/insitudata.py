@@ -169,7 +169,7 @@ class InSituData:
                 f"{tf.SPACER}   Alternative CellData objects with following keys: {','.join(altseg_keys)}"
             )
         return repr
-    
+
 
     @property
     def path(self):
@@ -308,6 +308,10 @@ class InSituData:
             insitupy._core.dataclasses.RegionsData: Regions.
         """
         return self._regions
+
+    @regions.setter
+    def regions(self, value: RegionsData):
+        self._regions = value
 
     @regions.deleter
     def regions(self):
@@ -457,7 +461,7 @@ class InSituData:
                 # save that the current key was analyzed
                 geom_attr.metadata[key]["analyzed"] = tf.TICK
 
-                print(f"Added results to `{name}.matrix.obsm[{geometry_type}]", flush=True)
+                print(f"Added results to `{name}.matrix.obsm['{geometry_type}']", flush=True)
 
 
     def assign_annotations(
@@ -913,6 +917,7 @@ class InSituData:
 
     def load_all(self,
                  skip: Optional[str] = None,
+                 verbose: bool = False
                  ):
         # # extract read functions
         # read_funcs = [elem for elem in dir(self) if elem.startswith("load_")]
@@ -922,12 +927,13 @@ class InSituData:
             if skip is None or skip not in f:
                 func = getattr(self, f)
                 try:
-                    func()
+                    func(verbose=verbose)
                 except ModalityNotFoundError as err:
                     print(err)
 
-    def load_annotations(self):
-        print("Loading annotations...", flush=True)
+    def load_annotations(self, verbose: bool = False):
+        if verbose:
+            print("Loading annotations...", flush=True)
         try:
             p = self._metadata["data"]["annotations"]
         except KeyError:
@@ -938,12 +944,11 @@ class InSituData:
     def import_annotations(self,
                            files: Optional[Union[str, os.PathLike, Path]],
                            keys: Optional[str],
-                           scale_factor: Number # µm/pixel - can be used to convert the pixel coordinates into µm coordinates
+                           scale_factor: Number, # µm/pixel - can be used to convert the pixel coordinates into µm coordinates
+                           verbose: bool = False
                            ):
-        '''
-
-        '''
-        print("Importing annotations...", flush=True)
+        if verbose:
+            print("Importing annotations...", flush=True)
 
         # add annotations object
         files = convert_to_list(files)
@@ -961,8 +966,9 @@ class InSituData:
 
         #self._remove_empty_modalities()
 
-    def load_regions(self):
-        print("Loading regions...", flush=True)
+    def load_regions(self, verbose: bool = False):
+        if verbose:
+            print("Loading regions...", flush=True)
         try:
             p = self._metadata["data"]["regions"]
         except KeyError:
@@ -972,9 +978,11 @@ class InSituData:
     def import_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]],
                     keys: Optional[str],
-                    scale_factor: Number # µm/pixel - used to convert the pixel coordinates into µm coordinates
+                    scale_factor: Number, # µm/pixel - used to convert the pixel coordinates into µm coordinates
+                    verbose: bool = False
                     ):
-        print("Importing regions...", flush=True)
+        if verbose:
+            print("Importing regions...", flush=True)
 
         # add regions object
         files = convert_to_list(files)
@@ -994,8 +1002,9 @@ class InSituData:
         #self._remove_empty_modalities()
 
 
-    def load_cells(self):
-        print("Loading cells...", flush=True)
+    def load_cells(self, verbose: bool = False):
+        if verbose:
+            print("Loading cells...", flush=True)
         pixel_size = self._metadata["xenium"]["pixel_size"]
         if self._from_insitudata:
             try:
@@ -1009,7 +1018,8 @@ class InSituData:
             try:
                 alt_path_dict = self._metadata["data"]["alt"]
             except KeyError:
-                print("\tNo alternative cells found...")
+                if verbose:
+                    print("\tNo alternative cells found...")
             else:
                 print("\tFound alternative cells...")
                 alt_dict = {}
@@ -1038,10 +1048,12 @@ class InSituData:
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
                     nuclei_type: Literal["focus", "mip", ""] = "mip",
                     load_cell_segmentation_images: bool = True,
-                    reload: bool = False
+                    overwrite: bool = False,
+                    verbose: bool = True
                     ):
         # load image into ImageData object
-        print("Loading images...", flush=True)
+        if verbose:
+            print("Loading images...", flush=True)
 
         if self._from_insitudata:
             # check if matrix data is stored in this InSituData
@@ -1117,10 +1129,11 @@ class InSituData:
             self._images = ImageData(img_paths, img_names)
         else:
             for im, n in zip(img_paths, img_names):
-                self._images.add_image(im, n, overwrite=reload)
+                self._images.add_image(im, n, overwrite=overwrite, verbose=verbose)
 
     def load_transcripts(self,
-                        transcript_filename: str = "transcripts.parquet"
+                        transcript_filename: str = "transcripts.parquet",
+                        verbose: bool = True
                         ):
         if self._from_insitudata:
             # check if matrix data is stored in this InSituData
@@ -1128,11 +1141,13 @@ class InSituData:
                 raise ModalityNotFoundError(modality="transcripts")
 
             # read transcripts
-            print("Loading transcripts...", flush=True)
+            if verbose:
+                print("Loading transcripts...", flush=True)
             self._transcripts = pd.read_parquet(self._path / self._metadata["data"]["transcripts"])
         else:
             # read transcripts
-            print("Loading transcripts...", flush=True)
+            if verbose:
+                print("Loading transcripts...", flush=True)
             transcript_dataframe = pd.read_parquet(self._path / transcript_filename)
 
             self._transcripts = _restructure_transcripts_dataframe(transcript_dataframe)
@@ -1365,7 +1380,7 @@ class InSituData:
                     self._update_to_existing_project(path=path, zarr_zipped=zarr_zipped)
 
                     # reload the modalities
-                    self.reload()
+                    self.reload(verbose=False)
                 else:
                     warn(
                         f"UID of current object {current_uid} not identical with UID in project path {path}: {project_uid}.\n"
@@ -1991,7 +2006,10 @@ class InSituData:
         if return_data:
             return results
 
-    def reload(self):
+    def reload(
+        self,
+        verbose: bool = True
+        ):
         data_meta = self._metadata["data"]
         current_modalities = [m for m in MODALITIES if getattr(self, m) is not None and m in data_meta]
         # # check if there is a path for the modalities in self.metadata
@@ -2007,10 +2025,10 @@ class InSituData:
         #         #current_modalities.remove(cm)
 
         if len(current_modalities) > 0:
-            print(f"Reloading following modalities: {','.join(current_modalities)}")
+            print(f"Reloading following modalities: {', '.join(current_modalities)}") if verbose else None
             for cm in current_modalities:
                 func = getattr(self, f"load_{cm}")
-                func()
+                func(verbose=verbose)
         else:
             print("No modalities with existing save path found. Consider saving the data with `saveas()` first.")
 
@@ -2062,11 +2080,14 @@ class InSituData:
         """
 
         try:
-            from spatialdata.transformations.transformations import Scale, Identity
-            from spatialdata import SpatialData
             import dask.dataframe as dd
+            from spatialdata import SpatialData
+            from spatialdata.models import (Image2DModel, Labels2DModel,
+                                            PointsModel, ShapesModel,
+                                            TableModel)
+            from spatialdata.transformations.transformations import (Identity,
+                                                                     Scale)
             from xarray import DataArray
-            from spatialdata.models import Image2DModel, Labels2DModel, TableModel, PointsModel, ShapesModel
         except:
             raise ImportError("This function requires spatialdata framework, please install with pip install spatialdata.")
 
@@ -2097,7 +2118,7 @@ class InSituData:
             return adata, circles
 
 
- 
+
         def transform_images(xd: InSituData, levels: int = 5):
             images = {}
             image_types = {}
@@ -2116,7 +2137,7 @@ class InSituData:
                         images[name] = Image2DModel.parse(array, dims=("c", "y", "x"), chunks=(1, 4096, 4096), scale_factors=[2 for _ in range(levels)])
                         image_types[name] = "image"
             return images, image_types
- 
+
 
         def transform_labels(xd: InSituData):
             labels = {}
@@ -2124,7 +2145,7 @@ class InSituData:
             if xd.cells is not None and xd.cells.boundaries is not None:
 
                 for name in xd.cells.boundaries.metadata.keys():
-        
+
                     labels_list =  xd.cells.boundaries[name]
                     if isinstance(labels_list, List):
                         labels_list = labels_list[0]
@@ -2133,7 +2154,7 @@ class InSituData:
                     label_types[name] = "labels"
             return labels, label_types
 
-        
+
         def transform_transcripts(xd: InSituData):
             points = {}
             point_types = {}
@@ -2157,7 +2178,7 @@ class InSituData:
                 points = {"transcripts": parsed_points}
                 point_types = {"transcripts": "points"}
             return points, point_types
-        
+
         def transform_matrix_annotations(xd: InSituData):
             tables, shapes, table_types, shape_type = {}, {}, {}, {}
             if xd.cells is not None and xd.cells.matrix is not None:
@@ -2179,8 +2200,8 @@ class InSituData:
                     shapes[key] = gdf
                     shape_type[key] = "shapes"
             return tables | shapes, table_types | shape_type
-        
-        
+
+
         transcripts, points_names = transform_transcripts(self)
         matrix_shapes, matrix_shapes_names = transform_matrix_annotations(self)
         images, images_names = transform_images(self, levels)
@@ -2188,7 +2209,7 @@ class InSituData:
         merged_dict = transcripts | matrix_shapes | images | labels
         merged_dict_names = points_names | matrix_shapes_names | images_names | labels_names
         return merged_dict, merged_dict_names
-    
+
     def to_spatialdata(self, levels: int = 5):
 
         """
@@ -2764,16 +2785,18 @@ def differential_gene_expression(
 def load_fromspatialdata(spatialdata_path, pixel_size):
 
     import os
+    from pathlib import Path
+
+    import numpy as np
     import pandas as pd
     import zarr
-    from pathlib import Path
     from anndata import read_zarr
-    from insitupy._core.dataclasses import CellData, ImageData, BoundariesData
+    from dask.array import transpose
     from dask.dataframe import read_parquet
-    import numpy as np
     from ome_zarr.io import ZarrLocation
     from ome_zarr.reader import Label, Multiscales, Reader
-    from dask.array import transpose
+
+    from insitupy._core.dataclasses import BoundariesData, CellData, ImageData
 
 
     def read_helper_images_labels(f_elem_store, type):
