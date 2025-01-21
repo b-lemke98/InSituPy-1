@@ -2570,11 +2570,11 @@ def calc_distance_of_cells_from(
 
 def differential_gene_expression(
     data: InSituData,
-    data_annotation_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
+    data_annotation_tuple: Optional[Tuple[str, str]] = None,
     ref_data: Optional[InSituData] = None,
     ref_annotation_tuple: Optional[Union[Literal["rest"], Tuple[str, str]]] = None,
     obs_tuple: Optional[Tuple[str, str]] = None,
-    region_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
+    region_tuple: Optional[Tuple[str, str]] = None,
     plot_volcano: bool = True,
     method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
     ignore_duplicate_assignments: bool = False,
@@ -2594,11 +2594,11 @@ def differential_gene_expression(
 
     Args:
         data (InSituData): The primary in situ data object.
-        data_annotation_tuple (Union[Tuple[str, str], Tuple[str, str]]): Tuple containing the annotation key and name.
+        data_annotation_tuple (Tuple[str, str]): Tuple containing the annotation key and name.
         ref_data (Optional[InSituData], optional): Reference in situ data object for comparison. Defaults to None.
-        ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
+        ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
         obs_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
-        region_tuple (Optional[Union[Tuple[str, str], Tuple[str, str]]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
+        region_tuple (Optional[Tuple[str, str]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
         plot_volcano (bool, optional): Whether to generate a volcano plot of the results. Defaults to True.
         method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']], optional): Statistical method to use for differential expression analysis. Defaults to 't-test'.
         ignore_duplicate_assignments (bool, optional): Whether to ignore duplicate assignments in the data. Defaults to False.
@@ -2631,14 +2631,14 @@ def differential_gene_expression(
 
     comb_col_name = "combined_annotation_column"
 
-    # extract annotation information (added: if data_annotation_tuple is None and ref_annotation_tuple is None)
-    if data_annotation_tuple == [Union[Tuple[str, str], Tuple[str, str]]]:   
-        annotation_key = data_annotation_tuple[0]
-        annotation_name = data_annotation_tuple[1]
-    elif data_annotation_tuple == None:
+    # extract annotation information
+    if data_annotation_tuple == None:
         annotation_key = None
         annotation_name = None
         assert ref_annotation_tuple==None
+    else:
+        annotation_key = data_annotation_tuple[0]
+        annotation_name = data_annotation_tuple[1]
 
     # extract information from reference tuple (added if re_annotation_tuple is None)
     if ref_annotation_tuple == "rest":
@@ -2690,7 +2690,7 @@ def differential_gene_expression(
                 check_reference=check_reference_during_substitution,
                 ignore_duplicate_assignments=ignore_duplicate_assignments
                 ), axis=1
-            ) 
+            )
 
         # check that the annotation_name exists inside the column
         assert np.any(col_with_id == annotation_name), f"annotation_name '{annotation_name}' not found under annotation_key '{annotation_key}'."
@@ -2939,4 +2939,4 @@ def load_fromspatialdata(spatialdata_path, pixel_size):
             image, axes = read_helper_images_labels(f_elem_store, "image")
             xd.images.add_image(image[0], name=name, axes=axes, pixel_size=pixel_size, ome_meta={'PhysicalSizeX': pixel_size})
     return xd
-  
+
