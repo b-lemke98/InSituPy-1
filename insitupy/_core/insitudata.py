@@ -2632,10 +2632,10 @@ def differential_gene_expression(
     comb_col_name = "combined_annotation_column"
 
     # extract annotation information
-    if data_annotation_tuple == None:
+    if data_annotation_tuple is None:
         annotation_key = None
         annotation_name = None
-        assert ref_annotation_tuple==None
+        assert ref_annotation_tuple is None
     else:
         annotation_key = data_annotation_tuple[0]
         annotation_name = data_annotation_tuple[1]
@@ -2643,18 +2643,19 @@ def differential_gene_expression(
     # extract information from reference tuple (added if re_annotation_tuple is None)
     if ref_annotation_tuple == "rest":
         assert ref_data is None, "If `reference_tuple` is 'rest', `reference_data` must be None."
-        reference_key = None
+        ref_annotation_key = None
         reference_name = "rest"
     elif isinstance(ref_annotation_tuple, tuple) and (len(ref_annotation_tuple) == 2):
-        reference_key = ref_annotation_tuple[0]
+        ref_annotation_key = ref_annotation_tuple[0]
         reference_name = ref_annotation_tuple[1]
     elif ref_annotation_tuple == None:
-        reference_key = None
+        ref_annotation_key = None
         reference_name = None
     else:
         raise ValueError("`reference_tuple` is neither 'rest' nor a 2-tuple.")
 
-    if data_annotation_tuple is not None and ref_annotation_tuple is not None:
+    # check if the annotations in data and reference nceed to be checked
+    if annotation_key is not None:
         _check_assignment(data=data, key=annotation_key, force_assignment=force_assignment, modality="annotations")
 
     # check if the reference needs to be checked
@@ -2708,7 +2709,8 @@ def differential_gene_expression(
         if ref_annotation_tuple is None and data_annotation_tuple is not None:
             ref_annotation_tuple = data_annotation_tuple
 
-            _check_assignment(data=ref_data, key=reference_key, force_assignment=force_assignment, modality="annotations")
+        if ref_annotation_key is not None:
+            _check_assignment(data=ref_data, key=ref_annotation_key, force_assignment=force_assignment, modality="annotations")
 
             # extract reference anndata
         adata2 = ref_data.cells.matrix.copy()
@@ -2717,7 +2719,7 @@ def differential_gene_expression(
             col_with_id_ref = adata2.obsm["annotations"].apply(
                 func=lambda row: _substitution_func(
                     row=row,
-                    annotation_key=reference_key,
+                    annotation_key=ref_annotation_key,
                     annotation_name=reference_name,
                     reference_name=None,
                     check_reference=check_reference_during_substitution,
@@ -2727,14 +2729,14 @@ def differential_gene_expression(
             col_with_id_ref = col_with_id_ref.apply(func=lambda x: f"2-{x}")
 
             # check that the reference_name exists inside the column
-            assert np.any(col_with_id_ref == f"2-{reference_name}"), f"reference_name '{reference_name}' not found under reference_key '{reference_key}'."
+            assert np.any(col_with_id_ref == f"2-{reference_name}"), f"reference_name '{reference_name}' not found under reference_key '{ref_annotation_key}'."
 
             # add column to obs
             adata2.obs[comb_col_name] = col_with_id_ref
 
         if data_annotation_tuple is None and ref_annotation_tuple is None:
-            adata1.obs[comb_col_name]=data.sample_id
-            adata2.obs[comb_col_name]=ref_data.sample_id
+            adata1.obs[comb_col_name]="adata1"
+            adata2.obs[comb_col_name]="adata2"
 
         # combine anndatas
         adata_combined = anndata.concat([adata1, adata2])
