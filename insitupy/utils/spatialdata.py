@@ -6,7 +6,7 @@ from anndata import AnnData
 from insitupy._core.insitudata import InSituData
 
 
-def to_spatialdata_dict(data, levels: int = 5):
+def convert_to_spatialdata_dict(data, levels: int = 5):
 
     """
     Converts an InSituData object to a dictionary for SpatialData object.
@@ -150,7 +150,7 @@ def to_spatialdata_dict(data, levels: int = 5):
     merged_dict_names = points_names | matrix_shapes_names | images_names | labels_names
     return merged_dict, merged_dict_names
 
-def to_spatialdata(data, levels: int = 5):
+def convert_to_spatialdata(data, levels: int = 5):
 
     """
     Converts an InSituData object to a SpatialData object.
@@ -172,11 +172,11 @@ def to_spatialdata(data, levels: int = 5):
         raise ImportError("This function requires spatialdata framework, please install with pip install spatialdata.")
 
 
-    dict, _ = to_spatialdata_dict(data, levels=levels)
+    dict, _ = convert_to_spatialdata_dict(data, levels=levels)
     sdata = SpatialData.from_elements_dict(dict)
     return sdata
 
-def load_fromspatialdata(spatialdata_path, pixel_size):
+def load_from_spatialdata(spatialdata_path, pixel_size):
 
     import os
     from pathlib import Path
