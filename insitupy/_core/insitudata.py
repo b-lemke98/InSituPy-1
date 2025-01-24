@@ -97,77 +97,97 @@ class InSituData:
         Raises:
             FileNotFoundError: _description_
         """
+        # metadata
         self._path = path
         self._metadata = metadata
         self._slide_id = slide_id
         self._sample_id = sample_id
         self._from_insitudata = from_insitudata
+
+        # modalities
         self._images = None
         self._cells = None
         self._alt = None
         self._annotations = None
         self._transcripts = None
         self._regions = None
+
+        # other
         self._viewer = None
         self._quicksave_dir = None
 
     def __repr__(self):
-        try:
-            method = self._metadata["method"]
-        except KeyError:
+        if self._metadata is None:
             method = "unknown"
+        else:
+            method = self._metadata["method"]
 
+        if self._path is not None:
+            self._path = self._path.resolve()
+
+        # check if all modalities are empty
+        is_empty = np.all([elem is None for elem in [self._images, self._cells, self._alt, self._annotations, self._transcripts, self._regions]])
+
+        # if is_empty:
+        #     repr = f"{tf.Bold+tf.Red}InSituData{tf.ResetAll}\nEmpty"
+        # else:
         repr = (
             f"{tf.Bold+tf.Red}InSituData{tf.ResetAll}\n"
             f"{tf.Bold}Method:{tf.ResetAll}\t\t{method}\n"
             f"{tf.Bold}Slide ID:{tf.ResetAll}\t{self._slide_id}\n"
             f"{tf.Bold}Sample ID:{tf.ResetAll}\t{self._sample_id}\n"
-            f"{tf.Bold}Path:{tf.ResetAll}\t\t{self._path.resolve()}\n"
+            f"{tf.Bold}Path:{tf.ResetAll}\t\t{self._path}\n"
         )
 
-        mfile = self._metadata["metadata_file"]
+        if self._metadata is not None:
+            mfile = self._metadata["metadata_file"]
+        else:
+            mfile = None
 
         repr += f"{tf.Bold}Metadata file:{tf.ResetAll}\t{mfile}"
 
-        if self._images is not None:
-            images_repr = self._images.__repr__()
-            repr = (
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + images_repr.replace("\n", f"\n{tf.SPACER}   ")
-            )
+        if is_empty:
+            repr += "\n\nNo modalities available."
+        else:
+            if self._images is not None:
+                images_repr = self._images.__repr__()
+                repr = (
+                    repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + images_repr.replace("\n", f"\n{tf.SPACER}   ")
+                )
 
-        if self._cells is not None:
-            cells_repr = self._cells.__repr__()
-            repr = (
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} cells{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
-            )
+            if self._cells is not None:
+                cells_repr = self._cells.__repr__()
+                repr = (
+                    repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} cells{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
+                )
 
-        if self._transcripts is not None:
-            trans_repr = f"DataFrame with shape {self._transcripts.shape[0]} x {self._transcripts.shape[1]}"
+            if self._transcripts is not None:
+                trans_repr = f"DataFrame with shape {self._transcripts.shape[0]} x {self._transcripts.shape[1]}"
 
-            repr = (
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Purple+tf.Bold} transcripts{tf.ResetAll}\n{tf.SPACER}   " + trans_repr
-            )
+                repr = (
+                    repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Purple+tf.Bold} transcripts{tf.ResetAll}\n{tf.SPACER}   " + trans_repr
+                )
 
-        if self._annotations is not None:
-            annot_repr = self._annotations.__repr__()
-            repr = (
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + annot_repr.replace("\n", f"\n{tf.SPACER}   ")
-            )
+            if self._annotations is not None:
+                annot_repr = self._annotations.__repr__()
+                repr = (
+                    repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + annot_repr.replace("\n", f"\n{tf.SPACER}   ")
+                )
 
-        if self._regions is not None:
-            region_repr = self._regions.__repr__()
-            repr = (
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + region_repr.replace("\n", f"\n{tf.SPACER}   ")
-            )
+            if self._regions is not None:
+                region_repr = self._regions.__repr__()
+                repr = (
+                    repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + region_repr.replace("\n", f"\n{tf.SPACER}   ")
+                )
 
-        if self._alt is not None:
-            cells_repr = self._alt.__repr__()
-            altseg_keys = self._alt.keys()
-            repr = (
-                #repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
-                repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n"
-                f"{tf.SPACER}   Alternative CellData objects with following keys: {','.join(altseg_keys)}"
-            )
+            if self._alt is not None:
+                cells_repr = self._alt.__repr__()
+                altseg_keys = self._alt.keys()
+                repr = (
+                    #repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
+                    repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n"
+                    f"{tf.SPACER}   Alternative CellData objects with following keys: {','.join(altseg_keys)}"
+                )
         return repr
 
 
@@ -628,11 +648,14 @@ class InSituData:
         else:
             _self = self.copy()
 
-        # if the object was previously cropped, check if the current window is identical with the previous one
-        if np.all([elem in _self.metadata["xenium"].keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
-            # test whether the limits are identical
-            if (xlim == _self.metadata["xenium"]["cropping_xlim"]) & (ylim == _self.metadata["xenium"]["cropping_ylim"]):
-                raise InSituDataRepeatedCropError(xlim, ylim)
+        try:
+            # if the object was previously cropped, check if the current window is identical with the previous one
+            if np.all([elem in _self.metadata["xenium"].keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
+                # test whether the limits are identical
+                if (xlim == _self.metadata["xenium"]["cropping_xlim"]) & (ylim == _self.metadata["xenium"]["cropping_ylim"]):
+                    raise InSituDataRepeatedCropError(xlim, ylim)
+        except TypeError:
+            pass
 
         if _self.cells is not None:
             # infer mask from cell coordinates
@@ -705,25 +728,26 @@ class InSituData:
                 # ylim=tuple([elem / pixel_size for elem in ylim])
             )
 
-        # add information about cropping to metadata
-        if "cropping_history" not in _self.metadata:
-            _self.metadata["cropping_history"] = {}
-            _self.metadata["cropping_history"]["xlim"] = []
-            _self.metadata["cropping_history"]["ylim"] = []
-        _self.metadata["cropping_history"]["xlim"].append(tuple([int(elem) for elem in xlim]))
-        _self.metadata["cropping_history"]["ylim"].append(tuple([int(elem) for elem in ylim]))
+        if _self.metadata is not None:
+            # add information about cropping to metadata
+            if "cropping_history" not in _self.metadata:
+                _self.metadata["cropping_history"] = {}
+                _self.metadata["cropping_history"]["xlim"] = []
+                _self.metadata["cropping_history"]["ylim"] = []
+            _self.metadata["cropping_history"]["xlim"].append(tuple([int(elem) for elem in xlim]))
+            _self.metadata["cropping_history"]["ylim"].append(tuple([int(elem) for elem in ylim]))
 
-        # add new uid to uid history
-        _self.metadata["uids"].append(str(uuid4()))
+            # add new uid to uid history
+            _self.metadata["uids"].append(str(uuid4()))
 
-        # empty current data and data history entry in metadata
-        _self.metadata["data"] = {}
-        for k in _self.metadata["history"].keys():
-            if k != "alt":
-                _self.metadata["history"][k] = []
-            else:
-                empty_alt_hist_dict = {k: [] for k in _self.metadata["history"]["alt"].keys()}
-                _self.metadata["history"]["alt"] = empty_alt_hist_dict
+            # empty current data and data history entry in metadata
+            _self.metadata["data"] = {}
+            for k in _self.metadata["history"].keys():
+                if k != "alt":
+                    _self.metadata["history"][k] = []
+                else:
+                    empty_alt_hist_dict = {k: [] for k in _self.metadata["history"]["alt"].keys()}
+                    _self.metadata["history"]["alt"] = empty_alt_hist_dict
 
         # sometimes modalities like annotations or regions can be empty in the meantime
         # here such empty modalities are removed
