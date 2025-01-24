@@ -25,7 +25,8 @@ def _save_images(imagedata: ImageData,
         as_zarr=images_as_zarr,
         zipped=zipped,
         return_savepaths=True,
-        max_resolution=max_resolution
+        max_resolution=max_resolution,
+        verbose=False
         )
 
     if metadata is not None:

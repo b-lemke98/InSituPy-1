@@ -1011,7 +1011,8 @@ class ImageData(DeepCopyMixin):
              compression: Literal['jpeg', 'LZW', 'jpeg2000', 'ZLIB', None] = 'ZLIB', # jpeg2000 or ZLIB are recommended in the Xenium documentation - ZLIB is faster
              return_savepaths: bool = False,
              overwrite: bool = False,
-             max_resolution: Optional[Number] = None # in µm per pixel
+             max_resolution: Optional[Number] = None, # in µm per pixel
+             verbose: bool = True
              ):
         """
         Save images to the specified output folder in either Zarr or OME-TIFF format.
@@ -1024,7 +1025,9 @@ class ImageData(DeepCopyMixin):
             save_pyramid (bool): If True, save image pyramids (only applicable for Zarr format).
             compression (Literal['jpeg', 'LZW', 'jpeg2000', 'ZLIB', None]): Compression method for OME-TIFF files.
             return_savepaths (bool): If True, return the paths of the saved files.
-            overwrite (bool): If True, overwrite existing files in the output folder.
+            overwrite (bool): If True, overwrite existing files in the output folder. Default is False.
+            max_resolution (Optional[Number]): Maximum resolution for images in µm per pixel. If the pixel size of an image is larger than `max_resolution`, the image is downscaled. Default is None.
+            verbose (bool): If True, print status messages during saving. Default is True.
 
         Returns:
             Optional[Dict[str, Path]]: A dictionary mapping image keys to their save paths if `return_savepaths` is True. Otherwise, returns None.
@@ -1049,10 +1052,10 @@ class ImageData(DeepCopyMixin):
         if return_savepaths:
             savepaths = {}
 
-        for n, img_metadata in self._metadata.items():
-            if n in keys_to_save:
+        for name, img_metadata in self._metadata.items():
+            if name in keys_to_save:
                 # extract image
-                img = self[n]
+                img = self[name]
                 new_img_metadata = img_metadata.copy()
 
                 axes = new_img_metadata['axes']
@@ -1090,22 +1093,22 @@ class ImageData(DeepCopyMixin):
                     # generate filename
                     if zipped:
                         #filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr.zip"
-                        filename = n + ".zarr.zip"
+                        filename = name + ".zarr.zip"
                     else:
                         # filename = Path(img_metadata["file"]).name.split(".")[0] + ".zarr"
-                        filename = n + ".zarr"
+                        filename = name + ".zarr"
 
                     # write to zarr
                     img_path = output_folder / filename
                     write_zarr(image=img, file=img_path,
                                img_metadata=new_img_metadata,
                                save_pyramid=save_pyramid,
-                               axes=axes
+                               axes=axes, verbose=verbose
                                )
                 else:
                     # get file name for saving
                     #filename = Path(img_metadata["file"]).name.split(".")[0] + ".ome.tif"
-                    filename = n + ".ome.tif"
+                    filename = name + ".ome.tif"
                     # retrieve image metadata for saving
                     photometric = 'rgb' if new_img_metadata['rgb'] else 'minisblack'
 
@@ -1121,17 +1124,17 @@ class ImageData(DeepCopyMixin):
 
                     selected_metadata = {key: pixel_meta[key] for key in ome_meta_to_retrieve if key in pixel_meta}
 
-                    print("start saving")
                     # write images as OME-TIFF
                     write_ome_tiff(image=img, file=output_folder / filename,
                                 photometric=photometric, axes=axes,
                                 compression=compression,
-                                metadata=selected_metadata, overwrite=False)
-                    print("end saving")
+                                metadata=selected_metadata, overwrite=False,
+                                verbose=verbose
+                                )
 
                 if return_savepaths:
                     # collect savepaths
-                    savepaths[n] = output_folder / filename
+                    savepaths[name] = output_folder / filename
 
         if return_savepaths:
             return savepaths
