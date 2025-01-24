@@ -17,14 +17,6 @@ InSituPy is a Python package designed to facilitate the analysis of in situ sequ
    conda activate insitupy
    ```
 
-2. **(Windows Only)** Download and install the `annoy` package from the provided wheel file. If your Python version is different from `3.9`, make sure to download the correct wheel [here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#annoy) and adapt the installation code accordingly:
-
-   ```bash
-   pip install wheels\annoy-1.17.0-cp39-cp39-win_amd64.whl
-   ```
-
-   *(Note: Skip this step if you're on Mac or Linux.)*
-
 ### Method 1: Installation from Cloned Repository
 
 1. **Clone the repository to your local machine:**
@@ -42,7 +34,15 @@ InSituPy is a Python package designed to facilitate the analysis of in situ sequ
    git checkout dev
    ```
 
-3. **Install the required packages using `pip` within the conda environment:**
+3. **(Windows Only)** Download and install the `annoy` package from the provided wheel file. If your Python version is different from `3.9`, make sure to download the correct wheel [here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#annoy) and adapt the installation code accordingly:
+
+   ```bash
+   pip install wheels\annoy-1.17.0-cp39-cp39-win_amd64.whl
+   ```
+
+   *(Note: Skip this step if you're on Mac or Linux.)*
+
+4. **Install the required packages using `pip` within the conda environment:**
 
    ```bash
    # for installation without napari use
