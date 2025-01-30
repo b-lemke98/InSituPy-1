@@ -1705,7 +1705,7 @@ class InSituData:
         if self._cells is None:
             # add annotation widget to napari
             add_geom_widget = add_new_geometries_widget()
-            add_geom_widget.max_height = 100
+            add_geom_widget.max_height = 120
             add_geom_widget.max_width = widgets_max_width
             self._viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
         else:
