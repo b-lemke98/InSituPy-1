@@ -80,11 +80,12 @@ if WITH_NAPARI:
             if isinstance(b, dask.array.core.Array) or np.all([isinstance(elem, dask.array.core.Array) for elem in b]):
                 masks.append(n)
 
-        # get image metadata
-        global pixel_size
-        if pixel_size_param is None:
-            first_key = list(xdata.images.metadata.keys())[0]
-            pixel_size = xdata.images.metadata[first_key]["pixel_size"]
-        else:
-            pixel_size = pixel_size_param
+        if xdata.images is not None:
+            # get image metadata
+            global pixel_size
+            if pixel_size_param is None:
+                first_key = list(xdata.images.metadata.keys())[0]
+                pixel_size = xdata.images.metadata[first_key]["pixel_size"]
+            else:
+                pixel_size = pixel_size_param
 

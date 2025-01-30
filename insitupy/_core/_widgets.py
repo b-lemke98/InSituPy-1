@@ -208,7 +208,7 @@ if WITH_NAPARI:
             @magicgui(
                 call_button='Filter',
                 obs_key={'choices': config.value_dict["obs"], 'label': "Obs:"},
-                operation_type={'choices': ["contains", "is equal to"], 'label': 'Operation:'},
+                operation_type={'choices': ["contains", "is equal to", "is not", "is in"], 'label': 'Operation:'},
                 obs_value={'label': 'Value:'},
                 reset={'label': 'Reset'}
                 )
@@ -228,7 +228,12 @@ if WITH_NAPARI:
                     if operation_type == "contains":
                         mask = config.adata.obs[obs_key].str.contains(obs_value)
                     elif operation_type == "is equal to":
-                        mask = config.adata.obs[obs_key] == obs_value
+                        mask = config.adata.obs[obs_key].astype(str) == str(obs_value)
+                    elif operation_type == "is not":
+                        mask = config.adata.obs[obs_key].astype(str) != str(obs_value)
+                    elif operation_type == "is in":
+                        obs_value_list = [elem.strip().strip("'").strip('"') for elem in obs_value.split(",")]
+                        mask = config.adata.obs[obs_key].isin(obs_value_list)
                     else:
                         raise ValueError(f"Unknown operation type: {operation_type}.")
 
@@ -451,7 +456,7 @@ if WITH_NAPARI:
                     {
                         'name': name,
                         'shape_type': 'polygon',
-                        'edge_width': 10,
+                        'edge_width': 40,
                         'edge_color': 'red',
                         'face_color': 'transparent',
                         #'scale': (config.pixel_size, config.pixel_size),
@@ -474,7 +479,7 @@ if WITH_NAPARI:
                     [],
                     {
                         'name': name,
-                        'size': 25,
+                        'size': 40,
                         'edge_color': 'black',
                         'face_color': 'blue',
                         #'scale': (config.pixel_size, config.pixel_size),
@@ -499,7 +504,7 @@ if WITH_NAPARI:
                     {
                         'name': name,
                         'shape_type': 'polygon',
-                        'edge_width': 10,
+                        'edge_width': 40,
                         'edge_color': '#ffaa00ff',
                         'face_color': 'transparent',
                         #'scale': (config.pixel_size, config.pixel_size),
