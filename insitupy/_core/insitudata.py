@@ -83,6 +83,7 @@ class InSituData:
     def __init__(self,
                  path: Union[str, os.PathLike, Path] = None,
                  metadata: dict = None,
+                 method: str = None,
                  slide_id: str = None,
                  sample_id: str = None,
                  from_insitudata: bool = None,
@@ -103,6 +104,7 @@ class InSituData:
         self._slide_id = slide_id
         self._sample_id = sample_id
         self._from_insitudata = from_insitudata
+        self._metadata["method"] = method
 
         # modalities
         self._images = None
@@ -2659,4 +2661,3 @@ def differential_gene_expression(
             "results": df,
             "params": adata_combined.uns["rank_genes_groups"]["params"]
         }
-      
