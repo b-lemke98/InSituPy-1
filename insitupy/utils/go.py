@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import requests
 from anndata import AnnData
-from gprofiler import GProfiler
 from matplotlib import colormaps
 from scipy.cluster.hierarchy import (dendrogram, fcluster, linkage,
                                      set_link_color_palette)
@@ -70,6 +69,11 @@ class GOEnrichment():
         Raises:
             ValueError: If `target_genes` is not a dictionary or list, or if `organism` is not specified.
         """
+        try:
+            from gprofiler import GProfiler
+        except ImportError:
+            raise ImportError("This function requires the 'gprofiler' package. Please install it with 'pip install gprofiler-official'.")
+
         if isinstance(target_genes, dict):
             groups = target_genes.keys()
         elif isinstance(target_genes, list):
@@ -210,7 +214,13 @@ class GOEnrichment():
         Raises:
             ValueError: If `target_genes` is not a dictionary or list, or if `organism` is not specified.
         """
-        import gseapy
+        try:
+            import gseapy
+        except ImportError:
+            raise ImportError("This function requires the 'gseapy' package. Please install it with 'pip install gseapy'.")
+
+
+
 
         if isinstance(target_genes, dict):
             groups = target_genes.keys()
