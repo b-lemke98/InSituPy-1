@@ -46,7 +46,7 @@ def check_integer_counts(X):
     # check if the matrix contains raw counts
     if not np.all(np.modf(X)[0] == 0):
         raise ValueError("Anndata object does not contain raw counts. Preprocessing aborted.")
-    
+
 
 def is_integer_counts(X):
     '''
@@ -162,7 +162,7 @@ def _check_assignment(
             # assign regions
             data.assign_regions(keys=key)
     else:
-        print(f"{modality.capitalize()} with key '{key} have already been assigned to `data`.")
+        print(f"{modality.capitalize()} with key '{key}' have already been assigned to the dataset.")
 
 
 def _substitution_func(

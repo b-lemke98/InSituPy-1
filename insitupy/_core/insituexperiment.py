@@ -127,7 +127,7 @@ class InSituExperiment:
             dataset = data
         else:
             dataset = insitupy.read_xenium(data)
-        assert isinstance(dataset, insitupy.InSituData), "Loaded dataset is not an InSituData object."
+        assert isinstance(dataset, insitupy._core.insitudata.InSituData), "Loaded dataset is not an InSituData object."
 
         # # set a unique ID
         # dataset._set_uid()
@@ -241,11 +241,11 @@ class InSituExperiment:
 
     def dge(self,
             data_id: int,
-            data_annotation_tuple: Union[Tuple[str, str], Tuple[str, str]], # tuple of annotation key and names
+            data_annotation_tuple: Optional[Tuple[str, str]] = None, # tuple of annotation key and names
             ref_id: Optional[int] = None,
-            ref_annotation_tuple: Union[Literal["rest"], Tuple[str, str], Tuple[str, str]] = "rest",
+            ref_annotation_tuple: Optional[Union[Literal["rest"], Tuple[str, str]]] = None,
             obs_tuple: Optional[Tuple[str, str]] = None,
-            region_tuple: Optional[Union[Tuple[str, str], Tuple[str, str]]] = None,
+            region_tuple: Optional[Tuple[str, str]] = None,
             plot_volcano: bool = True,
             method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
             ignore_duplicate_assignments: bool = False,
@@ -267,11 +267,11 @@ class InSituExperiment:
 
         Args:
             data_id (int): Identifier for the primary dataset within the `InSituExperiment` object.
-            data_annotation_tuple (Union[Tuple[str, str], Tuple[str, str]]): Tuple containing the annotation key and name for the primary data.
+            data_annotation_tuple (Tuple[str, str]): Tuple containing the annotation key and name for the primary data.
             ref_id (Optional[int]): Identifier for the reference dataset within the `InSituExperiment` object.
-            ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
+            ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
             obs_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
-            region_tuple (Optional[Union[Tuple[str, str], Tuple[str, str]]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
+            region_tuple (Optional[Tuple[str, str]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
             plot_volcano (bool, optional): Whether to generate a volcano plot of the results. Defaults to True.
             method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']], optional): Statistical method to use for differential expression analysis. Defaults to 't-test'.
             ignore_duplicate_assignments (bool, optional): Whether to ignore duplicate assignments in the data. Defaults to False.
@@ -307,19 +307,23 @@ class InSituExperiment:
             ref_data = None
             ref_name = data_name
 
-        if isinstance(data_annotation_tuple, tuple):
-            data_annot_name = data_annotation_tuple[1]
+        if data_annotation_tuple is None:
+            data_annot_name = ""
+        elif isinstance(data_annotation_tuple, tuple):
+            data_annot_name = f"'{data_annotation_tuple[1]}' in "
         elif data_annotation_tuple == "rest":
-            data_annot_name = data_annotation_tuple
+            data_annot_name = f"'{data_annotation_tuple}' in "
         else:
-            raise ValueError(f"Argument `data_annotation_tuple` has to be either tuple or 'rest'. Instead: {data_annotation_tuple}")
+            raise ValueError(f"Argument `data_annotation_tuple` has to be either tuple, 'rest' or None. Instead: {data_annotation_tuple}")
 
-        if isinstance(ref_annotation_tuple, tuple):
-            ref_annot_name = ref_annotation_tuple[1]
+        if ref_annotation_tuple is None:
+            ref_annot_name = ""
+        elif isinstance(ref_annotation_tuple, tuple):
+            ref_annot_name = f"'{ref_annotation_tuple[1]}' in "
         elif ref_annotation_tuple == "rest":
-            ref_annot_name = ref_annotation_tuple
+            ref_annot_name = f"'{ref_annotation_tuple}' in "
         else:
-            raise ValueError(f"Argument `ref_annotation_tuple` has to be either tuple or 'rest'. Instead: {ref_annotation_tuple}")
+            raise ValueError(f"Argument `ref_annotation_tuple` has to be either tuple, 'rest' or None. Instead: {ref_annotation_tuple}")
 
         # create title if necessary
         if title is None:
@@ -327,7 +331,7 @@ class InSituExperiment:
                 cell_title_part = f"\n{obs_tuple[0]}: {obs_tuple[1]}"
             else:
                 cell_title_part = ""
-            title = f"'{data_annot_name}' in {data_name} vs. '{ref_annot_name}' in {ref_name}{cell_title_part}"
+            title = f"{data_annot_name}{data_name} vs. {ref_annot_name}{ref_name}{cell_title_part}"
 
         dge_res = differential_gene_expression(
             data=data,
