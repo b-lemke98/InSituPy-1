@@ -88,15 +88,7 @@ class InSituData:
                  sample_id: str = None,
                  from_insitudata: bool = None,
                  ):
-        """_summary_
-
-        Args:
-            path (Union[str, os.PathLike, Path]): _description_
-            pattern_xenium_folder (str, optional): _description_. Defaults to "output-{ins_id}__{slide_id}__{sample_id}".
-            matrix (Optional[AnnData], optional): _description_. Defaults to None.
-
-        Raises:
-            FileNotFoundError: _description_
+        """
         """
         # metadata
         self._path = path
@@ -125,7 +117,7 @@ class InSituData:
             method = self._metadata["method"]
 
         if self._path is not None:
-            self._path = self._path.resolve()
+            self._path = str(Path(self._path).resolve())
 
         # check if all modalities are empty
         is_empty = np.all([elem is None for elem in [self._images, self._cells, self._alt, self._annotations, self._transcripts, self._regions]])
@@ -142,7 +134,10 @@ class InSituData:
         )
 
         if self._metadata is not None:
-            mfile = self._metadata["metadata_file"]
+            if "metadata_file" in self._metadata:
+                mfile = self._metadata["metadata_file"]
+            else:
+                mfile = None
         else:
             mfile = None
 
@@ -338,33 +333,6 @@ class InSituData:
     @regions.deleter
     def regions(self):
         self._regions = None
-
-    def _save_metadata_after_registration(self,
-                      metadata_path: Union[str, os.PathLike, Path] = None
-                      ):
-        # if there is no specific path given, the metadata is written to the default path for modified metadata
-        if metadata_path is None:
-            metadata_path = self._path / "experiment_modified.xenium"
-
-        # write to json file
-        metadata_json = json.dumps(self._metadata["xenium"], indent=4)
-        print(f"\t\tSave metadata to {metadata_path}", flush=True)
-        with open(metadata_path, "w") as metafile:
-            metafile.write(metadata_json)
-
-#    def _remove_empty_modalities(self):
-#        try:
-#            # check if anything really added to regions and if not, remove it again
-#            if len(self.regions.metadata) == 0:
-#                self.remove_modality("regions")
-#        except AttributeError:
-#            pass
-#        try:
-#            # check if anything really added to annotations and if not, remove it again
-#            if len(self.annotations.metadata) == 0:
-#                self.remove_modality("annotations")
-#        except AttributeError:
-#            pass
 
     def assign_geometries(self,
                           geometry_type: Literal["annotations", "regions"],
@@ -578,7 +546,7 @@ class InSituData:
             raise ValueError("At least one of `region_tuple` or `xlim`/`ylim` must be provided.")
 
         # retrieve pixel size of data
-        #pixel_size = self.metadata["xenium"]["pixel_size"]
+        #pixel_size = self.metadata["method_params"]["pixel_size"]
 
         if region_tuple is not None:
 
@@ -652,9 +620,9 @@ class InSituData:
 
         try:
             # if the object was previously cropped, check if the current window is identical with the previous one
-            if np.all([elem in _self.metadata["xenium"].keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
+            if np.all([elem in _self.metadata["method_params"].keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
                 # test whether the limits are identical
-                if (xlim == _self.metadata["xenium"]["cropping_xlim"]) & (ylim == _self.metadata["xenium"]["cropping_ylim"]):
+                if (xlim == _self.metadata["method_params"]["cropping_xlim"]) & (ylim == _self.metadata["method_params"]["cropping_ylim"]):
                     raise InSituDataRepeatedCropError(xlim, ylim)
         except TypeError:
             pass
@@ -1013,7 +981,7 @@ class InSituData:
         # add regions object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        #pixel_size = self.metadata["xenium"]['pixel_size']
+        #pixel_size = self.metadata["method_params"]['pixel_size']
 
         if self._regions is None:
             self._regions = RegionsData()
@@ -1031,7 +999,7 @@ class InSituData:
     def load_cells(self, verbose: bool = False):
         if verbose:
             print("Loading cells...", flush=True)
-        pixel_size = self._metadata["xenium"]["pixel_size"]
+
         if self._from_insitudata:
             try:
                 cells_path = self._metadata["data"]["cells"]
@@ -1056,6 +1024,7 @@ class InSituData:
                 self._alt = alt_dict
 
         else:
+            pixel_size = self._metadata["method_params"]["pixel_size"]
             # read celldata
             matrix = _read_matrix_from_xenium(path=self._path)
             boundaries = _read_boundaries_from_xenium(path=self._path, pixel_size=pixel_size)
@@ -1100,7 +1069,7 @@ class InSituData:
             # In v2.0 the "mip" image was removed due to better focusing of the machine.
             # For <v2.0 the function still tries to retrieve the "mip" image but in case this is not found
             # it will retrieve the "focus" image
-            if nuclei_type == "mip" and nuclei_file_key not in self._metadata["xenium"]["images"].keys():
+            if nuclei_type == "mip" and nuclei_file_key not in self._metadata["method_params"]["images"].keys():
                 warn(
                     f"Nuclei image type '{nuclei_type}' not found. Used 'focus' instead. This is the normal behavior for data analyzed with Xenium Ranger >=v2.0",
                     UserWarning, stacklevel=2
@@ -1114,7 +1083,7 @@ class InSituData:
                 img_names = ["nuclei"]
             else:
                 # get available keys for registered images in metadata
-                img_keys = [elem for elem in self._metadata["xenium"]["images"] if elem.startswith("registered")]
+                img_keys = [elem for elem in self._metadata["method_params"]["images"] if elem.startswith("registered")]
 
                 # extract image names from keys and add nuclei
                 img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
@@ -1131,11 +1100,11 @@ class InSituData:
                     img_names = [elem for m, elem in zip(mask, img_names) if m]
 
             # get path of image files
-            img_files = [self._metadata["xenium"]["images"][k] for k in img_keys]
+            img_files = [self._metadata["method_params"]["images"][k] for k in img_keys]
 
             if load_cell_segmentation_images:
                 # get cell segmentation images if available
-                if "morphology_focus/" in self._metadata["xenium"]["images"][nuclei_file_key]:
+                if "morphology_focus/" in self._metadata["method_params"]["images"][nuclei_file_key]:
                     seg_files = ["morphology_focus/morphology_focus_0001.ome.tif",
                                  "morphology_focus/morphology_focus_0002.ome.tif",
                                  "morphology_focus/morphology_focus_0003.ome.tif"
@@ -1282,8 +1251,6 @@ class InSituData:
         # clean old entries in data metadata
         self._metadata["data"] = {}
 
-        #pixel_size = self.metadata['xenium']['pixel_size']
-
         # save images
         if self._images is not None:
             images = self._images
@@ -1295,13 +1262,6 @@ class InSituData:
                 zipped=zarr_zipped,
                 max_resolution=images_max_resolution
                 )
-
-            # if images_max_resolution is not None:
-            #     if images_max_resolution <= pixel_size:
-            #         warn(f"`max_pixel_size` ({images_max_resolution}) smaller than `pixel_size` ({pixel_size}). Skipped resizing.")
-            #         pass
-            #     else:
-            #         self.metadata['xenium']['pixel_size'] = images_max_resolution
 
         # save cells
         if self._cells is not None:
@@ -1353,8 +1313,9 @@ class InSituData:
         # save version of InSituPy
         self._metadata["version"] = __version__
 
-        # move xenium key to end of metadata
-        self._metadata["xenium"] = self._metadata.pop("xenium")
+        if "method_params" in self._metadata:
+            # move method_param key to end of metadata
+            self._metadata["method_params"] = self._metadata.pop("method_params")
 
         # write Xeniumdata metadata to json file
         xd_metadata_path = path / ISPY_METADATA_FILE
@@ -1494,8 +1455,9 @@ class InSituData:
         # save version of InSituPy
         self._metadata["version"] = __version__
 
-        # move xenium key to end of metadata
-        self._metadata["xenium"] = self._metadata.pop("xenium")
+        if "method_params" in self._metadata:
+            # move method_params key to end of metadata
+            self._metadata["method_params"] = self._metadata.pop("method_params")
 
         # write Xeniumdata metadata to json file
         xd_metadata_path = path / ISPY_METADATA_FILE
@@ -1604,7 +1566,7 @@ class InSituData:
         # # get information about pixel size
         # if (pixel_size is None) & (scalebar):
         #     # extract pixel_size
-        #     pixel_size = float(self.metadata["xenium"]["pixel_size"])
+        #     pixel_size = float(self.metadata["method_params"]["pixel_size"])
         # else:
         #     pixel_size = 1
 
@@ -2265,8 +2227,8 @@ def register_images(
                 )
 
             # save metadata
-            data.metadata["xenium"]['images'][f'registered_{channel_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, data.path).replace("\\", "/")
-            write_dict_to_json(data.metadata["xenium"], data.path / "experiment_modified.xenium")
+            data.metadata["method_params"]['images'][f'registered_{channel_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, data.path).replace("\\", "/")
+            write_dict_to_json(data.metadata["method_params"], data.path / "experiment_modified.xenium")
             #self._save_metadata_after_registration()
         if add_registered_image:
             data.images.add_image(
@@ -2315,8 +2277,8 @@ def register_images(
                     )
 
                 # save metadata
-                data.metadata["xenium"]['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, data.path).replace("\\", "/")
-                write_dict_to_json(data.metadata["xenium"], data.path / "experiment_modified.xenium")
+                data.metadata["method_params"]['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, data.path).replace("\\", "/")
+                write_dict_to_json(data.metadata["method_params"], data.path / "experiment_modified.xenium")
                 #self._save_metadata_after_registration()
             if add_registered_image:
                 data.images.add_image(

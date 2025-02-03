@@ -30,7 +30,7 @@ def read_xenium(
         dim = None # dimensions of the dataset
         from_insitudata = False  # flag indicating from where the data is read
         if (path / ISPY_METADATA_FILE).exists():
-            # read xeniumdata metadata
+            # read InSituData metadata
             xd_metadata_file = path / ISPY_METADATA_FILE
             metadata = read_json(xd_metadata_file)
 
@@ -42,7 +42,7 @@ def read_xenium(
             metadata["path"] = abspath(path).replace("\\", "/")
             metadata["metadata_file"] = ISPY_METADATA_FILE
 
-            # set flag for xeniumdata
+            # set flag for InSituData
             from_insitudata = True
         else:
             # initialize the metadata dict
@@ -57,39 +57,26 @@ def read_xenium(
             if not path.is_dir():
                 raise FileNotFoundError(f"No such directory found: {str(path)}")
 
-            # if metadata_filename is not None:
-            #     experiment_xenium_filename = metadata_filename
-
-            # else:
-            #     # check for modified metadata_filename
-            #     metadata_files = [elem.name for elem in path.glob("*.xenium")]
-            #     if "experiment_modified.xenium" in metadata_files:
-            #         experiment_xenium_filename = "experiment_modified.xenium"
-            #     else:
-            #         experiment_xenium_filename = "experiment.xenium"
-
-            # # all changes are saved to the modified .xenium json
-            # metadata_save_path_after_registration = path / "experiment_modified.xenium"
-
             # save paths of this project in metadata
             metadata["path"] = abspath(path).replace("\\", "/")
             metadata["metadata_file"] = metadata_filename
 
             # read metadata
-            metadata["xenium"] = read_json(path / metadata_filename)
+            metadata["method_params"] = read_json(path / metadata_filename)
 
             # get slide id and sample id from metadata
-            slide_id = metadata["xenium"]["slide_id"]
-            sample_id = metadata["xenium"]["region_name"]
+            slide_id = metadata["method_params"]["slide_id"]
+            sample_id = metadata["method_params"]["region_name"]
 
             # initialize the uid section
             metadata["uids"] = [str(uuid4())]
 
-        # add method to metadata
-        metadata["method"] = "Xenium"
+        # # add method to metadata
+        # metadata["method"] = "Xenium"
 
         data = InSituData(path=path,
                           metadata=metadata,
+                          method="Xenium",
                           slide_id=slide_id,
                           sample_id=sample_id,
                           from_insitudata=from_insitudata,

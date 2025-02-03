@@ -27,7 +27,7 @@ if WITH_NAPARI:
         pixel_size_param = None
         ):
         if current_data_name == "main":
-            # access adata, viewer and metadata from xeniumdata
+            # access adata, viewer and metadata from InSituData
             global adata
             adata = xdata.cells.matrix
             global boundaries

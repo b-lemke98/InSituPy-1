@@ -409,8 +409,8 @@ class BoundariesData(DeepCopyMixin):
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self,
-                 cell_ids: Optional[da.core.Array],
-                 seg_mask_value: Optional[da.core.Array],
+                 cell_ids: Union[da.core.Array, np.ndarray, List],
+                 seg_mask_value: Optional[Union[da.core.Array, np.ndarray, List]] = None,
                  #pixel_size: Number = 1, # required for boundaries that are saved as masks
                  ):
         """_summary_
@@ -423,8 +423,11 @@ class BoundariesData(DeepCopyMixin):
         self._metadata = {}
 
         # store cell ids
-        self._cell_ids = cell_ids
+        self._cell_ids = da.from_array(np.array(cell_ids, dtype=np.uint32))
+
         self._seg_mask_value = seg_mask_value
+        if self._seg_mask_value is not None:
+            self._seg_mask_value = da.from_array(np.array(seg_mask_value, dtype=np.uint32))
 
         self._data = dict()
 
