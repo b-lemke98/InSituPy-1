@@ -83,7 +83,6 @@ class InSituData:
     def __init__(self,
                  path: Union[str, os.PathLike, Path] = None,
                  metadata: dict = None,
-                 method: str = None,
                  slide_id: str = None,
                  sample_id: str = None,
                  from_insitudata: bool = None,
@@ -91,12 +90,11 @@ class InSituData:
         """
         """
         # metadata
-        self._path = path
+        self._path = Path(path)
         self._metadata = metadata
         self._slide_id = slide_id
         self._sample_id = sample_id
         self._from_insitudata = from_insitudata
-        self._metadata["method"] = method
 
         # modalities
         self._images = None
@@ -114,10 +112,13 @@ class InSituData:
         if self._metadata is None:
             method = "unknown"
         else:
-            method = self._metadata["method"]
+            try:
+                method = self._metadata["method"]
+            except KeyError:
+                method = "unknown"
 
         if self._path is not None:
-            self._path = str(Path(self._path).resolve())
+            self._path = self._path.resolve()
 
         # check if all modalities are empty
         is_empty = np.all([elem is None for elem in [self._images, self._cells, self._alt, self._annotations, self._transcripts, self._regions]])

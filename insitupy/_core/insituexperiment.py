@@ -13,7 +13,7 @@ from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
 
 import insitupy
-from insitupy import differential_gene_expression
+from insitupy import differential_gene_expression, read
 from insitupy._constants import LOAD_FUNCS
 from insitupy._core._checks import is_integer_counts
 from insitupy._exceptions import ModalityNotFoundError
@@ -110,7 +110,8 @@ class InSituExperiment:
 
     def add(self,
             data: Union[str, os.PathLike, Path, insitupy.InSituData],
-            metadata: Optional[dict] = None
+            metadata: Optional[dict] = None,
+            mode: Literal["insitupy", "xenium"] = "insitupy"
             ):
         """Add a dataset to the experiment and update metadata.
 
@@ -126,7 +127,7 @@ class InSituExperiment:
         except TypeError:
             dataset = data
         else:
-            dataset = insitupy.read_xenium(data)
+            dataset = read(data, mode=mode)
         assert isinstance(dataset, insitupy._core.insitudata.InSituData), "Loaded dataset is not an InSituData object."
 
         # # set a unique ID
@@ -551,7 +552,7 @@ class InSituExperiment:
         #for i in range(len(metadata)):
         for dataset_path in dataset_paths:
             #dataset_path = path / f"{i}"
-            dataset = insitupy.read_xenium(dataset_path)
+            dataset = insitupy._read_xenium(dataset_path)
             data.append(dataset)
 
         # Create a new InSituExperiment object
@@ -617,7 +618,7 @@ class InSituExperiment:
             if not dataset_path.exists():
                 raise FileNotFoundError(f"No such directory found: {str(dataset_path)}")
 
-            dataset = insitupy.read_xenium(dataset_path)
+            dataset = insitupy._read_xenium(dataset_path)
             experiment._data.append(dataset)
 
             # Extract metadata from the row, excluding the 'directory' column

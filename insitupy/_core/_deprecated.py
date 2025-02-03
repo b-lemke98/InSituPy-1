@@ -19,3 +19,6 @@ def read_images(self, *args, **kwargs):
 
 def read_transcripts(self, *args, **kwargs):
     warn("`read_transcripts` is deprecated. Use `load_transcripts` instead.", DeprecationWarning, stacklevel=2)
+
+def read_xenium(self, *args, **kwargs):
+    warn("`read_xenium` is deprecated. Use `read(mode='xenium')` instead.", DeprecationWarning, stacklevel=2)

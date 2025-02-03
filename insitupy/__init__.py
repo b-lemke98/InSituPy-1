@@ -19,7 +19,7 @@ from ._core.dataclasses import AnnotationsData, BoundariesData, ImageData
 from ._core.insitudata import (InSituData, calc_distance_of_cells_from,
                                differential_gene_expression, register_images)
 from ._core.insituexperiment import InSituExperiment
-from ._core.xenium import read_xenium
+from ._core.reader import read
 from .palettes import CustomPalettes
 
 __all__ = [

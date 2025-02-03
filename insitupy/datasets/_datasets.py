@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Literal, Optional, Union
 
 from insitupy._constants import CACHE
 from insitupy._core.insitudata import InSituData
-from insitupy._core.xenium import read_xenium
+from insitupy._core.reader import _read_xenium
 from insitupy.datasets.download import download_url
 
 # parameters for download functions
@@ -120,7 +120,7 @@ def human_breast_cancer(
     # if necessary download data
     data_check_and_download(data_dir, zip_file, expected_md5sum, overwrite, data_url, named_data_dir)
     # load data into InSituData object
-    data = read_xenium(data_dir)
+    data = _read_xenium(data_dir)
 
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hbreastcancer__HE__histo.ome.tif", expected_he_md5sum, overwrite):
@@ -164,7 +164,7 @@ def human_kidney_nondiseased(
     data_check_and_download(data_dir, zip_file, expected_md5sum, overwrite, data_url, named_data_dir)
 
      # load data into InSituData object
-    data = read_xenium(data_dir)
+    data = _read_xenium(data_dir)
 
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hkidney__HE__histo.ome.tif", expected_he_md5sum, overwrite):
@@ -208,7 +208,7 @@ def human_pancreatic_cancer(
     data_check_and_download(data_dir, zip_file, expected_md5sum, overwrite, data_url, named_data_dir)
 
     # load data into InSituData object
-    data = read_xenium(data_dir)
+    data = _read_xenium(data_dir)
 
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hPancreas__HE__histo.ome.tif", expected_he_md5sum, overwrite):
@@ -253,7 +253,7 @@ def human_skin_melanoma(
     data_check_and_download(data_dir, zip_file, expected_md5sum, overwrite, data_url, named_data_dir)
 
     # load data into InSituData object
-    data = read_xenium(data_dir)
+    data = _read_xenium(data_dir)
 
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hskin__HE__histo.ome.tif", expected_he_md5sum, overwrite):
@@ -294,7 +294,7 @@ def human_brain_cancer(
     data_check_and_download(data_dir, zip_file, expected_md5sum, overwrite, data_url, named_data_dir)
 
     # load data into InSituData object
-    data = read_xenium(data_dir)
+    data = _read_xenium(data_dir)
 
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hbraincancer__HE__histo.ome.tif", expected_he_md5sum, overwrite):
@@ -335,7 +335,7 @@ def human_lung_cancer(
     data_check_and_download(data_dir, zip_file, expected_md5sum, overwrite, data_url, named_data_dir)
 
     # load data into InSituData object
-    data = read_xenium(data_dir)
+    data = _read_xenium(data_dir)
 
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hlungcancer__HE__histo.ome.tif", expected_he_md5sum, overwrite):
@@ -376,7 +376,7 @@ def human_lymph_node_5k(
     data_check_and_download(data_dir, zip_file, expected_md5sum, overwrite, data_url, named_data_dir)
 
     # load data into InSituData object
-    data = read_xenium(data_dir)
+    data = _read_xenium(data_dir)
 
     # download image data
     if md5sum_image_check(image_dir/"slide_id__hlymphnode5k__HE__histo.ome.tif", expected_he_md5sum, overwrite):
@@ -412,7 +412,7 @@ def human_lymph_node(
     data_check_and_download(data_dir, zip_file, expected_md5sum, overwrite, data_url, named_data_dir)
 
     # load data into InSituData object
-    data = read_xenium(data_dir)
+    data = _read_xenium(data_dir)
 
     print('For this dataset no image is available')
 
@@ -443,7 +443,7 @@ def xenium_test_dataset(
     data_check_and_download(data_dir, zip_file, expected_md5sum, overwrite, data_url, named_data_dir)
 
     # load data into InSituData object
-    data = read_xenium(data_dir)
+    data = _read_xenium(data_dir)
 
     print('For this dataset no image is available')
     return data
