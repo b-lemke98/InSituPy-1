@@ -1,5 +1,6 @@
 from typing import Literal, Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
 import scanpy as sc
 from parse import *
@@ -33,10 +34,73 @@ def normalize_and_transform_anndata(adata,
         sc.pp.log1p(adata)
     elif transformation_method == "sqrt":
         # Suggested in stlearn tutorial (https://stlearn.readthedocs.io/en/latest/tutorials/Xenium_PSTS.html)
-        X = adata.X.toarray()
+        try:
+            X = adata.X.toarray()
+        except AttributeError:
+            X = adata.X
         adata.X = csr_matrix(np.sqrt(X) + np.sqrt(X + 1))
     else:
         raise ValueError(f'`transformation_method` is not one of ["log1p", "sqrt"]')
+
+
+def test_transformation(adata, target_sum=1e4, layer=None):
+    """
+    Test normalization and transformation methods by plotting histograms of raw,
+    log1p-transformed, and sqrt-transformed counts.
+
+    Args:
+        adata (AnnData): Annotated data matrix.
+        target_sum (int, optional): Target sum for normalization. Defaults to 1e4.
+        layer (str, optional): Layer to use for transformation. Defaults to None.
+    """
+
+    # create a copy of the anndata
+    _adata = adata.copy()
+
+    # Check if the matrix consists of raw integer counts
+    if layer is None:
+        check_integer_counts(_adata.X)
+    else:
+        _adata.X = _adata.layers[layer].copy()
+        check_integer_counts(_adata.X)
+
+    # Preprocessing according to napari tutorial in squidpy
+    sc.pp.normalize_total(_adata, target_sum=target_sum)
+
+    # Create a copy of the anndata object for log1p transformation
+    adata_log1p = _adata.copy()
+    sc.pp.log1p(adata_log1p)
+
+    # Create a copy of the anndata object for sqrt transformation
+    adata_sqrt = _adata.copy()
+    try:
+        X = adata_sqrt.X.toarray()
+    except AttributeError:
+        X = adata_sqrt.X
+    adata_sqrt.X = np.sqrt(X) + np.sqrt(X + 1)
+
+    # Plot histograms
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    axes[0].hist(_adata.layers['counts'].sum(axis=1), bins=50, color='skyblue', edgecolor='black')
+    axes[0].set_title('Raw Counts', fontsize=14)
+    axes[0].set_xlabel('Counts', fontsize=12)
+    axes[0].set_ylabel('Frequency', fontsize=12)
+
+    axes[1].hist(adata_log1p.X.sum(axis=1), bins=50, color='skyblue', edgecolor='black')
+    axes[1].set_title('Log1p Transformed Counts', fontsize=14)
+    axes[1].set_xlabel('Counts', fontsize=12)
+    axes[1].set_ylabel('Frequency', fontsize=12)
+
+    axes[2].hist(adata_sqrt.X.sum(axis=1), bins=50, color='skyblue', edgecolor='black')
+    axes[2].set_title('Sqrt Transformed Counts', fontsize=14)
+    axes[2].set_xlabel('Counts', fontsize=12)
+    axes[2].set_ylabel('Frequency', fontsize=12)
+
+
+    plt.tight_layout()
+    plt.show()
+
 
 
 def reduce_dimensions_anndata(adata,
