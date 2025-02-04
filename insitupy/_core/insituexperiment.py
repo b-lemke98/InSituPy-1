@@ -13,7 +13,7 @@ from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
 
 import insitupy
-from insitupy import differential_gene_expression, read
+from insitupy import InSituData, differential_gene_expression
 from insitupy._constants import LOAD_FUNCS
 from insitupy._core._checks import is_integer_counts
 from insitupy._exceptions import ModalityNotFoundError
@@ -127,7 +127,7 @@ class InSituExperiment:
         except TypeError:
             dataset = data
         else:
-            dataset = read(data, mode=mode)
+            dataset = InSituData.read(data, mode=mode)
         assert isinstance(dataset, insitupy._core.insitudata.InSituData), "Loaded dataset is not an InSituData object."
 
         # # set a unique ID

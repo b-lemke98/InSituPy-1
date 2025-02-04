@@ -368,3 +368,5 @@ class ImageRegistration:
         plt.imshow(matchedVis)
         plt.savefig(matchedVis_file, dpi=400)
         plt.close()
+
+
