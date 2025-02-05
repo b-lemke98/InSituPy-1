@@ -10,7 +10,8 @@ from parse import *
 from insitupy import __version__
 from insitupy._core.insitudata import InSituData
 from insitupy._exceptions import UnknownOptionError
-from insitupy.images import ImageRegistration, deconvolve_he, resize_image
+from insitupy.images import (ImageRegistration, clip_image_histogram,
+                             deconvolve_he, resize_image)
 from insitupy.io.files import write_dict_to_json
 from insitupy.utils.utils import convert_to_list
 from insitupy.utils.utils import textformat as tf
@@ -27,7 +28,7 @@ def register_images(
     decon_scale_factor: float = 0.2,
     physicalsize: str = 'µm',
     prefix: str = "",
-    min_good_matches: int = 20
+    min_good_matches: int = 200
     ):
     """
     Register images stored in an InSituData object.
@@ -129,16 +130,20 @@ def register_images(
     pixel_size = pixelsizes['PhysicalSizeX']
 
     # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
-    axes_selected = "YX"
+    #axes_selected = "YX"
     if image_type == "histo":
         print("\t\tRun color deconvolution", flush=True)
         # deconvolve HE - performed on resized image to save memory
         # TODO: Scale to max width instead of using a fixed scale factor before deconvolution (`scale_to_max_width`)
-        nuclei_img, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor, axes=axes_selected),
+        #return image
+        nuclei_img, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor, axes="YXS"),
                                     return_type="grayscale", convert=True)
 
+        # Clip the image histogram to enhance contrast
+        nuclei_img = clip_image_histogram(image=nuclei_img)
+
         # bring back to original size
-        nuclei_img = resize_image(nuclei_img, scale_factor=1/decon_scale_factor, axes=axes_selected)
+        nuclei_img = resize_image(nuclei_img, scale_factor=1/decon_scale_factor, axes="YX")
 
         # set nuclei_channel and nuclei_axis to None
         channel_name_for_registration = channel_axis = None
@@ -156,8 +161,11 @@ def register_images(
         if channel_name_for_registration is None:
             raise TypeError("Argument `nuclei_channel` should be an integer and not NoneType.")
 
-        # select dapi channel for registration
-        nuclei_img = np.take(image, channel_name_for_registration, channel_axis)
+        # select dapi channel for registration and convert to numpy array
+        nuclei_img = np.take(image, channel_name_for_registration, channel_axis).compute()
+
+        # Clip the image histogram to enhance contrast
+        nuclei_img = clip_image_histogram(image=nuclei_img)
 
     # Setup image registration objects - is important to load and scale the images.
     # The reason for this are limits in C++, not allowing to perform certain OpenCV functions on big images.
@@ -174,6 +182,7 @@ def register_images(
     imreg_complete.load_and_scale_images()
 
     # setup ImageRegistration object with the nucleus image (either from deconvolution or just selected from IF image)
+    axes_selected = "YX"
     imreg_selected = ImageRegistration(
         image=nuclei_img,
         template=imreg_complete.template,
@@ -224,7 +233,8 @@ def register_images(
             name=channel_names[0],
             axes=axes_image,
             pixel_size=pixel_size,
-            ome_meta=ome_metadata
+            ome_meta=ome_metadata,
+            overwrite=True
             )
 
         del imreg_complete, imreg_selected, image, template, nuclei_img, eo, dab

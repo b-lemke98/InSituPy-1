@@ -81,7 +81,7 @@ def fit_image_to_size_limit(image: NDArray,
     else:
         return resized_image
 
-def convert_to_8bit(img, save_mem=True, verbose=False):
+def convert_to_8bit_func(img, save_mem=True, verbose=False):
     '''
     Convert numpy array image to 8bit.
     '''
@@ -179,9 +179,9 @@ def deconvolve_he(
         raise ValueError('Unknown `return_type`. Possible values: "grayscale" or "rgb".')
 
     if convert:
-        ihc_h = convert_to_8bit(ihc_h, save_mem=False)
-        ihc_e = convert_to_8bit(ihc_e, save_mem=False)
-        ihc_d = convert_to_8bit(ihc_d, save_mem=False)
+        ihc_h = convert_to_8bit_func(ihc_h, save_mem=False)
+        ihc_e = convert_to_8bit_func(ihc_e, save_mem=False)
+        ihc_d = convert_to_8bit_func(ihc_d, save_mem=False)
 
     return ihc_h, ihc_e, ihc_d
 
@@ -264,3 +264,13 @@ def crop_dask_array_or_pyramid(
         )
 
     return cropped_data
+
+def clip_image_histogram(
+    image: np.ndarray,
+    lower_perc: int = 2,
+    upper_perc: int = 98
+    ):
+    # Define the min and max intensity values
+    lp, up = np.percentile(image, (lower_perc, upper_perc))
+    image = np.clip((image - lp) * 255.0 / (up - lp), 0, 255).astype(np.uint8)
+    return image
