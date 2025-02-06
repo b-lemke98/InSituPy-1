@@ -423,6 +423,7 @@ if WITH_NAPARI:
                     _update_keys_based_on_geom_type(show_geometries_widget, xdata=xdata)
                     _update_classes_on_key_change(show_geometries_widget, xdata=xdata)
                     _set_show_names_based_on_geom_type(show_geometries_widget)
+                    _update_values_on_key_change(add_cells_widget)
 
         return add_cells_widget, move_to_cell_widget, show_geometries_widget, add_boundaries_widget, select_data, filter_cells_widget #add_genes, add_observations
 
