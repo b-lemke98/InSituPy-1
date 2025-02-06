@@ -16,6 +16,7 @@ import insitupy
 from insitupy import InSituData, differential_gene_expression
 from insitupy._constants import LOAD_FUNCS
 from insitupy._core._checks import is_integer_counts
+from insitupy._core.reader import read_xenium
 from insitupy._exceptions import ModalityNotFoundError
 from insitupy.io.files import check_overwrite_and_remove_if_true
 from insitupy.io.plots import save_and_show_figure
@@ -548,10 +549,8 @@ class InSituExperiment:
         # Load each dataset
         data = []
         dataset_paths = sorted([elem for elem in path.glob("data-*") if elem.is_dir()])
-        #for i in range(len(metadata)):
         for dataset_path in dataset_paths:
-            #dataset_path = path / f"{i}"
-            dataset = insitupy._read_xenium(dataset_path)
+            dataset = InSituData.read(dataset_path)
             data.append(dataset)
 
         # Create a new InSituExperiment object
@@ -563,7 +562,7 @@ class InSituExperiment:
         return experiment
 
     @classmethod
-    def from_config(cls, config_path: Union[str, os.PathLike, Path]):
+    def from_config(cls, config_path: Union[str, os.PathLike, Path], mode: Literal["insitupy", "xenium"] = "insitupy"):
         """
         Create an InSituExperiment object from a configuration file.
 
@@ -617,7 +616,12 @@ class InSituExperiment:
             if not dataset_path.exists():
                 raise FileNotFoundError(f"No such directory found: {str(dataset_path)}")
 
-            dataset = insitupy._read_xenium(dataset_path)
+            if mode == "insitupy":
+                dataset = InSituData(dataset_path)
+            elif mode == "xenium":
+                dataset = read_xenium(dataset_path)
+            else:
+                raise ValueError("Invalid mode. Supported modes are 'insitupy' and 'xenium'.")
             experiment._data.append(dataset)
 
             # Extract metadata from the row, excluding the 'directory' column
