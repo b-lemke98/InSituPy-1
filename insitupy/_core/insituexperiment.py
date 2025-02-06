@@ -728,7 +728,7 @@ class InSituExperiment:
             return dataset.viewer
 
 
-    def plot_overview(self, colums_to_plot: List[str] = [], layer: str = None, index: bool = True, qc_width: float = 4.0):
+    def plot_overview(self, colums_to_plot: List[str] = [], layer: str = None, force_layer: bool = False, index: bool = True, qc_width: float = 4.0):
         """
         Plots an overview table with metadata and quality control metrics.
 
@@ -801,7 +801,7 @@ class InSituExperiment:
                 ax.text(width + 1, rect.get_y() + rect.get_height() / 2, f'{width:.0f}', ha='left', va='center')
             return bar
 
-        def calculate_metrics(adata: AnnData, layer: str = None):
+        def calculate_metrics(adata: AnnData, layer: str = None, force_layer: bool = False):
             """
             Calculate quality control metrics for an AnnData object.
 
@@ -816,8 +816,8 @@ class InSituExperiment:
                 - If no raw counts are provided and the main matrix (adata.X) does not contain integer counts, the function will issue a warning and return (0, 0).
             """
             if layer is None:
-                if not is_integer_counts(adata.X):
-                    if not is_integer_counts(adata.layers["counts"]):
+                if not is_integer_counts(adata.X) and not force_layer:
+                    if "counts" not in adata.layers.keys() or ("counts" in adata.layers.keys() and not is_integer_counts(adata.layers["counts"])):
                         warnings.warn("No raw counts provided, metrics are set to 0.")
                         return 0, 0
                     else:
@@ -825,7 +825,7 @@ class InSituExperiment:
                 else:
                     df_cells, _ = sc.pp.calculate_qc_metrics(adata, percent_top=None)
             else:
-                if not is_integer_counts(adata.layers[layer]):
+                if not is_integer_counts(adata.layers[layer]) and not force_layer:
                     warnings.warn(f"No raw counts provided in layer '{layer}', metrics are set to 0.")
                     return 0, 0
                 else:
@@ -869,7 +869,7 @@ class InSituExperiment:
                 list_gene_count.append(0)
                 list_transcript_count.append(0)
             else:
-                m_gene_counts, m_transcript_counts = calculate_metrics(data.cells.matrix, layer=layer)
+                m_gene_counts, m_transcript_counts = calculate_metrics(data.cells.matrix, layer=layer, force_layer=force_layer)
                 list_gene_count.append(m_gene_counts)
                 list_transcript_count.append(m_transcript_counts)
 
