@@ -40,8 +40,8 @@ if WITH_NAPARI:
 
         # get keys from var_names, obs and obsm
         global genes, observations, value_dict
-        genes = adata.var_names.tolist()
-        observations = adata.obs.columns.tolist()
+        genes = sorted(adata.var_names.tolist())
+        observations = sorted(adata.obs.columns.tolist())
 
         obsm_keys = list(adata.obsm.keys())
         obsm_cats = []
