@@ -96,6 +96,7 @@ class ImageRegistration:
                                                       verbose=self.verbose,
                                                       print_spacer="\t\t\t"
                                                       )
+        ##TODO: Should we delete the self.image after this step to free memory?
         else:
             self.image_scaled = self.image
             self.template_scaled = self.template

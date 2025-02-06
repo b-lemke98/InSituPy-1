@@ -56,6 +56,7 @@ def test_transformation(adata, target_sum=1e4, layer=None):
 
     # create a copy of the anndata
     _adata = adata.copy()
+    counts = _adata.X
 
     # Check if the matrix consists of raw integer counts
     if layer is None:
@@ -63,6 +64,9 @@ def test_transformation(adata, target_sum=1e4, layer=None):
     else:
         _adata.X = _adata.layers[layer].copy()
         check_integer_counts(_adata.X)
+
+    # get raw counts
+    raw_counts = _adata.X.copy()
 
     # Preprocessing according to napari tutorial in squidpy
     sc.pp.normalize_total(_adata, target_sum=target_sum)
@@ -81,8 +85,7 @@ def test_transformation(adata, target_sum=1e4, layer=None):
 
     # Plot histograms
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-    axes[0].hist(_adata.layers['counts'].sum(axis=1), bins=50, color='skyblue', edgecolor='black')
+    axes[0].hist(raw_counts.sum(axis=1), bins=50, color='skyblue', edgecolor='black')
     axes[0].set_title('Raw Counts', fontsize=14)
     axes[0].set_xlabel('Counts', fontsize=12)
     axes[0].set_ylabel('Frequency', fontsize=12)

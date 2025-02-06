@@ -110,8 +110,7 @@ class InSituExperiment:
 
     def add(self,
             data: Union[str, os.PathLike, Path, insitupy.InSituData],
-            metadata: Optional[dict] = None,
-            mode: Literal["insitupy", "xenium"] = "insitupy"
+            metadata: Optional[dict] = None
             ):
         """Add a dataset to the experiment and update metadata.
 
@@ -127,7 +126,7 @@ class InSituExperiment:
         except TypeError:
             dataset = data
         else:
-            dataset = InSituData.read(data, mode=mode)
+            dataset = InSituData.read(data)
         assert isinstance(dataset, insitupy._core.insitudata.InSituData), "Loaded dataset is not an InSituData object."
 
         # # set a unique ID
