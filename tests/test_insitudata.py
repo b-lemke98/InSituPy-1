@@ -1,5 +1,5 @@
 from pathlib import Path
-from insitupy.datasets._datasets import xenium_test_dataset
+from insitupy.datasets.datasets import xenium_test_dataset
 
 BAYSOR_PATH = Path("tests/data/baysor_output-slide__region__20241212__134825__j1_b1_s1")
 image_x = 3522
@@ -37,7 +37,7 @@ def test_baysor():
     assert xd.alt["baysor"].boundaries is not None
     assert xd.alt["baysor"].boundaries
     assert 'cellular' in xd.alt["baysor"].boundaries.metadata.keys()
-    
+
 
 def test_functions():
     xd = xenium_test_dataset()

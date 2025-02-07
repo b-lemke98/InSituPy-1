@@ -1,3 +1,4 @@
+
 import functools as ft
 import gc
 import json
@@ -5,6 +6,7 @@ import os
 import shutil
 from datetime import datetime
 from numbers import Number
+from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
@@ -37,6 +39,7 @@ from insitupy._core._xenium import (_read_binned_expression,
                                     _read_matrix_from_xenium,
                                     _restructure_transcripts_dataframe)
 from insitupy._exceptions import UnknownOptionError
+from insitupy._warnings import NoProjectLoadWarning
 from insitupy.images import ImageRegistration, deconvolve_he, resize_image
 from insitupy.io.files import read_json, write_dict_to_json
 from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
@@ -83,28 +86,18 @@ class InSituData:
     def __init__(self,
                  path: Union[str, os.PathLike, Path] = None,
                  metadata: dict = None,
-                 method: str = None,
                  slide_id: str = None,
                  sample_id: str = None,
                  from_insitudata: bool = None,
                  ):
-        """_summary_
-
-        Args:
-            path (Union[str, os.PathLike, Path]): _description_
-            pattern_xenium_folder (str, optional): _description_. Defaults to "output-{ins_id}__{slide_id}__{sample_id}".
-            matrix (Optional[AnnData], optional): _description_. Defaults to None.
-
-        Raises:
-            FileNotFoundError: _description_
+        """
         """
         # metadata
-        self._path = path
+        self._path = Path(path)
         self._metadata = metadata
         self._slide_id = slide_id
         self._sample_id = sample_id
         self._from_insitudata = from_insitudata
-        self._metadata["method"] = method
 
         # modalities
         self._images = None
@@ -122,7 +115,10 @@ class InSituData:
         if self._metadata is None:
             method = "unknown"
         else:
-            method = self._metadata["method"]
+            try:
+                method = self._metadata["method"]
+            except KeyError:
+                method = "unknown"
 
         if self._path is not None:
             self._path = self._path.resolve()
@@ -142,14 +138,17 @@ class InSituData:
         )
 
         if self._metadata is not None:
-            mfile = self._metadata["metadata_file"]
+            if "metadata_file" in self._metadata:
+                mfile = self._metadata["metadata_file"]
+            else:
+                mfile = None
         else:
             mfile = None
 
         repr += f"{tf.Bold}Metadata file:{tf.ResetAll}\t{mfile}"
 
         if is_empty:
-            repr += "\n\nNo modalities available."
+            repr += "\n\nNo modalities loaded."
         else:
             if self._images is not None:
                 images_repr = self._images.__repr__()
@@ -338,33 +337,6 @@ class InSituData:
     @regions.deleter
     def regions(self):
         self._regions = None
-
-    def _save_metadata_after_registration(self,
-                      metadata_path: Union[str, os.PathLike, Path] = None
-                      ):
-        # if there is no specific path given, the metadata is written to the default path for modified metadata
-        if metadata_path is None:
-            metadata_path = self._path / "experiment_modified.xenium"
-
-        # write to json file
-        metadata_json = json.dumps(self._metadata["xenium"], indent=4)
-        print(f"\t\tSave metadata to {metadata_path}", flush=True)
-        with open(metadata_path, "w") as metafile:
-            metafile.write(metadata_json)
-
-#    def _remove_empty_modalities(self):
-#        try:
-#            # check if anything really added to regions and if not, remove it again
-#            if len(self.regions.metadata) == 0:
-#                self.remove_modality("regions")
-#        except AttributeError:
-#            pass
-#        try:
-#            # check if anything really added to annotations and if not, remove it again
-#            if len(self.annotations.metadata) == 0:
-#                self.remove_modality("annotations")
-#        except AttributeError:
-#            pass
 
     def assign_geometries(self,
                           geometry_type: Literal["annotations", "regions"],
@@ -578,7 +550,7 @@ class InSituData:
             raise ValueError("At least one of `region_tuple` or `xlim`/`ylim` must be provided.")
 
         # retrieve pixel size of data
-        #pixel_size = self.metadata["xenium"]["pixel_size"]
+        #pixel_size = self.metadata["method_params"]["pixel_size"]
 
         if region_tuple is not None:
 
@@ -652,9 +624,9 @@ class InSituData:
 
         try:
             # if the object was previously cropped, check if the current window is identical with the previous one
-            if np.all([elem in _self.metadata["xenium"].keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
+            if np.all([elem in _self.metadata["method_params"].keys() for elem in ["cropping_xlim", "cropping_ylim"]]):
                 # test whether the limits are identical
-                if (xlim == _self.metadata["xenium"]["cropping_xlim"]) & (ylim == _self.metadata["xenium"]["cropping_ylim"]):
+                if (xlim == _self.metadata["method_params"]["cropping_xlim"]) & (ylim == _self.metadata["method_params"]["cropping_ylim"]):
                     raise InSituDataRepeatedCropError(xlim, ylim)
         except TypeError:
             pass
@@ -1013,7 +985,7 @@ class InSituData:
         # add regions object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        #pixel_size = self.metadata["xenium"]['pixel_size']
+        #pixel_size = self.metadata["method_params"]['pixel_size']
 
         if self._regions is None:
             self._regions = RegionsData()
@@ -1031,7 +1003,7 @@ class InSituData:
     def load_cells(self, verbose: bool = False):
         if verbose:
             print("Loading cells...", flush=True)
-        pixel_size = self._metadata["xenium"]["pixel_size"]
+
         if self._from_insitudata:
             try:
                 cells_path = self._metadata["data"]["cells"]
@@ -1054,26 +1026,13 @@ class InSituData:
 
                 # add attribute
                 self._alt = alt_dict
-
         else:
-            # read celldata
-            matrix = _read_matrix_from_xenium(path=self._path)
-            boundaries = _read_boundaries_from_xenium(path=self._path, pixel_size=pixel_size)
-            self._cells = CellData(matrix=matrix, boundaries=boundaries)
-
-            try:
-                # read binned expression
-                arr = _read_binned_expression(path=self._path, gene_names_to_select=self._cells.matrix.var_names)
-                self._cells.matrix.varm["binned_expression"] = arr
-            except ValueError:
-                warn("Loading of binned expression did not work. Skipped it.")
-                pass
-
+            NoProjectLoadWarning()
 
     def load_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
-                    nuclei_type: Literal["focus", "mip", ""] = "mip",
-                    load_cell_segmentation_images: bool = True,
+                    # nuclei_type: Literal["focus", "mip", ""] = "mip",
+                    # load_cell_segmentation_images: bool = True,
                     overwrite: bool = False,
                     verbose: bool = True
                     ):
@@ -1094,71 +1053,21 @@ class InSituData:
             # get file paths and names
             img_files = [v for k,v in self._metadata["data"]["images"].items() if k in img_names]
             img_names = [k for k,v in self._metadata["data"]["images"].items() if k in img_names]
-        else:
-            nuclei_file_key = f"morphology_{nuclei_type}_filepath"
 
-            # In v2.0 the "mip" image was removed due to better focusing of the machine.
-            # For <v2.0 the function still tries to retrieve the "mip" image but in case this is not found
-            # it will retrieve the "focus" image
-            if nuclei_type == "mip" and nuclei_file_key not in self._metadata["xenium"]["images"].keys():
-                warn(
-                    f"Nuclei image type '{nuclei_type}' not found. Used 'focus' instead. This is the normal behavior for data analyzed with Xenium Ranger >=v2.0",
-                    UserWarning, stacklevel=2
-                     )
+            # create imageData object
+            img_paths = [self._path / elem for elem in img_files]
 
-                nuclei_type = "focus"
-                nuclei_file_key = f"morphology_{nuclei_type}_filepath"
-
-            if names == "nuclei":
-                img_keys = [nuclei_file_key]
-                img_names = ["nuclei"]
+            if self._images is None:
+                self._images = ImageData(img_paths, img_names)
             else:
-                # get available keys for registered images in metadata
-                img_keys = [elem for elem in self._metadata["xenium"]["images"] if elem.startswith("registered")]
+                for im, n in zip(img_paths, img_names):
+                    self._images.add_image(im, n, overwrite=overwrite, verbose=verbose)
 
-                # extract image names from keys and add nuclei
-                img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
-
-                # add dapi image key
-                img_keys = [nuclei_file_key] + img_keys
-
-                if names != "all":
-                    # make sure keys is a list
-                    names = convert_to_list(names)
-                    # select the specified keys
-                    mask = [elem in names for elem in img_names]
-                    img_keys = [elem for m, elem in zip(mask, img_keys) if m]
-                    img_names = [elem for m, elem in zip(mask, img_names) if m]
-
-            # get path of image files
-            img_files = [self._metadata["xenium"]["images"][k] for k in img_keys]
-
-            if load_cell_segmentation_images:
-                # get cell segmentation images if available
-                if "morphology_focus/" in self._metadata["xenium"]["images"][nuclei_file_key]:
-                    seg_files = ["morphology_focus/morphology_focus_0001.ome.tif",
-                                 "morphology_focus/morphology_focus_0002.ome.tif",
-                                 "morphology_focus/morphology_focus_0003.ome.tif"
-                                 ]
-                    seg_names = ["cellseg1", "cellseg2", "cellseg3"]
-
-                    # check which segmentation files exist and append to image list
-                    seg_file_exists_list = [(self._path / f).is_file() for f in seg_files]
-                    #print(seg_file_exists_list)
-                    img_files += [f for f, exists in zip(seg_files, seg_file_exists_list) if exists]
-                    img_names += [n for n, exists in zip(seg_names, seg_file_exists_list) if exists]
-
-        # create imageData object
-        img_paths = [self._path / elem for elem in img_files]
-
-        if self._images is None:
-            self._images = ImageData(img_paths, img_names)
         else:
-            for im, n in zip(img_paths, img_names):
-                self._images.add_image(im, n, overwrite=overwrite, verbose=verbose)
+            NoProjectLoadWarning()
 
     def load_transcripts(self,
-                        transcript_filename: str = "transcripts.parquet",
+                        # transcript_filename: str = "transcripts.parquet",
                         verbose: bool = True
                         ):
         if self._from_insitudata:
@@ -1170,14 +1079,41 @@ class InSituData:
             if verbose:
                 print("Loading transcripts...", flush=True)
             self._transcripts = pd.read_parquet(self._path / self._metadata["data"]["transcripts"])
+
         else:
-            # read transcripts
-            if verbose:
-                print("Loading transcripts...", flush=True)
-            transcript_dataframe = pd.read_parquet(self._path / transcript_filename)
+            NoProjectLoadWarning()
 
-            self._transcripts = _restructure_transcripts_dataframe(transcript_dataframe)
+    @classmethod
+    def read(cls, path: Union[str, os.PathLike, Path]):
+        """Read an InSituData object from a specified folder.
 
+        Args:
+            path (Union[str, os.PathLike, Path]): The path to the folder where data is saved.
+
+        Returns:
+            InSituData: A new InSituData object with the loaded data.
+        """
+        path = Path(path) # make sure the path is a pathlib path
+        assert (path / ISPY_METADATA_FILE).exists(), "No insitupy metadata file found."
+        # read InSituData metadata
+        insitupy_metadata_file = path / ISPY_METADATA_FILE
+        metadata = read_json(insitupy_metadata_file)
+
+        # retrieve slide_id and sample_id
+        slide_id = metadata["slide_id"]
+        sample_id = metadata["sample_id"]
+
+        # save paths of this project in metadata
+        metadata["path"] = abspath(path).replace("\\", "/")
+        metadata["metadata_file"] = ISPY_METADATA_FILE
+
+        data = cls(path=path,
+                   metadata=metadata,
+                   slide_id=slide_id,
+                   sample_id=sample_id,
+                   from_insitudata=True
+                   )
+        return data
 
     def reduce_dimensions(self,
                         umap: bool = True,
@@ -1282,8 +1218,6 @@ class InSituData:
         # clean old entries in data metadata
         self._metadata["data"] = {}
 
-        #pixel_size = self.metadata['xenium']['pixel_size']
-
         # save images
         if self._images is not None:
             images = self._images
@@ -1295,13 +1229,6 @@ class InSituData:
                 zipped=zarr_zipped,
                 max_resolution=images_max_resolution
                 )
-
-            # if images_max_resolution is not None:
-            #     if images_max_resolution <= pixel_size:
-            #         warn(f"`max_pixel_size` ({images_max_resolution}) smaller than `pixel_size` ({pixel_size}). Skipped resizing.")
-            #         pass
-            #     else:
-            #         self.metadata['xenium']['pixel_size'] = images_max_resolution
 
         # save cells
         if self._cells is not None:
@@ -1353,8 +1280,9 @@ class InSituData:
         # save version of InSituPy
         self._metadata["version"] = __version__
 
-        # move xenium key to end of metadata
-        self._metadata["xenium"] = self._metadata.pop("xenium")
+        if "method_params" in self._metadata:
+            # move method_param key to end of metadata
+            self._metadata["method_params"] = self._metadata.pop("method_params")
 
         # write Xeniumdata metadata to json file
         xd_metadata_path = path / ISPY_METADATA_FILE
@@ -1494,8 +1422,9 @@ class InSituData:
         # save version of InSituPy
         self._metadata["version"] = __version__
 
-        # move xenium key to end of metadata
-        self._metadata["xenium"] = self._metadata.pop("xenium")
+        if "method_params" in self._metadata:
+            # move method_params key to end of metadata
+            self._metadata["method_params"] = self._metadata.pop("method_params")
 
         # write Xeniumdata metadata to json file
         xd_metadata_path = path / ISPY_METADATA_FILE
@@ -1604,7 +1533,7 @@ class InSituData:
         # # get information about pixel size
         # if (pixel_size is None) & (scalebar):
         #     # extract pixel_size
-        #     pixel_size = float(self.metadata["xenium"]["pixel_size"])
+        #     pixel_size = float(self.metadata["method_params"]["pixel_size"])
         # else:
         #     pixel_size = 1
 
@@ -2088,248 +2017,6 @@ class InSituData:
 
         else:
             print(f"No modality '{modality}' found. Nothing removed.")
-
-
-def register_images(
-    data: InSituData,
-    image_to_be_registered: Union[str, os.PathLike, Path],
-    image_type: Literal["histo", "IF"],
-    channel_names: Union[str, List[str]],
-    channel_name_for_registration: Optional[str] = None,  # name used for the nuclei image. Only required for IF images.
-    template_image_name: str = "nuclei",
-    save_results: bool = True,
-    add_registered_image: bool = True,
-    decon_scale_factor: float = 0.2,
-    physicalsize: str = 'µm',
-    prefix: str = "",
-    min_good_matches: int = 20
-    ):
-    '''
-    Register images stored in InSituData object.
-    '''
-
-    # if image type is IF, the channel name for registration needs to be given
-    if image_type == "IF" and channel_name_for_registration is None:
-        raise ValueError(f'If `image_type" is "IF", `channel_name_for_registration is not allowed to be `None`.')
-
-    # define output directory
-    output_dir = data.path.parent / "registered_images"
-
-    # if output_dir.is_dir() and not force:
-    #     raise FileExistsError(f"Output directory {output_dir} exists already. If you still want to run the registration, set `force=True`.")
-
-    # check if image path exists
-    image_to_be_registered = Path(image_to_be_registered)
-    if not image_to_be_registered.is_file():
-        raise FileNotFoundError(f"No such file found: {str(image_to_be_registered)}")
-
-    # make sure the given image names are in a list
-    channel_names = convert_to_list(channel_names)
-
-    # determine the structure of the image axes and check other things
-    axes_template = "YX"
-    if image_type == "histo":
-        axes_image = "YXS"
-
-        # make sure that there is only one image name given
-        if len(channel_names) > 1:
-            raise ValueError(f"More than one image name retrieved ({channel_names})")
-
-        if len(channel_names) == 0:
-            raise ValueError(f"No image name found in file {image_to_be_registered}")
-
-    elif image_type == "IF":
-        axes_image = "CYX"
-    else:
-        raise UnknownOptionError(image_type, available=["histo", "IF"])
-
-    print(f'\tProcessing following {image_type} images: {tf.Bold}{", ".join(channel_names)}{tf.ResetAll}', flush=True)
-
-    # read images
-    print("\t\tLoading images to be registered...", flush=True)
-    image = imread(image_to_be_registered) # e.g. HE image
-
-    # sometimes images are read with an empty time dimension in the first axis.
-    # If this is the case, it is removed here.
-    if len(image.shape) == 4:
-        image = image[0]
-
-    # read images in InSituData object
-    data.load_images(names=template_image_name, load_cell_segmentation_images=False)
-    template = data.images["nuclei"][0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
-
-    # extract OME metadata
-    ome_metadata_template = data.images.metadata["nuclei"]["OME"]
-
-    # extract pixel size for x and y from metadata
-    pixelsizes = {key: ome_metadata_template['Image']['Pixels'][key] for key in ['PhysicalSizeX', 'PhysicalSizeY']}
-
-    # generate OME metadata for saving
-    ome_metadata = {
-        **{'SignificantBits': 8,
-        'PhysicalSizeXUnit': physicalsize,
-        'PhysicalSizeYUnit': physicalsize
-        },
-        **pixelsizes
-    }
-
-    # determine one pixel direction as universal pixel size
-    pixel_size = pixelsizes['PhysicalSizeX']
-
-    # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
-    axes_selected = "YX"
-    if image_type == "histo":
-        print("\t\tRun color deconvolution", flush=True)
-        # deconvolve HE - performed on resized image to save memory
-        # TODO: Scale to max width instead of using a fixed scale factor before deconvolution (`scale_to_max_width`)
-        nuclei_img, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor, axes=axes_selected),
-                                    return_type="grayscale", convert=True)
-
-        # bring back to original size
-        nuclei_img = resize_image(nuclei_img, scale_factor=1/decon_scale_factor, axes=axes_selected)
-
-        # set nuclei_channel and nuclei_axis to None
-        channel_name_for_registration = channel_axis = None
-    else:
-        # image_type is "IF" then
-        # get index of nuclei channel
-        channel_name_for_registration = channel_names.index(channel_name_for_registration)
-        channel_axis = axes_image.find("C")
-
-        if channel_axis == -1:
-            raise ValueError(f"No channel indicator `C` found in image axes ({axes_image})")
-
-        print(f"\t\tSelect image with nuclei from IF image (channel: {channel_name_for_registration})", flush=True)
-        # select nuclei channel from IF image
-        if channel_name_for_registration is None:
-            raise TypeError("Argument `nuclei_channel` should be an integer and not NoneType.")
-
-        # select dapi channel for registration
-        nuclei_img = np.take(image, channel_name_for_registration, channel_axis)
-        #selected = image[nuclei_channel]
-
-    # Setup image registration objects - is important to load and scale the images.
-    # The reason for this are limits in C++, not allowing to perform certain OpenCV functions on big images.
-
-    # First: Setup the ImageRegistration object for the whole image (before deconvolution in histo images and multi-channel in IF)
-    imreg_complete = ImageRegistration(
-        image=image,
-        template=template,
-        axes_image=axes_image,
-        axes_template=axes_template,
-        verbose=False
-        )
-    # load and scale the whole image
-    imreg_complete.load_and_scale_images()
-
-    # setup ImageRegistration object with the nucleus image (either from deconvolution or just selected from IF image)
-    imreg_selected = ImageRegistration(
-        image=nuclei_img,
-        template=imreg_complete.template,
-        axes_image=axes_selected,
-        axes_template=axes_template,
-        max_width=4000,
-        convert_to_grayscale=False,
-        perspective_transform=False,
-        min_good_matches=min_good_matches
-    )
-
-    # run all steps to extract features and get transformation matrix
-    imreg_selected.load_and_scale_images()
-
-    print("\t\tExtract common features from image and template", flush=True)
-    # perform registration to extract the common features ptsA and ptsB
-    imreg_selected.extract_features()
-    imreg_selected.calculate_transformation_matrix()
-
-    if image_type == "histo":
-        # in case of histo RGB images, the channels are in the third axis and OpenCV can transform them
-        if imreg_complete.image_resized is None:
-            imreg_selected.image = imreg_complete.image  # use original image
-        else:
-            imreg_selected.image_resized = imreg_complete.image_resized  # use resized original image
-
-        # perform registration
-        imreg_selected.perform_registration()
-
-        if save_results:
-            # save files
-            identifier = f"{prefix}__{data.slide_id}__{data.sample_id}__{channel_names[0]}"
-            #current_outfile = output_dir / f"{identifier}__registered.ome.tif"
-            imreg_selected.save(
-                output_dir=output_dir,
-                identifier = identifier,
-                axes=axes_image,
-                photometric='rgb',
-                ome_metadata=ome_metadata
-                )
-
-            # save metadata
-            data.metadata["xenium"]['images'][f'registered_{channel_names[0]}_filepath'] = os.path.relpath(imreg_selected.outfile, data.path).replace("\\", "/")
-            write_dict_to_json(data.metadata["xenium"], data.path / "experiment_modified.xenium")
-            #self._save_metadata_after_registration()
-        if add_registered_image:
-            data.images.add_image(
-                image=imreg_selected.registered,
-                name=channel_names[0],
-                axes=axes_image,
-                pixel_size=pixel_size,
-                ome_meta=ome_metadata
-                )
-
-        del imreg_complete, imreg_selected, image, template, nuclei_img, eo, dab
-    else:
-        # image_type is IF
-        # In case of IF images the channels are normally in the first axis and each channel is registered separately
-        # Further, each channel is then saved separately as grayscale image.
-
-        # iterate over channels
-        for i, n in enumerate(channel_names):
-            # skip the DAPI image
-            if n == channel_name_for_registration:
-                break
-
-            if imreg_complete.image_resized is None:
-                # select one channel from non-resized original image
-                imreg_selected.image = np.take(imreg_complete.image, i, channel_axis)
-            else:
-                # select one channel from resized original image
-                imreg_selected.image_resized = np.take(imreg_complete.image_resized, i, channel_axis)
-
-            # perform registration
-            imreg_selected.perform_registration()
-
-            if save_results:
-                # save files
-                identifier = f"{data.slide_id}__{data.sample_id}__{n}"
-                #current_outfile = output_dir / f"{filename}__registered.ome.tif",
-                imreg_selected.save(
-                    #outfile = current_outfile,
-                    output_dir=output_dir,
-                    identifier=identifier,
-                    #output_dir=self.path.parent / "registered_images",
-                    #filename=f"{self.slide_id}__{self.sample_id}__{n}",
-                    axes='YX',
-                    photometric='minisblack',
-                    ome_metadata=ome_metadata
-                    )
-
-                # save metadata
-                data.metadata["xenium"]['images'][f'registered_{n}_filepath'] = os.path.relpath(imreg_selected.outfile, data.path).replace("\\", "/")
-                write_dict_to_json(data.metadata["xenium"], data.path / "experiment_modified.xenium")
-                #self._save_metadata_after_registration()
-            if add_registered_image:
-                data.images.add_image(
-                    image=imreg_selected.registered,
-                    name=n,
-                    axes=axes_image,
-                    pixel_size=pixel_size,
-                    ome_meta=ome_metadata
-                    )
-
-        # free RAM
-        del imreg_complete, imreg_selected, image, template, nuclei_img
-    gc.collect()
 
 
 def calc_distance_of_cells_from(

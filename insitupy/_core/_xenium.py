@@ -20,6 +20,7 @@ from insitupy.utils.utils import decode_robust_series
 
 def _read_matrix_from_xenium(path) -> AnnData:
     # extract parameters from metadata
+    path = Path(path)
     cf_h5_path = path / "cell_feature_matrix.h5"
 
     with warnings.catch_warnings():
@@ -117,6 +118,7 @@ def _read_binned_expression(
     path: Union[str, os.PathLike, Path],
     gene_names_to_select = List
 ):
+    path = Path(path)
     # add binned expression data to .varm of self.cells.matrix
     trans_file = path / "transcripts.zarr.zip"
 

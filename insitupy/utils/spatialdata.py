@@ -46,7 +46,7 @@ def convert_to_spatialdata_dict(data, levels: int = 5):
         attrs["region_key"] = REGION
         adata.uns["spatialdata_attrs"] = attrs
         if cells_as_circles:
-            transform = Scale([1.0 / data.metadata["xenium"]["pixel_size"], 1.0 / data.metadata["xenium"]["pixel_size"]], axes=("x", "y"))
+            transform = Scale([1.0 / data.metadata["method_params"]["pixel_size"], 1.0 / data.metadata["method_params"]["pixel_size"]], axes=("x", "y"))
             radius = np.sqrt(data.cells.matrix.obs["cell_area"].to_numpy() / np.pi)
             circles = ShapesModel.parse(
                     data.cells.matrix.obsm["spatial"].copy(),
@@ -108,7 +108,7 @@ def convert_to_spatialdata_dict(data, levels: int = 5):
                             "gene": "feature_name"
                         }
             df = df.rename(columns=rename_dict)
-            scale = Scale([1.0 / xd.metadata["xenium"]["pixel_size"], 1.0 / xd.metadata["xenium"]["pixel_size"], 1.0], axes=("x", "y", "z"))
+            scale = Scale([1.0 / xd.metadata["method_params"]["pixel_size"], 1.0 / xd.metadata["method_params"]["pixel_size"], 1.0], axes=("x", "y", "z"))
             parsed_points = PointsModel.parse(df,
                                             coordinates={"x": "x", "y": "y", "z": "z"},
                                             feature_key="feature_name",

@@ -37,7 +37,7 @@ def _calc_kernel_density(
         try:
             import mellon
         except:
-            raise ImportError("To calculate densities with the mellon package, please install it with `pip install spatialdata`.")
+            raise ImportError("To calculate densities with the mellon package, please install it with `pip install mellon`.")
         if verbose:
             print("Using Mellon density estimator.")
         # Fit and predict log density

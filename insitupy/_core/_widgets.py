@@ -29,10 +29,10 @@ if WITH_NAPARI:
     from ._layers import _add_annotations_as_layer
 
     def _initialize_widgets(
-        xdata # xenium data object
+        xdata # InSituData object
         ) -> List[FunctionGui]:
 
-        # access viewer from xeniumdata
+        # access viewer from InSituData
         viewer = xdata.viewer
 
         if xdata.cells is None:
@@ -290,7 +290,7 @@ if WITH_NAPARI:
                                 edge_width=0.1
                             )
                 else:
-                    print(f"Cell '{cell}' not found in `xeniumdata.cells.matrix.obs_names()`.")
+                    print(f"Cell '{cell}' not found in `.cells.matrix.obs_names()`.")
 
             def callback_refresh(event=None):
                 # after the points widget is run, the widgets have to be refreshed to current data layer
@@ -423,6 +423,7 @@ if WITH_NAPARI:
                     _update_keys_based_on_geom_type(show_geometries_widget, xdata=xdata)
                     _update_classes_on_key_change(show_geometries_widget, xdata=xdata)
                     _set_show_names_based_on_geom_type(show_geometries_widget)
+                    _update_values_on_key_change(add_cells_widget)
 
         return add_cells_widget, move_to_cell_widget, show_geometries_widget, add_boundaries_widget, select_data, filter_cells_widget #add_genes, add_observations
 

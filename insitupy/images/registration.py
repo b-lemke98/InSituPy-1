@@ -15,7 +15,8 @@ from .._constants import SHRT_MAX
 from .._exceptions import NotEnoughFeatureMatchesError
 from ..utils.utils import remove_last_line_from_csv
 from .io import write_ome_tiff
-from .utils import convert_to_8bit, fit_image_to_size_limit, scale_to_max_width
+from .utils import (convert_to_8bit_func, fit_image_to_size_limit,
+                    scale_to_max_width)
 
 
 class ImageRegistration:
@@ -95,14 +96,15 @@ class ImageRegistration:
                                                       verbose=self.verbose,
                                                       print_spacer="\t\t\t"
                                                       )
+        ##TODO: Should we delete the self.image after this step to free memory?
         else:
             self.image_scaled = self.image
             self.template_scaled = self.template
 
         # convert and normalize images to 8bit for registration
         self.verboseprint("\t\tConvert scaled images to 8 bit")
-        self.image_scaled = convert_to_8bit(self.image_scaled)
-        self.template_scaled = convert_to_8bit(self.template_scaled)
+        self.image_scaled = convert_to_8bit_func(self.image_scaled)
+        self.template_scaled = convert_to_8bit_func(self.template_scaled)
 
         # calculate scale factors for x and y dimension for image and template
         # TODO: Do we really nead to do this separately for both axes?
@@ -368,3 +370,5 @@ class ImageRegistration:
         plt.imshow(matchedVis)
         plt.savefig(matchedVis_file, dpi=400)
         plt.close()
+
+

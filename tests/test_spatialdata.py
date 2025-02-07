@@ -1,7 +1,7 @@
 from pathlib import Path
 from spatialdata import read_zarr
 import pytest
-from insitupy.datasets._datasets import xenium_test_dataset
+from insitupy.datasets.datasets import xenium_test_dataset
 
 
 SDATA_PATH = Path("tests/data/spatialdata_example")
@@ -26,7 +26,7 @@ def test_tospatialdata(levels: int):
     assert len(sdata.images) == n_images
     assert len(sdata.images["nuclei"].groups) == levels + 2
     assert sdata.images["nuclei"]["scale0"].dims == sdata_ref.images["morphology_focus"]["scale0"].dims
-        
+
 
     assert len(sdata.labels) == 2
     assert len(sdata.labels["cellular"].groups) == levels + 2
