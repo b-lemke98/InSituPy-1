@@ -111,6 +111,7 @@ class InSituExperiment:
 
     def add(self,
             data: Union[str, os.PathLike, Path, insitupy.InSituData],
+            mode: Literal["insitupy", "xenium"] = "insitupy",
             metadata: Optional[dict] = None
             ):
         """Add a dataset to the experiment and update metadata.
@@ -127,7 +128,13 @@ class InSituExperiment:
         except TypeError:
             dataset = data
         else:
-            dataset = InSituData.read(data)
+            if mode == "insitupy":
+                dataset = InSituData.read(data)
+            elif mode == "xenium":
+                dataset = read_xenium(data)
+            else:
+                raise ValueError("Invalid mode. Supported modes are 'insitupy' and 'xenium'.")
+
         assert isinstance(dataset, insitupy._core.insitudata.InSituData), "Loaded dataset is not an InSituData object."
 
         # # set a unique ID
@@ -562,12 +569,15 @@ class InSituExperiment:
         return experiment
 
     @classmethod
-    def from_config(cls, config_path: Union[str, os.PathLike, Path], mode: Literal["insitupy", "xenium"] = "insitupy"):
+    def from_config(cls,
+                    config_path: Union[str, os.PathLike, Path],
+                    mode: Literal["insitupy", "xenium"] = "insitupy"):
         """
         Create an InSituExperiment object from a configuration file.
 
         Args:
             config_path (Union[str, os.PathLike, Path]): The path to the configuration CSV or Excel file.
+            mode (Literal["insitupy", "xenium"], optional): The mode to use for loading the datasets. Defaults to "insitupy".
 
         The configuration file should be either a CSV or Excel file (.csv, .xlsx, .xls) and must contain the following columns:
 
@@ -622,6 +632,7 @@ class InSituExperiment:
                 dataset = read_xenium(dataset_path)
             else:
                 raise ValueError("Invalid mode. Supported modes are 'insitupy' and 'xenium'.")
+
             experiment._data.append(dataset)
 
             # Extract metadata from the row, excluding the 'directory' column
