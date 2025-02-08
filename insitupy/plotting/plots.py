@@ -5,7 +5,6 @@ from typing import Literal, Optional, Union
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from adjustText import adjust_text
 from matplotlib.lines import Line2D
 from napari.viewer import Viewer
 
@@ -122,6 +121,11 @@ def plot_cellular_composition(
         >>> compositions = plot_cell_composition(data, cell_type_col="cell_type", key="region_1", return_data=True)
         >>> print(compositions)
     """
+    if adjust_labels:
+        try:
+            from adjustText import adjust_text
+        except ImportError:
+            raise ImportError("The 'adjustText' module is required for label adjustment. Please install it with `pip install adjusttext` or select adjust_labels=False.")
 
     # check whether the cells were already assigned to the requested annotation
     _check_assignment(data=data, key=key, force_assignment=force_assignment, modality=modality)

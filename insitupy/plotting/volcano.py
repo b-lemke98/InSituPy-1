@@ -17,6 +17,7 @@ def volcano_plot(data,
                  significance_threshold: Number = 0.05,
                  fold_change_threshold: Number = 1,
                  title: str = "Volcano Plot",
+                 adjust_labels: bool = False,
                  savepath: Union[str, os.PathLike, Path] = None,
                  save_only: bool = False,
                  dpi_save: int = 300,
@@ -34,6 +35,7 @@ def volcano_plot(data,
         significance_threshold (float): P-value threshold for significance (default is 0.05).
         fold_change_threshold (float): Log2 fold change threshold for up/down regulation (default is 1).
         title (str): Title of the plot (default is "Volcano Plot").
+        adjust_labels (bool, optional): If True, adjusts the labels to avoid overlap. Default is False.
         savepath (Union[str, os.PathLike, Path], optional): Path to save the plot (default is None).
         save_only (bool): If True, only save the plot without displaying it (default is False).
         dpi_save (int): Dots per inch (DPI) for saving the plot (default is 300).
@@ -43,6 +45,12 @@ def volcano_plot(data,
     Returns:
         None
     """
+    if adjust_labels:
+        try:
+            from adjustText import adjust_text
+        except ImportError:
+            raise ImportError("The 'adjustText' module is required for label adjustment. Please install it with `pip install adjusttext` or select adjust_labels=False.")
+
     plt.figure(figsize=figsize)
 
     # Determine colors based on significance and fold change
@@ -94,8 +102,9 @@ def volcano_plot(data,
                                    fontsize=14,  # Increased font size
                                    alpha=0.75))
 
-    # Adjust text to avoid overlap
-    adjust_text(texts, arrowprops=dict(arrowstyle='->', color='gray', lw=0.5))
+    if adjust_labels:
+        # Adjust text to avoid overlap
+        adjust_text(texts, arrowprops=dict(arrowstyle='->', color='gray', lw=0.5))
 
     # save and show figure
     save_and_show_figure(savepath=savepath, fig=plt.gcf(), save_only=save_only, dpi_save=dpi_save)
