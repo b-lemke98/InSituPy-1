@@ -101,7 +101,12 @@ def _read_boundaries_from_xenium(
         # read cell ids and seg mask value
         # for info see: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/analysis/xoa-output-zarr#cells
         cell_ids = da.from_zarr(cells_zarr_file, component="cell_id").compute()
-        cell_names = np.array([convert_int_to_xenium_hex(elem[0], elem[1]) for elem in cell_ids])
+        if len(cell_ids.shape) == 2:
+            cell_names = np.array([convert_int_to_xenium_hex(elem[0], elem[1]) for elem in cell_ids])
+        elif len(cell_ids.shape) == 1:
+            cell_names = cell_ids.astype(str)
+        else:
+            raise ValueError(f"Unexpected shape for `cell_ids` array: {cell_ids.shape} instead of 1 or 2.")
 
         try:
             seg_mask_value = da.from_zarr(cells_zarr_file, component="seg_mask_value")
