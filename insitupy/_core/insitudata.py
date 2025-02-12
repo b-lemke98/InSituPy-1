@@ -632,42 +632,16 @@ class InSituData:
             pass
 
         if _self.cells is not None:
-            # infer mask from cell coordinates
-            cells = _self.cells
-            cell_coords = cells.matrix.obsm['spatial'].copy()
-            xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
-            ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
-            mask = xmask & ymask
-
-            # select
-            _self.cells.matrix = _self.cells.matrix[mask, :].copy()
-
-            # crop boundaries
-            _self.cells.boundaries.crop(
-                cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim
-                )
-
-            # shift coordinates to correct for change of coordinates during cropping
-            _self.cells.shift(x=-xlim[0], y=-ylim[0])
+            _self.cells.crop(
+                xlim=xlim, ylim=ylim, inplace=True
+            )
 
         if _self.alt is not None:
             alt = _self.alt
-            for k, cells in alt.items():
-                cell_coords = cells.matrix.obsm['spatial'].copy()
-                xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
-                ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
-                mask = xmask & ymask
-
-                # select
-                cells.matrix = cells.matrix[mask, :].copy()
-
-                # crop boundaries
-                cells.boundaries.crop(
-                    cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim
-                    )
-
-                # shift coordinates to correct for change of coordinates during cropping
-                cells.shift(x=-xlim[0], y=-ylim[0])
+            for k, alt_cells in alt.items():
+                alt_cells.crop(
+                    xlim=xlim, ylim=ylim, inplace=True
+                )
 
         if _self.transcripts is not None:
             # infer mask for selection
@@ -1296,6 +1270,9 @@ class InSituData:
         # change path to the new one
         self._path = path.resolve()
 
+        # reload the modalities
+        self.reload(verbose=False)
+
         print("Saved.") if verbose else None
 
     def save(self,
@@ -1650,31 +1627,33 @@ class InSituData:
                 select_data.max_height = 50
                 select_data.max_width = widgets_max_width
 
-            if filter_cells_widget is not None:
-                self.viewer.window.add_dock_widget(filter_cells_widget, name="Filter cells", area="right")
-                filter_cells_widget.max_height = 150
+            if show_points_widget is not None:
+                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right")
+                show_points_widget.max_height = 170
                 show_points_widget.max_width = widgets_max_width
 
-            if show_points_widget is not None:
-                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right", tabify=True)
-                show_points_widget.max_height = 150
-                show_points_widget.max_width = widgets_max_width
+
 
             if show_boundaries_widget is not None:
                 self._viewer.window.add_dock_widget(show_boundaries_widget, name="Show boundaries", area="right")
-                show_boundaries_widget.max_height = 80
+                #show_boundaries_widget.max_height = 80
                 show_boundaries_widget.max_width = widgets_max_width
 
             if locate_cells_widget is not None:
-                self._viewer.window.add_dock_widget(locate_cells_widget, name="Navigate to cell", area="right")
+                self._viewer.window.add_dock_widget(locate_cells_widget, name="Navigate to cell", area="right", tabify=True)
                 #locate_cells_widget.max_height = 130
                 locate_cells_widget.max_width = widgets_max_width
+
+            if filter_cells_widget is not None:
+                self.viewer.window.add_dock_widget(filter_cells_widget, name="Filter cells", area="right", tabify=True)
+                filter_cells_widget.max_height = 150
+                show_points_widget.max_width = widgets_max_width
 
             # add annotation widget to napari
             add_geom_widget = add_new_geometries_widget()
             #annot_widget.max_height = 100
             add_geom_widget.max_width = widgets_max_width
-            self._viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
+            self._viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right", add_vertical_stretch=True)
 
             # if show_region_widget is not None:
             #     self.viewer.window.add_dock_widget(show_region_widget, name="Show regions", area="right")

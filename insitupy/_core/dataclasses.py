@@ -409,21 +409,25 @@ class BoundariesData(DeepCopyMixin):
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self,
-                 cell_ids: Union[da.core.Array, np.ndarray, List],
+                 cell_names: Union[da.core.Array, np.ndarray, List],
                  seg_mask_value: Optional[Union[da.core.Array, np.ndarray, List]] = None,
-                 #pixel_size: Number = 1, # required for boundaries that are saved as masks
                  ):
-        """_summary_
-        For details on `cell_ids` and `seg_mask_value` see: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/1.9/tutorials/outputs/xoa-output-zarr
+        """
+        Initialize the BoundariesData object.
 
         Args:
-            cell_ids (Optional[da.core.Array]): _description_
-            seg_mask_value (Optional[da.core.Array]): _description_
+            cell_names (Union[da.core.Array, np.ndarray, List]): Cell names which need to correspond to `.obs_names` in the `.matrix` of `CellData`.
+            seg_mask_value (Optional[Union[da.core.Array, np.ndarray, List]]): Segmentation mask values. Required to have the same length as `cell_names`.
+                Specifies which values in the "cells" segmentation mask correspond to which cell name.
+
+        For more details on how these values are saved in case of Xenium In Situ, see:
+        https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/tutorials/outputs/xoa-output-zarr
         """
         self._metadata = {}
 
         # store cell ids
-        self._cell_ids = da.from_array(np.array(cell_ids, dtype=np.uint32))
+        #self._cell_ids = da.from_array(np.array(cell_ids, dtype=np.uint32))
+        self._cell_names = da.from_array(np.array(cell_names))
 
         self._seg_mask_value = seg_mask_value
         if self._seg_mask_value is not None:
@@ -452,9 +456,13 @@ class BoundariesData(DeepCopyMixin):
     def metadata(self):
         return self._metadata
 
+    # @property
+    # def cell_ids(self):
+    #     return self._cell_ids
+
     @property
-    def cell_ids(self):
-        return self._cell_ids
+    def cell_names(self):
+        return self._cell_names
 
     @property
     def seg_mask_value(self):
@@ -553,7 +561,7 @@ class BoundariesData(DeepCopyMixin):
              bound_file : Union[str, os.PathLike, Path] = "boundaries.zarr.zip",
              save_as_pyramid: bool = True
              ):
-
+        bound_file = Path(bound_file)
         suffix = bound_file.name.split(".", maxsplit=1)[-1]
 
         if suffix not in ["zarr", "zarr.zip"]:
@@ -592,10 +600,11 @@ class BoundariesData(DeepCopyMixin):
             # save paths in insitupy metadata
             #metadata["boundaries"]["path"] = Path(relpath(bound_file, path)).as_posix()
 
-            self._cell_ids.to_zarr(dirstore, component="cell_id")
+            #self._cell_ids.to_zarr(dirstore, component="cell_id")
+            self.cell_names.to_zarr(dirstore, component="cell_names", overwrite=True)
 
             if self._seg_mask_value is not None:
-                self._seg_mask_value.to_zarr(dirstore, component="seg_mask_value")
+                self.seg_mask_value.to_zarr(dirstore, component="seg_mask_value", overwrite=True)
 
         # # add version to metadata
         # metadata_to_save = self.metadata.copy()
@@ -661,6 +670,41 @@ class CellData(DeepCopyMixin):
         '''
 
         return deepcopy(self)
+
+    def crop(self,
+             xlim: Optional[Tuple[int, int]] = None,
+             ylim: Optional[Tuple[int, int]] = None,
+             inplace: bool = False
+             ):
+        # check if the changes are supposed to be made in place or not
+        if inplace:
+            _self = self
+        else:
+            _self = self.copy()
+
+        # make sure there are no negative values in the limits
+        xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
+        ylim = tuple(np.clip(ylim, a_min=0, a_max=None))
+
+        # infer mask from cell coordinates
+        cell_coords = _self.matrix.obsm['spatial'].copy()
+        xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
+        ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
+        mask = xmask & ymask
+
+        # select
+        _self.matrix = _self.matrix[mask, :].copy()
+
+        # crop boundaries
+        _self.boundaries.crop(
+            cell_ids=_self.matrix.obs_names, xlim=xlim, ylim=ylim
+            )
+
+        # shift coordinates to correct for change of coordinates during cropping
+        _self.shift(x=-xlim[0], y=-ylim[0])
+
+        # sync the ids and names
+        _self.sync_cell_ids()
 
     def save(self,
              path: Union[str, os.PathLike, Path],
@@ -730,58 +774,39 @@ class CellData(DeepCopyMixin):
             print('No `boundaries` attribute found in CellData found.')
         else:
             boundaries = self._boundaries
-            # retrieve cell_ids of boundaries
-            try:
-                # this assumes the new version of data with integers representing hex code
-                bound_cell_ids_int = boundaries.cell_ids[:, 0].compute()
-                data_suffices = boundaries.cell_ids[:, 1].compute()
 
-            except IndexError:
-                # this means that the data has an older type where the cell ids are simply integers
-                # since in this old data there is as far as I know no seg_mask_value, the integers are also the final ids
-                assert boundaries.seg_mask_value is None, "Cell IDs had only one column but also a seg_mask_value was given. Needs to be checked."
-                bound_cell_ids_final = boundaries.cell_ids.compute().astype(str)
+            # create pandas series from seg_mask values and cell_names
+            ds = pd.Series(
+                data=boundaries.seg_mask_value,
+                index=boundaries.cell_names
+                )
 
-                # check which ids are not in matrix cell ids
-                seg_mask_values_not_in_matrix = np.array([elem for elem in bound_cell_ids_final if elem not in matrix_cell_ids_hex])
+            filter_mask_in = ds.index.isin(matrix_cell_ids_hex)
 
+            # filter cell names and seg_mask_values
+            boundaries._seg_mask_value = da.from_array(np.array(ds[filter_mask_in], dtype=str))
+            boundaries._cell_names = da.from_array(np.array(ds.index[filter_mask_in], dtype=str))
+
+            # find the seg_mask_values which are not anymore present
+            seg_mask_values_not_in_matrix = ds[~filter_mask_in].values
+
+            cell_bounds = boundaries["cells"]
+            nuc_bounds = boundaries["nuclei"]
+
+            if isinstance(cell_bounds, list):
+                assert isinstance (nuc_bounds, list), "Cellular boundaries are a image pyramid but nuclear boundaries are not. Both need to be of the same type for the synchronization to work."
+                for cell_bound, nuc_bound in zip(cell_bounds, nuc_bounds):
+                    removed_cells_mask = da.isin(cell_bound, seg_mask_values_not_in_matrix)
+                    cell_bound[removed_cells_mask] = 0 # set all removed cells 0
+                    nuc_bound[removed_cells_mask] = 0 # set all nuclei belong to the removed cells 0
+            elif isinstance(cell_bounds, da.core.Array):
+                assert isinstance (nuc_bounds, da.core.Array), "Cellular boundaries are a dask array but nuclear boundaries are not. Both need to be of the same type for the synchronization to work."
+                # set all non existent cell ids to zero
+                removed_cells_mask = da.isin(cell_bounds, seg_mask_values_not_in_matrix)
+                cell_bounds[removed_cells_mask] = 0 # set all removed cells 0
+                nuc_bounds[removed_cells_mask] = 0 # set all nuclei belong to the removed cells 0
             else:
-                # generate from integers and data suffix a xenium-style hex code
-                bound_cell_ids_final = [convert_int_to_xenium_hex(ci, dataset_suffix=ds) for ci, ds in zip(bound_cell_ids_int, data_suffices)]
-
-                # check which ids are not in matrix cell ids
-                seg_mask_values = boundaries.seg_mask_value.compute()
-                seg_mask_values_not_in_matrix = [smv for smv, cif in zip(seg_mask_values, bound_cell_ids_final) if cif not in matrix_cell_ids_hex]
-
-
-            for n in boundaries.metadata.keys():
-                # get data
-                bound_data = boundaries[n]
-
-                if isinstance(bound_data, list):
-                    synced_bound_data = []
-                    # iterate through list
-                    for d in bound_data:
-                        # set all non existent cell ids to zero
-                        d[da.isin(d, seg_mask_values_not_in_matrix)] = 0
-                        synced_bound_data.append(d)
-
-                elif isinstance(bound_data, da.core.Array):
-                    # set all non existent cell ids to zero
-                    bound_data[da.isin(bound_data, seg_mask_values_not_in_matrix)] = 0
-                    synced_bound_data = bound_data
-
-                elif isinstance(bound_data, pd.DataFrame):
-                    # filter dataframe
-                    bound_data = bound_data.loc[bound_data["cell_id"].astype(str).isin(matrix_cell_ids_hex), :]
-                    synced_bound_data = bound_data
-
-                else:
-                    warnings.warn(f"Unknown data type for boundaries key '{n}'. Skipped synchronization of cell ids.")
-                # add to object
-                self._boundaries[n] = synced_bound_data
-
-            print(f"Successfully synchronized.")
+                warnings.warn(f"Unknown data type for cellular boundaries: {type(cell_bounds)}. Need to be either a dask array or a list of dask arrays. Skipped synchronization of cell ids.")
 
     def shift(self,
               x: Union[int, float],
