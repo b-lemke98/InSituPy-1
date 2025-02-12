@@ -81,13 +81,6 @@ def read_xenium(
     boundaries = _read_boundaries_from_xenium(path=data.path, pixel_size=pixel_size)
     data.cells = CellData(matrix=matrix, boundaries=boundaries)
 
-    try:
-        # read binned expression
-        arr = _read_binned_expression(path=data.path, gene_names_to_select=data.cells.matrix.var_names)
-        data.cells.matrix.varm["binned_expression"] = arr
-    except ValueError:
-        warn("Loading of binned expression did not work. Skipped it.")
-        pass
 
     # LOAD IMAGES
     if verbose:
@@ -98,10 +91,6 @@ def read_xenium(
     # For <v2.0 the function still tries to retrieve the "mip" image but in case this is not found
     # it will retrieve the "focus" image
     if nuclei_type == "mip" and nuclei_file_key not in data.metadata["method_params"]["images"].keys():
-        warn(
-            f"Nuclei image type '{nuclei_type}' not found. Used 'focus' instead. This is the normal behavior for data analyzed with Xenium Ranger >=v2.0",
-            UserWarning, stacklevel=2
-                )
 
         nuclei_type = "focus"
         nuclei_file_key = f"morphology_{nuclei_type}_filepath"
@@ -109,23 +98,6 @@ def read_xenium(
     # if names == "nuclei":
     img_keys = [nuclei_file_key]
     img_names = ["nuclei"]
-    # else:
-    #     # get available keys for registered images in metadata
-    #     img_keys = [elem for elem in data.metadata["method_params"]["images"] if elem.startswith("registered")]
-
-    #     # extract image names from keys and add nuclei
-    #     img_names = ["nuclei"] + [elem.split("_")[1] for elem in img_keys]
-
-    #     # add dapi image key
-    #     img_keys = [nuclei_file_key] + img_keys
-
-    #     if names != "all":
-    #         # make sure keys is a list
-    #         names = convert_to_list(names)
-    #         # select the specified keys
-    #         mask = [elem in names for elem in img_names]
-    #         img_keys = [elem for m, elem in zip(mask, img_keys) if m]
-    #         img_names = [elem for m, elem in zip(mask, img_names) if m]
 
     # get path of image files
     img_files = [data.metadata["method_params"]["images"][k] for k in img_keys]
