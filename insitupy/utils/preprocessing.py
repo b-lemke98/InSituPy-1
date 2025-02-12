@@ -7,7 +7,6 @@ from parse import *
 from scipy.sparse import csr_matrix
 
 from insitupy import __version__
-from insitupy.utils._scanorama import scanorama
 
 from .._core._checks import check_integer_counts
 
@@ -153,6 +152,8 @@ def reduce_dimensions_anndata(adata,
             sc.tl.tsne(adata, n_jobs=tsne_jobs, learning_rate=tsne_lr)
 
     else:
+        from insitupy.utils._scanorama import run_scanorama
+
         # PCA
         sc.pp.pca(adata)
 
@@ -166,7 +167,7 @@ def reduce_dimensions_anndata(adata,
         # batch correction
         print(f"Batch correction using scanorama for {batch_correction_key}...") if verbose else None
         hvgs = list(adata.var_names[adata.var['highly_variable']])
-        adata = scanorama(adata, batch_key=batch_correction_key, hvg=hvgs, verbose=False, **kwargs)
+        adata = run_scanorama(adata, batch_key=batch_correction_key, hvg=hvgs, verbose=False, **kwargs)
 
         # find neighbors
         sc.pp.neighbors(adata, use_rep="X_scanorama")

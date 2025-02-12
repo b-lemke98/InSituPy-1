@@ -142,7 +142,7 @@ class bootstrap_loess:
     Class to calculate standard error and confidence intervals of LOESS regression using bootstrapping.
     '''
     def __init__(self,
-                 loess_object: loess,
+                 loess_object
                  ):
         self.x = loess_object.inputs.x
         self.y = loess_object.inputs.y
