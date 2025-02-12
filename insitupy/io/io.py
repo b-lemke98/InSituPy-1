@@ -9,7 +9,6 @@ import pandas as pd
 import scanpy as sc
 import toml
 import zarr
-from rasterio.features import rasterize
 from zarr.errors import ArrayNotFoundError
 
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
@@ -23,6 +22,10 @@ def read_baysor_cells(
     baysor_output: Union[str, os.PathLike, Path],
     pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
     ) -> CellData:
+    try:
+        from rasterio.features import rasterize
+    except ImportError:
+        raise ImportError("This function requires the rasterio package, please install with `pip install rasterio`.")
 
     # convert to pathlib path
     baysor_output = Path(baysor_output)
