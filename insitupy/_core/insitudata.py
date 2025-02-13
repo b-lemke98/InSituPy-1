@@ -1311,7 +1311,7 @@ class InSituData:
                     self._update_to_existing_project(path=path, zarr_zipped=zarr_zipped)
 
                     # reload the modalities
-                    self.reload(verbose=False)
+                    self.reload(verbose=False, skip=["transcripts", "images"])
                 else:
                     warn(
                         f"UID of current object {current_uid} not identical with UID in project path {path}: {project_uid}.\n"
@@ -1942,21 +1942,20 @@ class InSituData:
 
     def reload(
         self,
+        skip: Optional[List] = None,
         verbose: bool = True
         ):
         data_meta = self._metadata["data"]
         current_modalities = [m for m in MODALITIES if getattr(self, m) is not None and m in data_meta]
-        # # check if there is a path for the modalities in self.metadata
-        # data_meta = self.metadata["data"]
-        # print(data_meta)
-        # for cm in current_modalities:
-        #     print(cm)
-        #     if cm in data_meta:
-        #         print('blubb')
-        #         pass
-        #     else:
-        #         print(f"No data path found for modality '{cm}'. Modality skipped during reload and needs to be saved first.")
-        #         #current_modalities.remove(cm)
+
+        if skip is not None:
+            # remove the modalities which are supposed to be skipped during reload
+            skip = convert_to_list(skip)
+            for s in skip:
+                try:
+                    current_modalities.remove(s)
+                except ValueError:
+                    pass
 
         if len(current_modalities) > 0:
             print(f"Reloading following modalities: {', '.join(current_modalities)}") if verbose else None
