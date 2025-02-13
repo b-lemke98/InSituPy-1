@@ -9,7 +9,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 # mandatory dependencies
 python = "^3.9.18"
-scanpy = "1.10.3" #"1.9.5"
+scanpy = {version = "1.10.3", extras = ["leiden"]}
 numpy = "1.26.4"
 napari = {version = "0.4.18", extras = ["all"]}
 #PyQt5 = "5.15.11"
@@ -23,7 +23,7 @@ geopandas = "^0.14.4"
 #fiona = "1.9.6" # 1.10.0 can only be used with geopandas==0.14.4
 fiona = "1.10.0"
 openpyxl = "^3.1.2"
-#leidenalg = "0.10.1"
+#leidenalg = "^0.10.1"
 #asciitree = "0.3.3"
 pytest = "^7.4.2"
 xmltodict = "0.13.0"
