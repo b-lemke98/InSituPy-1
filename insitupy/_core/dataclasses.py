@@ -784,7 +784,7 @@ class CellData(DeepCopyMixin):
             filter_mask_in = ds.index.isin(matrix_cell_ids_hex)
 
             # filter cell names and seg_mask_values
-            boundaries._seg_mask_value = da.from_array(np.array(ds[filter_mask_in], dtype=str))
+            boundaries._seg_mask_value = da.from_array(np.array(ds[filter_mask_in]))
             boundaries._cell_names = da.from_array(np.array(ds.index[filter_mask_in], dtype=str))
 
             # find the seg_mask_values which are not anymore present
