@@ -109,10 +109,10 @@ def register_images(
     # data.load_images(names=template_image_name,
     #                  #load_cell_segmentation_images=False
     #                  )
-    template = data.images["nuclei"][0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
+    template = data.images[template_image_name][0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
 
     # extract OME metadata
-    ome_metadata_template = data.images.metadata["nuclei"]["OME"]
+    ome_metadata_template = data.images.metadata[template_image_name]["OME"]
 
     # extract pixel size for x and y from metadata
     pixelsizes = {key: ome_metadata_template['Image']['Pixels'][key] for key in ['PhysicalSizeX', 'PhysicalSizeY']}
