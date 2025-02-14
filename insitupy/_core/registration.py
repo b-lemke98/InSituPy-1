@@ -12,6 +12,7 @@ from insitupy._core.insitudata import InSituData
 from insitupy._exceptions import UnknownOptionError
 from insitupy.images import (ImageRegistration, clip_image_histogram,
                              deconvolve_he, resize_image)
+from insitupy.images.utils import otsu_thresholding
 from insitupy.io.files import write_dict_to_json
 from insitupy.utils.utils import convert_to_list
 from insitupy.utils.utils import textformat as tf
@@ -25,10 +26,11 @@ def register_images(
     channel_name_for_registration: Optional[str] = None,  # name used for the nuclei image. Only required for IF images.
     template_image_name: str = "nuclei",
     save_registered_images: bool = True,
+    min_good_matches_per_area: int = 5, # unit: 1/mm²
+    test_flipping: bool = True,
     decon_scale_factor: float = 0.2,
     physicalsize: str = 'µm',
     prefix: str = "",
-    min_good_matches: int = 200
     ):
     """
     Register images stored in an InSituData object.
@@ -41,10 +43,11 @@ def register_images(
         channel_name_for_registration (Optional[str], optional): Name of the channel used for registration. Required for IF images. Defaults to None.
         template_image_name (str, optional): Name of the template image. Defaults to "nuclei".
         save_registered_images (bool, optional): Whether to save the registered images. Defaults to True.
+        min_good_matches (int, optional): Minimum number of good matches required for registration. Defaults to 20.
+        test_flipping (bool): Whether to test flipping of images during registration. Defaults to True.
         decon_scale_factor (float, optional): Scale factor for deconvolution. Defaults to 0.2.
         physicalsize (str, optional): Unit of physical size. Defaults to 'µm'.
         prefix (str, optional): Prefix for the output files. Defaults to "".
-        min_good_matches (int, optional): Minimum number of good matches required for registration. Defaults to 20.
 
     Raises:
         ValueError: If `image_type` is "IF" and `channel_name_for_registration` is None.
@@ -106,28 +109,42 @@ def register_images(
         image = image[0]
 
     # # read images in InSituData object
-    # data.load_images(names=template_image_name,
-    #                  #load_cell_segmentation_images=False
-    #                  )
     template = data.images[template_image_name][0] # usually the nuclei/DAPI image is the template. Use highest resolution of pyramid.
 
     # extract OME metadata
-    ome_metadata_template = data.images.metadata[template_image_name]["OME"]
+    #ome_metadata_template = data.images.metadata[template_image_name]["OME"]
 
-    # extract pixel size for x and y from metadata
-    pixelsizes = {key: ome_metadata_template['Image']['Pixels'][key] for key in ['PhysicalSizeX', 'PhysicalSizeY']}
+    # get pixel size from image metadata
+    pixel_size = data.images.metadata[template_image_name]["pixel_size"]
+
+    # extract pixel size for x and y from OME metadata
+    #pixelsizes = {key: ome_metadata_template['Image']['Pixels'][key] for key in ['PhysicalSizeX', 'PhysicalSizeY']}
 
     # generate OME metadata for saving
     ome_metadata = {
-        **{'SignificantBits': 8,
+        'SignificantBits': 8,
         'PhysicalSizeXUnit': physicalsize,
-        'PhysicalSizeYUnit': physicalsize
-        },
-        **pixelsizes
-    }
+        'PhysicalSizeYUnit': physicalsize,
+        'PhysicalSizeX': pixel_size,
+        'PhysicalSizeY': pixel_size
+        }
 
-    # determine one pixel direction as universal pixel size
-    pixel_size = pixelsizes['PhysicalSizeX']
+    # determine minimum number of good matches that are necessary for the registration to be performed
+    h, w = template.shape[:2]
+    image_area = h * w * pixel_size**2 / 1000**2 # in mm²
+    min_good_matches = int(min_good_matches_per_area * image_area)
+
+    # # generate OME metadata for saving
+    # ome_metadata = {
+    #     **{'SignificantBits': 8,
+    #     'PhysicalSizeXUnit': physicalsize,
+    #     'PhysicalSizeYUnit': physicalsize
+    #     },
+    #     **pixelsizes
+    # }
+
+    # # determine one pixel direction as universal pixel size
+    # pixel_size = pixelsizes['PhysicalSizeX']
 
     # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
     #axes_selected = "YX"
@@ -140,7 +157,8 @@ def register_images(
                                     return_type="grayscale", convert=True)
 
         # Clip the image histogram to enhance contrast
-        nuclei_img = clip_image_histogram(image=nuclei_img)
+        # nuclei_img = clip_image_histogram(image=nuclei_img)
+        #nuclei_img = otsu_thresholding(image=nuclei_img)
 
         # bring back to original size
         nuclei_img = resize_image(nuclei_img, scale_factor=1/decon_scale_factor, axes="YX")
@@ -165,7 +183,8 @@ def register_images(
         nuclei_img = np.take(image, channel_name_for_registration, channel_axis).compute()
 
         # Clip the image histogram to enhance contrast
-        nuclei_img = clip_image_histogram(image=nuclei_img)
+        #nuclei_img = clip_image_histogram(image=nuclei_img)
+        #nuclei_img = otsu_thresholding(image=nuclei_img)
 
     # Setup image registration objects - is important to load and scale the images.
     # The reason for this are limits in C++, not allowing to perform certain OpenCV functions on big images.
@@ -199,7 +218,7 @@ def register_images(
 
     print("\t\tExtract common features from image and template", flush=True)
     # perform registration to extract the common features ptsA and ptsB
-    imreg_selected.extract_features()
+    imreg_selected.extract_features(test_flipping=test_flipping)
     imreg_selected.calculate_transformation_matrix()
 
     if image_type == "histo":

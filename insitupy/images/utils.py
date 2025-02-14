@@ -274,3 +274,10 @@ def clip_image_histogram(
     lp, up = np.percentile(image, (lower_perc, upper_perc))
     image = np.clip((image - lp) * 255.0 / (up - lp), 0, 255).astype(np.uint8)
     return image
+
+def otsu_thresholding(image: np.ndarray) -> np.ndarray:
+    # Apply GaussianBlur to reduce image noise if necessary
+    #blur = cv2.GaussianBlur(image, (5, 5), 0)
+    # Apply Otsu's thresholding
+    _, otsu_image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return otsu_image

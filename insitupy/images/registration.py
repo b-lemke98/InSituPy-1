@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from parse import *
 
-from insitupy import __version__
+from insitupy import CACHE, __version__
+from insitupy.images.utils import clip_image_histogram, otsu_thresholding
 
 from .._constants import SHRT_MAX
 from .._exceptions import NotEnoughFeatureMatchesError
@@ -128,16 +129,26 @@ class ImageRegistration:
             self.image_resized = None
             self.resize_factor_image = 1
 
-    def extract_features(self):
+    def extract_features(
+        self,
+        test_flipping: bool = True,
+        adjust_contrast_method: Optional[Literal["otsu", "clip"]] = "clip",
+        debugging: bool = False
+        ):
         '''
         Function to extract paired features from image and template.
         '''
 
         self.verboseprint("\t\t{}: Get features...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
 
-        # Test different flip transformations starting with no flip, then vertical, then horizontal.
+        if test_flipping:
+            # Test different flip transformations starting with no flip, then vertical, then horizontal.
+            flip_axis_list = [None, 0] # before: [None, 0, 1]
+        else:
+            # do not test flipping of the axis
+            flip_axis_list = [None]
         matches_list = [] # list to collect number of matches
-        for flip_axis in [None, 0, 1]:
+        for flip_axis in flip_axis_list:
             flipped = False
             if flip_axis is not None:
                 # flip image
@@ -146,20 +157,55 @@ class ImageRegistration:
                 flipped = True # set flipped flag to True
 
             # Get features
+
+
+            # adjust contrast of both image and template
+            if adjust_contrast_method is not None:
+                self.verboseprint(f"\t\t\tAdjust contrast with {adjust_contrast_method} method...")
+                if adjust_contrast_method == "otsu":
+                    image_contrast_adj = otsu_thresholding(image=convert_to_8bit_func(self.image_scaled))
+                    template_contrast_adj = otsu_thresholding(image=convert_to_8bit_func(self.template_scaled))
+                elif adjust_contrast_method == "clip":
+                    image_contrast_adj = clip_image_histogram(image=self.image_scaled, lower_perc=20, upper_perc=99)
+                    template_contrast_adj = clip_image_histogram(image=self.template_scaled, lower_perc=20, upper_perc=99)
+                else:
+                    raise ValueError(f"Invalid method {adjust_contrast_method} for `adjust_contrast_method`.")
+            else:
+                image_contrast_adj = self.image_scaled
+                template_contrast_adj = self.template_scaled
+
+            if debugging:
+                outpath = CACHE
+                plt.imshow(self.image_scaled)
+                plt.savefig(outpath / f"image.png")
+                plt.close()
+
+                plt.imshow(image_contrast_adj)
+                plt.savefig(outpath / f"image_{adjust_contrast_method}.png")
+                plt.close()
+
+                plt.imshow(self.template_scaled)
+                plt.savefig(outpath / f"template.png")
+                plt.close()
+
+                plt.imshow(template_contrast_adj)
+                plt.savefig(outpath / f"template_{adjust_contrast_method}.png")
+                plt.close()
+
             if self.feature_detection_method == "sift":
                 self.verboseprint("\t\t\tMethod: SIFT...")
                 # sift
                 sift = cv2.SIFT_create()
 
-                (kpsA, descsA) = sift.detectAndCompute(self.image_scaled, None)
-                (kpsB, descsB) = sift.detectAndCompute(self.template_scaled, None)
+                (kpsA, descsA) = sift.detectAndCompute(image_contrast_adj, None)
+                (kpsB, descsB) = sift.detectAndCompute(template_contrast_adj, None)
 
             elif self.feature_detection_method == "surf":
                 self.verboseprint("\t\t\tMethod: SURF...")
                 surf = cv2.xfeatures2d.SURF_create(400)
 
-                (kpsA, descsA) = surf.detectAndCompute(self.image_scaled, None)
-                (kpsB, descsB) = surf.detectAndCompute(self.template_scaled, None)
+                (kpsA, descsA) = surf.detectAndCompute(image_contrast_adj, None)
+                (kpsB, descsB) = surf.detectAndCompute(template_contrast_adj, None)
 
             else:
                 self.verboseprint("\t\t\tUnknown method. Aborted.")
@@ -207,7 +253,7 @@ class ImageRegistration:
             # check if a sufficient number of good matches was found
             matches_list.append(len(good_matches))
             if len(good_matches) >= self.min_good_matches:
-                print(f"\t\t\tSufficient number of good matches found ({len(good_matches)}).")
+                print(f"\t\t\tSufficient number of good matches found ({len(good_matches)}/{self.min_good_matches}).")
                 self.flip_axis = flip_axis
                 break
             else:
