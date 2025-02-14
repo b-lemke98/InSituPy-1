@@ -119,7 +119,7 @@ class ModalityNotFoundError(Exception):
     """
 
     def __init__(self,
-                 modality: str,
+                 modality: str
                  ):
         self.message = f"No `{modality}` modality found."
         super().__init__(self.message)

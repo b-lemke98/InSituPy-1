@@ -16,7 +16,8 @@ def _save_images(imagedata: ImageData,
                  metadata: Optional[dict] = None,
                  images_as_zarr: bool = True,
                  zipped: bool = False,
-                 max_resolution: Optional[Number] = None # in µm per pixel
+                 max_resolution: Optional[Number] = None, # in µm per pixel,
+                 verbose: bool = False
                  ):
     img_path = (path / "images")
 
@@ -26,7 +27,7 @@ def _save_images(imagedata: ImageData,
         zipped=zipped,
         return_savepaths=True,
         max_resolution=max_resolution,
-        verbose=False
+        verbose=verbose
         )
 
     if metadata is not None:

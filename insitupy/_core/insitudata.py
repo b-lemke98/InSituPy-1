@@ -901,7 +901,8 @@ class InSituData:
                 try:
                     func(verbose=verbose)
                 except ModalityNotFoundError as err:
-                    print(err)
+                    if verbose:
+                        print(err)
 
     def load_annotations(self, verbose: bool = False):
         if verbose:
@@ -909,8 +910,10 @@ class InSituData:
         try:
             p = self._metadata["data"]["annotations"]
         except KeyError:
-            raise ModalityNotFoundError(modality="annotations")
-        self._annotations = read_shapesdata(path=self._path / p, mode="annotations")
+            if verbose:
+                raise ModalityNotFoundError(modality="annotations")
+        else:
+            self._annotations = read_shapesdata(path=self._path / p, mode="annotations")
 
 
     def import_annotations(self,
@@ -944,8 +947,10 @@ class InSituData:
         try:
             p = self._metadata["data"]["regions"]
         except KeyError:
-            raise ModalityNotFoundError(modality="regions")
-        self._regions = read_shapesdata(path=self._path / p, mode="regions")
+            if verbose:
+                raise ModalityNotFoundError(modality="regions")
+        else:
+            self._regions = read_shapesdata(path=self._path / p, mode="regions")
 
     def import_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]],
@@ -982,7 +987,8 @@ class InSituData:
             try:
                 cells_path = self._metadata["data"]["cells"]
             except KeyError:
-                raise ModalityNotFoundError(modality="cells")
+                if verbose:
+                    raise ModalityNotFoundError(modality="cells")
             else:
                 self._cells = read_celldata(path=self._path / cells_path)
 
@@ -1005,10 +1011,8 @@ class InSituData:
 
     def load_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
-                    # nuclei_type: Literal["focus", "mip", ""] = "mip",
-                    # load_cell_segmentation_images: bool = True,
                     overwrite: bool = False,
-                    verbose: bool = True
+                    verbose: bool = False
                     ):
         # load image into ImageData object
         if verbose:
@@ -1016,43 +1020,49 @@ class InSituData:
 
         if self._from_insitudata:
             # check if matrix data is stored in this InSituData
-            if "images" not in self._metadata["data"]:
-                raise ModalityNotFoundError(modality="images")
-
-            if names == "all":
-                img_names = list(self._metadata["data"]["images"].keys())
+            try:
+                images_dict = self._metadata["data"]["images"]
+            except KeyError:
+                if verbose:
+                    raise ModalityNotFoundError(modality="images")
             else:
-                img_names = convert_to_list(names)
+                if names == "all":
+                    img_names = list(images_dict.keys())
+                else:
+                    img_names = convert_to_list(names)
 
-            # get file paths and names
-            img_files = [v for k,v in self._metadata["data"]["images"].items() if k in img_names]
-            img_names = [k for k,v in self._metadata["data"]["images"].items() if k in img_names]
+                # get file paths and names
+                img_files = [v for k,v in images_dict.items() if k in img_names]
+                img_names = [k for k,v in images_dict.items() if k in img_names]
 
-            # create imageData object
-            img_paths = [self._path / elem for elem in img_files]
+                # create imageData object
+                img_paths = [self._path / elem for elem in img_files]
 
-            if self._images is None:
-                self._images = ImageData(img_paths, img_names)
-            else:
-                for im, n in zip(img_paths, img_names):
-                    self._images.add_image(im, n, overwrite=overwrite, verbose=verbose)
+                if self._images is None:
+                    self._images = ImageData(img_paths, img_names)
+                else:
+                    for im, n in zip(img_paths, img_names):
+                        self._images.add_image(im, n, overwrite=overwrite, verbose=verbose)
 
         else:
             NoProjectLoadWarning()
 
     def load_transcripts(self,
-                        # transcript_filename: str = "transcripts.parquet",
-                        verbose: bool = True
+                        verbose: bool = False
                         ):
+        # read transcripts
+        if verbose:
+            print("Loading transcripts...", flush=True)
+
         if self._from_insitudata:
             # check if matrix data is stored in this InSituData
-            if "transcripts" not in self._metadata["data"]:
-                raise ModalityNotFoundError(modality="transcripts")
-
-            # read transcripts
-            if verbose:
-                print("Loading transcripts...", flush=True)
-            self._transcripts = pd.read_parquet(self._path / self._metadata["data"]["transcripts"])
+            try:
+                transcripts_path = self._metadata["data"]["transcripts"]
+            except KeyError:
+                if verbose:
+                    raise ModalityNotFoundError(modality="transcripts")
+            else:
+                self._transcripts = pd.read_parquet(self._path / transcripts_path)
 
         else:
             NoProjectLoadWarning()
@@ -1201,7 +1211,8 @@ class InSituData:
                 metadata=self._metadata,
                 images_as_zarr=images_as_zarr,
                 zipped=zarr_zipped,
-                max_resolution=images_max_resolution
+                max_resolution=images_max_resolution,
+                verbose=verbose
                 )
 
         # save cells
@@ -1277,7 +1288,8 @@ class InSituData:
 
     def save(self,
              path: Optional[Union[str, os.PathLike, Path]] = None,
-             zarr_zipped: bool = False
+             zarr_zipped: bool = False,
+             verbose: bool = True
              ):
 
         # check path
@@ -1308,7 +1320,10 @@ class InSituData:
                 project_uid = project_meta["uids"][-1]  # [-1] to select latest uid
                 current_uid = self._metadata["uids"][-1]
                 if current_uid == project_uid:
-                    self._update_to_existing_project(path=path, zarr_zipped=zarr_zipped)
+                    self._update_to_existing_project(path=path,
+                                                     zarr_zipped=zarr_zipped,
+                                                     verbose=verbose
+                                                     )
 
                     # reload the modalities
                     self.reload(verbose=False, skip=["transcripts", "images"])
@@ -1349,14 +1364,17 @@ class InSituData:
 
     def _update_to_existing_project(self,
                                     path: Optional[Union[str, os.PathLike, Path]],
-                                    zarr_zipped: bool = False
+                                    zarr_zipped: bool = False,
+                                    verbose: bool = True
                                     ):
-        print(f"Updating project in {path}")
+        if verbose:
+            print(f"Updating project in {path}")
 
         # save cells
         if self._cells is not None:
             cells = self._cells
-            print("\tUpdating cells...", flush=True)
+            if verbose:
+                print("\tUpdating cells...", flush=True)
             _save_cells(
                 cells=cells,
                 path=path,
@@ -1368,7 +1386,8 @@ class InSituData:
         # save alternative cell data
         if self._alt is not None:
             alt = self._alt
-            print("\tUpdating alternative segmentations...", flush=True)
+            if verbose:
+                print("\tUpdating alternative segmentations...", flush=True)
             _save_alt(
                 attr=alt,
                 path=path,
@@ -1379,7 +1398,8 @@ class InSituData:
         # save annotations
         if self._annotations is not None:
             annotations = self._annotations
-            print("\tUpdating annotations...", flush=True)
+            if verbose:
+                print("\tUpdating annotations...", flush=True)
             _save_annotations(
                 annotations=annotations,
                 path=path,
@@ -1389,7 +1409,8 @@ class InSituData:
         # save regions
         if self._regions is not None:
             regions = self._regions
-            print("\tUpdating regions...", flush=True)
+            if verbose:
+                print("\tUpdating regions...", flush=True)
             _save_regions(
                 regions=regions,
                 path=path,
@@ -1407,7 +1428,8 @@ class InSituData:
         xd_metadata_path = path / ISPY_METADATA_FILE
         write_dict_to_json(dictionary=self._metadata, file=xd_metadata_path)
 
-        print("Saved.")
+        if verbose:
+            print("Saved.")
 
 
     def quicksave(self,

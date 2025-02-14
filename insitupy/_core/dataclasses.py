@@ -1101,7 +1101,9 @@ class ImageData(DeepCopyMixin):
                         if isinstance(img, list):
                             img = img[0]
                         downscale_factor = max_resolution / pixel_size
-                        print(f"Downscale image to {max_resolution} µm per pixel by factor {downscale_factor}")
+
+                        if verbose:
+                            print(f"Downscale image to {max_resolution} µm per pixel by factor {downscale_factor}")
                         img = resize_image(img, scale_factor=1/downscale_factor, axes=axes)
                         img = da.from_array(img)
 
