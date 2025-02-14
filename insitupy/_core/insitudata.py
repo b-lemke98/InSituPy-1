@@ -41,6 +41,7 @@ from insitupy._core._xenium import (_read_binned_expression,
 from insitupy._exceptions import UnknownOptionError
 from insitupy._warnings import NoProjectLoadWarning
 from insitupy.images import ImageRegistration, deconvolve_he, resize_image
+from insitupy.images.utils import _get_contrast_limits
 from insitupy.io.files import read_json, write_dict_to_json
 from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_celldata, read_shapesdata)
@@ -1212,7 +1213,7 @@ class InSituData:
                 images_as_zarr=images_as_zarr,
                 zipped=zarr_zipped,
                 max_resolution=images_max_resolution,
-                verbose=verbose
+                verbose=False
                 )
 
         # save cells
@@ -1529,12 +1530,6 @@ class InSituData:
         return_viewer: bool = False,
         widgets_max_width: int = 500
         ):
-        # # get information about pixel size
-        # if (pixel_size is None) & (scalebar):
-        #     # extract pixel_size
-        #     pixel_size = float(self.metadata["method_params"]["pixel_size"])
-        # else:
-        #     pixel_size = 1
 
         # create viewer
         self._viewer = napari.Viewer(title=f"{self._slide_id}: {self._sample_id}")
@@ -1572,6 +1567,13 @@ class InSituData:
                 else:
                     img_pyramid = img
 
+                # infer contrast limits
+                contrast_limits = _get_contrast_limits(img_pyramid)
+
+                if contrast_limits[1] == 0:
+                    warn("The maximum value of the image is 0. Is the image really completely empty?")
+                    contrast_limits = (0, 255)
+
                 # add img pyramid to napari viewer
                 self._viewer.add_image(
                         img_pyramid,
@@ -1579,7 +1581,7 @@ class InSituData:
                         colormap=cmap,
                         blending=blending,
                         rgb=is_rgb,
-                        contrast_limits=self._images.metadata[img_name]["contrast_limits"],
+                        contrast_limits=contrast_limits,
                         scale=(pixel_size, pixel_size),
                         visible=is_visible
                     )
@@ -1684,7 +1686,6 @@ class InSituData:
 
             if show_geometries_widget is not None:
                 self._viewer.window.add_dock_widget(show_geometries_widget, name="Show geometries", area="right", tabify=True)
-                #show_annotations_widget.max_height = 100
                 show_geometries_widget.max_width = widgets_max_width
 
         # EVENTS

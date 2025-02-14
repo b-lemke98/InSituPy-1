@@ -281,3 +281,13 @@ def otsu_thresholding(image: np.ndarray) -> np.ndarray:
     # Apply Otsu's thresholding
     _, otsu_image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return otsu_image
+
+def _get_contrast_limits(img):
+    # retrieve metadata
+    img_max = img[0].max() if isinstance(img, list) else img.max()
+    try:
+        img_max = img_max.compute()
+    except AttributeError:
+        img_max = img_max
+
+    return (0, img_max)

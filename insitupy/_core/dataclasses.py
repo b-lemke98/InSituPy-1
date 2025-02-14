@@ -948,11 +948,11 @@ class ImageData(DeepCopyMixin):
 
             # retrieve metadata
             img_shape = img[0].shape if isinstance(img, list) else img.shape
-            img_max = img[0].max() if isinstance(img, list) else img.max()
-            try:
-                img_max = img_max.compute()
-            except AttributeError:
-                img_max = img_max
+            # img_max = img[0].max() if isinstance(img, list) else img.max()
+            # try:
+            #     img_max = img_max.compute()
+            # except AttributeError:
+            #     img_max = img_max
 
             # save metadata
             self._metadata[name] = {}
@@ -975,12 +975,11 @@ class ImageData(DeepCopyMixin):
             else:
                 raise ValueError(f"Unknown image shape: {img_shape}")
 
-            # get image contrast limits
-            if self._metadata[name]["rgb"]:
-                #self._metadata[name]["contrast_limits"] = (0, 255)
-                self._metadata[name]["contrast_limits"] = (0, img_max)
-            else:
-                self._metadata[name]["contrast_limits"] = (0, img_max)
+            # # get image contrast limits
+            # if self._metadata[name]["rgb"]:
+            #     self._metadata[name]["contrast_limits"] = (0, img_max)
+            # else:
+            #     self._metadata[name]["contrast_limits"] = (0, img_max)
 
 
     def load(self,
@@ -1040,7 +1039,7 @@ class ImageData(DeepCopyMixin):
              return_savepaths: bool = False,
              overwrite: bool = False,
              max_resolution: Optional[Number] = None, # in µm per pixel
-             verbose: bool = True
+             verbose: bool = False
              ):
         """
         Save images to the specified output folder in either Zarr or OME-TIFF format.
