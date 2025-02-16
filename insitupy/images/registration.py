@@ -10,14 +10,15 @@ import numpy as np
 from parse import *
 
 from insitupy import CACHE, __version__
-from insitupy.images.utils import clip_image_histogram, otsu_thresholding
+from insitupy.images.axes import ImageAxes, get_height_and_width
+from insitupy.images.utils import (clip_image_histogram, convert_to_8bit_func,
+                                   fit_image_to_size_limit, otsu_thresholding,
+                                   scale_to_max_width)
 
 from .._constants import SHRT_MAX
 from .._exceptions import NotEnoughFeatureMatchesError
 from ..utils.utils import remove_last_line_from_csv
 from .io import write_ome_tiff
-from .utils import (convert_to_8bit_func, fit_image_to_size_limit,
-                    scale_to_max_width)
 
 
 class ImageRegistration:
@@ -49,6 +50,8 @@ class ImageRegistration:
         self.template = template
         self.axes_image = axes_image
         self.axes_template = axes_template
+        self.axes_config_image = ImageAxes(self.axes_image)
+        self.axes_config_template = ImageAxes(self.axes_template)
         self.max_width = max_width
         self.convert_to_grayscale = convert_to_grayscale
         self.perspective_transform = perspective_transform
@@ -115,7 +118,11 @@ class ImageRegistration:
         self.y_sf_template = self.template_scaled.shape[0] / self.template.shape[0]
 
         # resize image if necessary (warpAffine has a size limit for the image that is transformed)
-        if np.any([elem > SHRT_MAX for elem in self.image.shape[:2]]):
+        # get width and height of image
+
+        h_image, w_image = get_height_and_width(image=self.image, axes_config=self.axes_config_image)
+        # if np.any([elem > SHRT_MAX for elem in self.image.shape[:2]]):
+        if np.any([elem > SHRT_MAX for elem in (h_image, w_image)]):
             self.verboseprint(
                 "\t\tWarning: Dimensions of image ({}) exceed C++ limit SHRT_MAX ({}). " \
                 "Image dimensions are resized to meet requirements. " \
@@ -125,6 +132,7 @@ class ImageRegistration:
             self.image_resized, self.resize_factor_image = fit_image_to_size_limit(
                 self.image, size_limit=SHRT_MAX, return_scale_factor=True, axes=self.axes_image
                 )
+            print(f"Image dimensions after resizing: {self.image_resized.shape}. Resize factor: {self.resize_factor_image}")
         else:
             self.image_resized = None
             self.resize_factor_image = 1
@@ -331,11 +339,10 @@ class ImageRegistration:
             self.image_to_register = np.flip(self.image_to_register, axis=self.flip_axis)
 
         # use the transformation matrix to register the images
+        # TODO: not very safe to use here "[:2]"
         (h, w) = self.template.shape[:2]
         # warping
         self.verboseprint(f"\t\t{datetime.now():%Y-%m-%d %H:%M:%S}: Register image by {warp_name} transformation...")
-
-        #self.image_resized = convert_to_8bit(self.image_resized)
         self.registered = warp_func(self.image_to_register, self.T_to_register, (w, h))
 
     def register_images(self):

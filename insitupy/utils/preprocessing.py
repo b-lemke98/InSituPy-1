@@ -7,8 +7,7 @@ from parse import *
 from scipy.sparse import csr_matrix
 
 from insitupy import __version__
-
-from .._core._checks import check_integer_counts
+from insitupy._core._checks import check_integer_counts
 
 
 def normalize_and_transform_anndata(adata,
@@ -55,7 +54,6 @@ def test_transformation(adata, target_sum=1e4, layer=None):
 
     # create a copy of the anndata
     _adata = adata.copy()
-    counts = _adata.X
 
     # Check if the matrix consists of raw integer counts
     if layer is None:

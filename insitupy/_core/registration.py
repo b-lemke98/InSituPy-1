@@ -134,31 +134,14 @@ def register_images(
     image_area = h * w * pixel_size**2 / 1000**2 # in mm²
     min_good_matches = int(min_good_matches_per_area * image_area)
 
-    # # generate OME metadata for saving
-    # ome_metadata = {
-    #     **{'SignificantBits': 8,
-    #     'PhysicalSizeXUnit': physicalsize,
-    #     'PhysicalSizeYUnit': physicalsize
-    #     },
-    #     **pixelsizes
-    # }
-
-    # # determine one pixel direction as universal pixel size
-    # pixel_size = pixelsizes['PhysicalSizeX']
-
     # the selected image will be a grayscale image in both cases (nuclei image or deconvolved hematoxylin staining)
     #axes_selected = "YX"
     if image_type == "histo":
         print("\t\tRun color deconvolution", flush=True)
         # deconvolve HE - performed on resized image to save memory
         # TODO: Scale to max width instead of using a fixed scale factor before deconvolution (`scale_to_max_width`)
-        #return image
         nuclei_img, eo, dab = deconvolve_he(img=resize_image(image, scale_factor=decon_scale_factor, axes="YXS"),
                                     return_type="grayscale", convert=True)
-
-        # Clip the image histogram to enhance contrast
-        # nuclei_img = clip_image_histogram(image=nuclei_img)
-        #nuclei_img = otsu_thresholding(image=nuclei_img)
 
         # bring back to original size
         nuclei_img = resize_image(nuclei_img, scale_factor=1/decon_scale_factor, axes="YX")
@@ -168,23 +151,19 @@ def register_images(
     else:
         # image_type is "IF" then
         # get index of nuclei channel
-        channel_name_for_registration = channel_names.index(channel_name_for_registration)
+        channel_id_for_registration = channel_names.index(channel_name_for_registration)
         channel_axis = axes_image.find("C")
 
         if channel_axis == -1:
             raise ValueError(f"No channel indicator `C` found in image axes ({axes_image})")
 
-        print(f"\t\tSelect image with nuclei from IF image (channel: {channel_name_for_registration})", flush=True)
-        # select nuclei channel from IF image
-        if channel_name_for_registration is None:
-            raise TypeError("Argument `nuclei_channel` should be an integer and not NoneType.")
+        print(f"\t\tSelect image with nuclei from IF image (channel index: {channel_id_for_registration})", flush=True)
+        # # select nuclei channel from IF image
+        # if channel_name_for_registration is None:
+        #     raise TypeError("Argument `nuclei_channel` should be an integer and not NoneType.")
 
         # select dapi channel for registration and convert to numpy array
-        nuclei_img = np.take(image, channel_name_for_registration, channel_axis).compute()
-
-        # Clip the image histogram to enhance contrast
-        #nuclei_img = clip_image_histogram(image=nuclei_img)
-        #nuclei_img = otsu_thresholding(image=nuclei_img)
+        nuclei_img = np.take(image, channel_id_for_registration, channel_axis).compute()
 
     # Setup image registration objects - is important to load and scale the images.
     # The reason for this are limits in C++, not allowing to perform certain OpenCV functions on big images.
@@ -195,9 +174,10 @@ def register_images(
         template=template,
         axes_image=axes_image,
         axes_template=axes_template,
-        verbose=False
+        verbose=True
         )
     # load and scale the whole image
+    print('Load and scale image data containing all channels.')
     imreg_complete.load_and_scale_images()
 
     # setup ImageRegistration object with the nucleus image (either from deconvolution or just selected from IF image)
@@ -214,6 +194,7 @@ def register_images(
     )
 
     # run all steps to extract features and get transformation matrix
+    print('Load and scale image data containing only the channels required for registration.')
     imreg_selected.load_and_scale_images()
 
     print("\t\tExtract common features from image and template", flush=True)
@@ -300,7 +281,8 @@ def register_images(
                 name=n,
                 axes=axes_image,
                 pixel_size=pixel_size,
-                ome_meta=ome_metadata
+                ome_meta=ome_metadata,
+                overwrite=True
                 )
 
         # free RAM
