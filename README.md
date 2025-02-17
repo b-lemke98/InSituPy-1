@@ -28,7 +28,7 @@ This might conflict with the backwards compatibility of this version! If there a
 
 ### Prerequisites
 
-1. **Create and activate a conda environment:**
+**Create and activate a conda environment:**
 
    ```bash
    conda create --name insitupy python=3.9
