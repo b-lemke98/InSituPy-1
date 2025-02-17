@@ -1233,7 +1233,8 @@ class InSituData:
     def save(self,
              path: Optional[Union[str, os.PathLike, Path]] = None,
              zarr_zipped: bool = False,
-             verbose: bool = True
+             verbose: bool = True,
+             keep_history: bool = False
              ):
 
         # check path
@@ -1271,6 +1272,9 @@ class InSituData:
 
                     # reload the modalities
                     self.reload(verbose=False, skip=["transcripts", "images"])
+
+                    if not keep_history:
+                        self.remove_history(verbose=False)
                 else:
                     warn(
                         f"UID of current object {current_uid} not identical with UID in project path {path}: {project_uid}.\n"
