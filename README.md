@@ -16,6 +16,7 @@ Currently the analysis is focused on data from the [_Xenium In Situ_](https://ww
   * Fixed issue with large multiplexed IF images.
   * Area dependent number of minimum matches to make registration pipeline also work on small images.
 * add registration demo notebook for pancreas data
+* by default remove history of variable data when calling `.save()`
 
 ### Update to `0.5.0`
 #### Major changes in reading/loading logic!
