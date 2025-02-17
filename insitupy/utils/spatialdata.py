@@ -28,9 +28,8 @@ def convert_to_spatialdata_dict(data, levels: int = 5):
                                         PointsModel, ShapesModel, TableModel)
         from spatialdata.transformations.transformations import Identity, Scale
         from xarray import DataArray
-    except:
-        raise ImportError("This function requires spatialdata framework, please install with pip install spatialdata.")
-
+    except ImportError:
+        raise ImportError("This function requires the spatialdata framework, please install it with `pip install spatialdata`.")
 
     def transform_anndata(adata: AnnData, cells_as_circles: bool = True):
 

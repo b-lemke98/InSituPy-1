@@ -9,14 +9,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 from parse import *
 
-from insitupy import __version__
+from insitupy import CACHE, __version__
+from insitupy.images.axes import ImageAxes, get_height_and_width
+from insitupy.images.utils import (clip_image_histogram, convert_to_8bit_func,
+                                   fit_image_to_size_limit, otsu_thresholding,
+                                   scale_to_max_width)
 
 from .._constants import SHRT_MAX
 from .._exceptions import NotEnoughFeatureMatchesError
 from ..utils.utils import remove_last_line_from_csv
 from .io import write_ome_tiff
-from .utils import (convert_to_8bit_func, fit_image_to_size_limit,
-                    scale_to_max_width)
 
 
 class ImageRegistration:
@@ -48,6 +50,8 @@ class ImageRegistration:
         self.template = template
         self.axes_image = axes_image
         self.axes_template = axes_template
+        self.axes_config_image = ImageAxes(self.axes_image)
+        self.axes_config_template = ImageAxes(self.axes_template)
         self.max_width = max_width
         self.convert_to_grayscale = convert_to_grayscale
         self.perspective_transform = perspective_transform
@@ -114,7 +118,11 @@ class ImageRegistration:
         self.y_sf_template = self.template_scaled.shape[0] / self.template.shape[0]
 
         # resize image if necessary (warpAffine has a size limit for the image that is transformed)
-        if np.any([elem > SHRT_MAX for elem in self.image.shape[:2]]):
+        # get width and height of image
+
+        h_image, w_image = get_height_and_width(image=self.image, axes_config=self.axes_config_image)
+        # if np.any([elem > SHRT_MAX for elem in self.image.shape[:2]]):
+        if np.any([elem > SHRT_MAX for elem in (h_image, w_image)]):
             self.verboseprint(
                 "\t\tWarning: Dimensions of image ({}) exceed C++ limit SHRT_MAX ({}). " \
                 "Image dimensions are resized to meet requirements. " \
@@ -124,20 +132,31 @@ class ImageRegistration:
             self.image_resized, self.resize_factor_image = fit_image_to_size_limit(
                 self.image, size_limit=SHRT_MAX, return_scale_factor=True, axes=self.axes_image
                 )
+            print(f"Image dimensions after resizing: {self.image_resized.shape}. Resize factor: {self.resize_factor_image}")
         else:
             self.image_resized = None
             self.resize_factor_image = 1
 
-    def extract_features(self):
+    def extract_features(
+        self,
+        test_flipping: bool = True,
+        adjust_contrast_method: Optional[Literal["otsu", "clip"]] = "clip",
+        debugging: bool = False
+        ):
         '''
         Function to extract paired features from image and template.
         '''
 
         self.verboseprint("\t\t{}: Get features...".format(f"{datetime.now():%Y-%m-%d %H:%M:%S}"))
 
-        # Test different flip transformations starting with no flip, then vertical, then horizontal.
+        if test_flipping:
+            # Test different flip transformations starting with no flip, then vertical, then horizontal.
+            flip_axis_list = [None, 0] # before: [None, 0, 1]
+        else:
+            # do not test flipping of the axis
+            flip_axis_list = [None]
         matches_list = [] # list to collect number of matches
-        for flip_axis in [None, 0, 1]:
+        for flip_axis in flip_axis_list:
             flipped = False
             if flip_axis is not None:
                 # flip image
@@ -146,20 +165,53 @@ class ImageRegistration:
                 flipped = True # set flipped flag to True
 
             # Get features
+            # adjust contrast of both image and template
+            if adjust_contrast_method is not None:
+                self.verboseprint(f"\t\t\tAdjust contrast with {adjust_contrast_method} method...")
+                if adjust_contrast_method == "otsu":
+                    image_contrast_adj = otsu_thresholding(image=convert_to_8bit_func(self.image_scaled))
+                    template_contrast_adj = otsu_thresholding(image=convert_to_8bit_func(self.template_scaled))
+                elif adjust_contrast_method == "clip":
+                    image_contrast_adj = clip_image_histogram(image=self.image_scaled, lower_perc=20, upper_perc=99)
+                    template_contrast_adj = clip_image_histogram(image=self.template_scaled, lower_perc=20, upper_perc=99)
+                else:
+                    raise ValueError(f"Invalid method {adjust_contrast_method} for `adjust_contrast_method`.")
+            else:
+                image_contrast_adj = self.image_scaled
+                template_contrast_adj = self.template_scaled
+
+            if debugging:
+                outpath = CACHE
+                plt.imshow(self.image_scaled)
+                plt.savefig(outpath / f"image.png")
+                plt.close()
+
+                plt.imshow(image_contrast_adj)
+                plt.savefig(outpath / f"image_{adjust_contrast_method}.png")
+                plt.close()
+
+                plt.imshow(self.template_scaled)
+                plt.savefig(outpath / f"template.png")
+                plt.close()
+
+                plt.imshow(template_contrast_adj)
+                plt.savefig(outpath / f"template_{adjust_contrast_method}.png")
+                plt.close()
+
             if self.feature_detection_method == "sift":
                 self.verboseprint("\t\t\tMethod: SIFT...")
                 # sift
                 sift = cv2.SIFT_create()
 
-                (kpsA, descsA) = sift.detectAndCompute(self.image_scaled, None)
-                (kpsB, descsB) = sift.detectAndCompute(self.template_scaled, None)
+                (kpsA, descsA) = sift.detectAndCompute(image_contrast_adj, None)
+                (kpsB, descsB) = sift.detectAndCompute(template_contrast_adj, None)
 
             elif self.feature_detection_method == "surf":
                 self.verboseprint("\t\t\tMethod: SURF...")
                 surf = cv2.xfeatures2d.SURF_create(400)
 
-                (kpsA, descsA) = surf.detectAndCompute(self.image_scaled, None)
-                (kpsB, descsB) = surf.detectAndCompute(self.template_scaled, None)
+                (kpsA, descsA) = surf.detectAndCompute(image_contrast_adj, None)
+                (kpsB, descsB) = surf.detectAndCompute(template_contrast_adj, None)
 
             else:
                 self.verboseprint("\t\t\tUnknown method. Aborted.")
@@ -207,7 +259,7 @@ class ImageRegistration:
             # check if a sufficient number of good matches was found
             matches_list.append(len(good_matches))
             if len(good_matches) >= self.min_good_matches:
-                print(f"\t\t\tSufficient number of good matches found ({len(good_matches)}).")
+                print(f"\t\t\tSufficient number of good matches found ({len(good_matches)}/{self.min_good_matches}).")
                 self.flip_axis = flip_axis
                 break
             else:
@@ -285,11 +337,10 @@ class ImageRegistration:
             self.image_to_register = np.flip(self.image_to_register, axis=self.flip_axis)
 
         # use the transformation matrix to register the images
+        # TODO: not very safe to use here "[:2]"
         (h, w) = self.template.shape[:2]
         # warping
         self.verboseprint(f"\t\t{datetime.now():%Y-%m-%d %H:%M:%S}: Register image by {warp_name} transformation...")
-
-        #self.image_resized = convert_to_8bit(self.image_resized)
         self.registered = warp_func(self.image_to_register, self.T_to_register, (w, h))
 
     def register_images(self):

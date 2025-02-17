@@ -41,6 +41,7 @@ from insitupy._core._xenium import (_read_binned_expression,
 from insitupy._exceptions import UnknownOptionError
 from insitupy._warnings import NoProjectLoadWarning
 from insitupy.images import ImageRegistration, deconvolve_he, resize_image
+from insitupy.images.utils import _get_contrast_limits
 from insitupy.io.files import read_json, write_dict_to_json
 from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_celldata, read_shapesdata)
@@ -49,7 +50,8 @@ from insitupy.plotting import volcano_plot
 from insitupy.utils.deg import create_deg_dataframe
 from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
                                           reduce_dimensions_anndata)
-from insitupy.utils.utils import convert_to_list, get_nrows_maxcols
+from insitupy.utils.utils import (_crop_transcripts, convert_to_list,
+                                  get_nrows_maxcols)
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
 from .._exceptions import (InSituDataMissingObject,
@@ -530,7 +532,6 @@ class InSituData:
              xlim: Optional[Tuple[int, int]] = None,
              ylim: Optional[Tuple[int, int]] = None,
              inplace: bool = False
-             #layer_name: Optional[str] = None,
             ):
         """
         Crop the data based on the provided parameters.
@@ -544,83 +545,35 @@ class InSituData:
         Raises:
             ValueError: If none of region_tuple, layer_name, or xlim/ylim are provided.
         """
+        # check if the changes are supposed to be made in place or not
+        if inplace:
+            _self = self
+        else:
+            _self = self.copy()
+
         # if layer_name is None and region_tuple is None and (xlim is None or ylim is None):
         #     raise ValueError("At least one of shape_layer, region_tuple, or xlim/ylim must be provided.")
-        if region_tuple is None and (xlim is None or ylim is None):
-            raise ValueError("At least one of `region_tuple` or `xlim`/`ylim` must be provided.")
+        if region_tuple is None:
+            if xlim is None or ylim is None:
+                raise ValueError("If shape is None, both xlim and ylim must not be None.")
 
-        # retrieve pixel size of data
-        #pixel_size = self.metadata["method_params"]["pixel_size"]
-
-        if region_tuple is not None:
-
+            # make sure there are no negative values in the limits
+            xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
+            ylim = tuple(np.clip(ylim, a_min=0, a_max=None))
+        else:
             # extract regions dataframe
             region_key = region_tuple[0]
             region_name = region_tuple[1]
             region_df = self._regions[region_key]
 
             # extract geometry
-            geometry = region_df[region_df["name"] == region_name]["geometry"].item()
-
-            use_shape = True
-
-        # elif layer_name is not None:
-        #     try:
-        #         # extract shape layer for cropping from napari viewer
-        #         layer = self.viewer.layers[layer_name]
-        #     except KeyError:
-        #         raise KeyError(f"Shape layer selected for cropping ('{layer_name}') was not found in layers.")
-
-        #     # check the type of the element
-        #     if not isinstance(layer, napari.layers.Shapes):
-        #         raise WrongNapariLayerTypeError(found=type(layer), wanted=napari.layers.Shapes)
-
-        #     # make sure the layer contains only one element
-        #     if len(layer.data) != 1:
-        #         raise NotOneElementError(layer.data)
-
-        #     # select the shape from list
-        #     crop_window = layer.data[0].copy()
-        #     # crop_window *= pixel_size
-        #     shape_type = layer.shape_type[0]
-
-        #     geometry = convert_napari_shape_to_polygon_or_line(
-        #         napari_shape_data=crop_window,
-        #         shape_type=shape_type
-        #         )
-
-        #     use_shape = True
-
-        else:
-            # if xlim or ylim is not none, assert that both are not None
-            #if xlim is not None or ylim is not None:
-            assert np.all([elem is not None for elem in [xlim, ylim]]), "If `region_tuple` is None, both `xlim` and `ylim` need to be set instead."
-            use_shape = False
-
-        # # assert that either shape_layer is given or xlim/ylim
-        # assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
-
-        if use_shape:
-            # convert to metric unit (normally µm)
-            #geometry = scale_func(geometry, xfact=pixel_size, yfact=pixel_size, origin=(0,0))
+            shape = region_df[region_df["name"] == region_name]["geometry"].item()
+            #use_shape = True
 
             # extract x and y limits from the geometry
-            bounding_box = geometry.bounds # (minx, miny, maxx, maxy)
-            xlim = (bounding_box[0], bounding_box[2])
-            ylim = (bounding_box[1], bounding_box[3])
-
-            # xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
-            # ylim = (crop_window[:, 0].min(), crop_window[:, 0].max())
-
-        # make sure there are no negative values in the limits
-        xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
-        ylim = tuple(np.clip(ylim, a_min=0, a_max=None))
-
-        # check if the changes are supposed to be made in place or not
-        if inplace:
-            _self = self
-        else:
-            _self = self.copy()
+            minx, miny, maxx, maxy = shape.bounds # (minx, miny, maxx, maxy)
+            xlim = (minx, maxx)
+            ylim = (miny, maxy)
 
         try:
             # if the object was previously cropped, check if the current window is identical with the previous one
@@ -632,55 +585,26 @@ class InSituData:
             pass
 
         if _self.cells is not None:
-            # infer mask from cell coordinates
-            cells = _self.cells
-            cell_coords = cells.matrix.obsm['spatial'].copy()
-            xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
-            ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
-            mask = xmask & ymask
-
-            # select
-            _self.cells.matrix = _self.cells.matrix[mask, :].copy()
-
-            # crop boundaries
-            _self.cells.boundaries.crop(
-                cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim
-                )
-
-            # shift coordinates to correct for change of coordinates during cropping
-            _self.cells.shift(x=-xlim[0], y=-ylim[0])
+            _self.cells.crop(
+                shape=shape,
+                xlim=xlim, ylim=ylim,
+                inplace=True, verbose=False
+            )
 
         if _self.alt is not None:
             alt = _self.alt
-            for k, cells in alt.items():
-                cell_coords = cells.matrix.obsm['spatial'].copy()
-                xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
-                ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
-                mask = xmask & ymask
-
-                # select
-                cells.matrix = cells.matrix[mask, :].copy()
-
-                # crop boundaries
-                cells.boundaries.crop(
-                    cell_ids=_self.cells.matrix.obs_names, xlim=xlim, ylim=ylim
-                    )
-
-                # shift coordinates to correct for change of coordinates during cropping
-                cells.shift(x=-xlim[0], y=-ylim[0])
+            for k, alt_cells in alt.items():
+                alt_cells.crop(
+                    shape=shape,
+                    xlim=xlim, ylim=ylim, inplace=True, verbose=False
+                )
 
         if _self.transcripts is not None:
-            # infer mask for selection
-            xmask = (_self.transcripts["coordinates", "x"] >= xlim[0]) & (_self.transcripts["coordinates", "x"] <= xlim[1])
-            ymask = (_self.transcripts["coordinates", "y"] >= ylim[0]) & (_self.transcripts["coordinates", "y"] <= ylim[1])
-            mask = xmask & ymask
-
-            # select
-            _self.transcripts = _self.transcripts.loc[mask, :].copy()
-
-            # move origin again to 0 by subtracting the lower limits from the coordinates
-            _self.transcripts["coordinates", "x"] -= xlim[0]
-            _self.transcripts["coordinates", "y"] -= ylim[0]
+            _self.transcripts = _crop_transcripts(
+                transcript_df=_self.transcripts,
+                shape=shape,
+                xlim=xlim, ylim=ylim, verbose=False
+            )
 
         if self._images is not None:
             _self.images.crop(xlim=xlim, ylim=ylim)
@@ -688,18 +612,18 @@ class InSituData:
         if self._annotations is not None:
 
             _self.annotations.crop(
+                shape=shape,
                 xlim=tuple([elem for elem in xlim]),
-                ylim=tuple([elem for elem in ylim])
-                # xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
-                # ylim=tuple([elem / pixel_size for elem in ylim])
+                ylim=tuple([elem for elem in ylim]),
+                verbose=False
                 )
 
         if self._regions is not None:
             _self.regions.crop(
+                shape=shape,
                 xlim=tuple([elem for elem in xlim]),
-                ylim=tuple([elem for elem in ylim])
-                # xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
-                # ylim=tuple([elem / pixel_size for elem in ylim])
+                ylim=tuple([elem for elem in ylim]),
+                verbose=False
             )
 
         if _self.metadata is not None:
@@ -723,17 +647,11 @@ class InSituData:
                     empty_alt_hist_dict = {k: [] for k in _self.metadata["history"]["alt"].keys()}
                     _self.metadata["history"]["alt"] = empty_alt_hist_dict
 
-        # sometimes modalities like annotations or regions can be empty in the meantime
-        # here such empty modalities are removed
-        #_self.remove_empty_modalities()
-
         if inplace:
             if self._viewer is not None:
                 del _self.viewer # delete viewer
         else:
             return _self
-
-
 
 
     def hvg(self,
@@ -927,7 +845,8 @@ class InSituData:
                 try:
                     func(verbose=verbose)
                 except ModalityNotFoundError as err:
-                    print(err)
+                    if verbose:
+                        print(err)
 
     def load_annotations(self, verbose: bool = False):
         if verbose:
@@ -935,8 +854,10 @@ class InSituData:
         try:
             p = self._metadata["data"]["annotations"]
         except KeyError:
-            raise ModalityNotFoundError(modality="annotations")
-        self._annotations = read_shapesdata(path=self._path / p, mode="annotations")
+            if verbose:
+                raise ModalityNotFoundError(modality="annotations")
+        else:
+            self._annotations = read_shapesdata(path=self._path / p, mode="annotations")
 
 
     def import_annotations(self,
@@ -970,8 +891,10 @@ class InSituData:
         try:
             p = self._metadata["data"]["regions"]
         except KeyError:
-            raise ModalityNotFoundError(modality="regions")
-        self._regions = read_shapesdata(path=self._path / p, mode="regions")
+            if verbose:
+                raise ModalityNotFoundError(modality="regions")
+        else:
+            self._regions = read_shapesdata(path=self._path / p, mode="regions")
 
     def import_regions(self,
                     files: Optional[Union[str, os.PathLike, Path]],
@@ -1008,7 +931,8 @@ class InSituData:
             try:
                 cells_path = self._metadata["data"]["cells"]
             except KeyError:
-                raise ModalityNotFoundError(modality="cells")
+                if verbose:
+                    raise ModalityNotFoundError(modality="cells")
             else:
                 self._cells = read_celldata(path=self._path / cells_path)
 
@@ -1031,10 +955,8 @@ class InSituData:
 
     def load_images(self,
                     names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
-                    # nuclei_type: Literal["focus", "mip", ""] = "mip",
-                    # load_cell_segmentation_images: bool = True,
                     overwrite: bool = False,
-                    verbose: bool = True
+                    verbose: bool = False
                     ):
         # load image into ImageData object
         if verbose:
@@ -1042,43 +964,49 @@ class InSituData:
 
         if self._from_insitudata:
             # check if matrix data is stored in this InSituData
-            if "images" not in self._metadata["data"]:
-                raise ModalityNotFoundError(modality="images")
-
-            if names == "all":
-                img_names = list(self._metadata["data"]["images"].keys())
+            try:
+                images_dict = self._metadata["data"]["images"]
+            except KeyError:
+                if verbose:
+                    raise ModalityNotFoundError(modality="images")
             else:
-                img_names = convert_to_list(names)
+                if names == "all":
+                    img_names = list(images_dict.keys())
+                else:
+                    img_names = convert_to_list(names)
 
-            # get file paths and names
-            img_files = [v for k,v in self._metadata["data"]["images"].items() if k in img_names]
-            img_names = [k for k,v in self._metadata["data"]["images"].items() if k in img_names]
+                # get file paths and names
+                img_files = [v for k,v in images_dict.items() if k in img_names]
+                img_names = [k for k,v in images_dict.items() if k in img_names]
 
-            # create imageData object
-            img_paths = [self._path / elem for elem in img_files]
+                # create imageData object
+                img_paths = [self._path / elem for elem in img_files]
 
-            if self._images is None:
-                self._images = ImageData(img_paths, img_names)
-            else:
-                for im, n in zip(img_paths, img_names):
-                    self._images.add_image(im, n, overwrite=overwrite, verbose=verbose)
+                if self._images is None:
+                    self._images = ImageData(img_paths, img_names)
+                else:
+                    for im, n in zip(img_paths, img_names):
+                        self._images.add_image(im, n, overwrite=overwrite, verbose=verbose)
 
         else:
             NoProjectLoadWarning()
 
     def load_transcripts(self,
-                        # transcript_filename: str = "transcripts.parquet",
-                        verbose: bool = True
+                        verbose: bool = False
                         ):
+        # read transcripts
+        if verbose:
+            print("Loading transcripts...", flush=True)
+
         if self._from_insitudata:
             # check if matrix data is stored in this InSituData
-            if "transcripts" not in self._metadata["data"]:
-                raise ModalityNotFoundError(modality="transcripts")
-
-            # read transcripts
-            if verbose:
-                print("Loading transcripts...", flush=True)
-            self._transcripts = pd.read_parquet(self._path / self._metadata["data"]["transcripts"])
+            try:
+                transcripts_path = self._metadata["data"]["transcripts"]
+            except KeyError:
+                if verbose:
+                    raise ModalityNotFoundError(modality="transcripts")
+            else:
+                self._transcripts = pd.read_parquet(self._path / transcripts_path)
 
         else:
             NoProjectLoadWarning()
@@ -1227,7 +1155,8 @@ class InSituData:
                 metadata=self._metadata,
                 images_as_zarr=images_as_zarr,
                 zipped=zarr_zipped,
-                max_resolution=images_max_resolution
+                max_resolution=images_max_resolution,
+                verbose=False
                 )
 
         # save cells
@@ -1296,11 +1225,15 @@ class InSituData:
         # change path to the new one
         self._path = path.resolve()
 
+        # reload the modalities
+        self.reload(verbose=False)
+
         print("Saved.") if verbose else None
 
     def save(self,
              path: Optional[Union[str, os.PathLike, Path]] = None,
-             zarr_zipped: bool = False
+             zarr_zipped: bool = False,
+             verbose: bool = True
              ):
 
         # check path
@@ -1331,10 +1264,13 @@ class InSituData:
                 project_uid = project_meta["uids"][-1]  # [-1] to select latest uid
                 current_uid = self._metadata["uids"][-1]
                 if current_uid == project_uid:
-                    self._update_to_existing_project(path=path, zarr_zipped=zarr_zipped)
+                    self._update_to_existing_project(path=path,
+                                                     zarr_zipped=zarr_zipped,
+                                                     verbose=verbose
+                                                     )
 
                     # reload the modalities
-                    self.reload(verbose=False)
+                    self.reload(verbose=False, skip=["transcripts", "images"])
                 else:
                     warn(
                         f"UID of current object {current_uid} not identical with UID in project path {path}: {project_uid}.\n"
@@ -1372,14 +1308,17 @@ class InSituData:
 
     def _update_to_existing_project(self,
                                     path: Optional[Union[str, os.PathLike, Path]],
-                                    zarr_zipped: bool = False
+                                    zarr_zipped: bool = False,
+                                    verbose: bool = True
                                     ):
-        print(f"Updating project in {path}")
+        if verbose:
+            print(f"Updating project in {path}")
 
         # save cells
         if self._cells is not None:
             cells = self._cells
-            print("\tUpdating cells...", flush=True)
+            if verbose:
+                print("\tUpdating cells...", flush=True)
             _save_cells(
                 cells=cells,
                 path=path,
@@ -1391,7 +1330,8 @@ class InSituData:
         # save alternative cell data
         if self._alt is not None:
             alt = self._alt
-            print("\tUpdating alternative segmentations...", flush=True)
+            if verbose:
+                print("\tUpdating alternative segmentations...", flush=True)
             _save_alt(
                 attr=alt,
                 path=path,
@@ -1402,7 +1342,8 @@ class InSituData:
         # save annotations
         if self._annotations is not None:
             annotations = self._annotations
-            print("\tUpdating annotations...", flush=True)
+            if verbose:
+                print("\tUpdating annotations...", flush=True)
             _save_annotations(
                 annotations=annotations,
                 path=path,
@@ -1412,7 +1353,8 @@ class InSituData:
         # save regions
         if self._regions is not None:
             regions = self._regions
-            print("\tUpdating regions...", flush=True)
+            if verbose:
+                print("\tUpdating regions...", flush=True)
             _save_regions(
                 regions=regions,
                 path=path,
@@ -1430,7 +1372,8 @@ class InSituData:
         xd_metadata_path = path / ISPY_METADATA_FILE
         write_dict_to_json(dictionary=self._metadata, file=xd_metadata_path)
 
-        print("Saved.")
+        if verbose:
+            print("Saved.")
 
 
     def quicksave(self,
@@ -1530,12 +1473,6 @@ class InSituData:
         return_viewer: bool = False,
         widgets_max_width: int = 500
         ):
-        # # get information about pixel size
-        # if (pixel_size is None) & (scalebar):
-        #     # extract pixel_size
-        #     pixel_size = float(self.metadata["method_params"]["pixel_size"])
-        # else:
-        #     pixel_size = 1
 
         # create viewer
         self._viewer = napari.Viewer(title=f"{self._slide_id}: {self._sample_id}")
@@ -1573,6 +1510,13 @@ class InSituData:
                 else:
                     img_pyramid = img
 
+                # infer contrast limits
+                contrast_limits = _get_contrast_limits(img_pyramid)
+
+                if contrast_limits[1] == 0:
+                    warn("The maximum value of the image is 0. Is the image really completely empty?")
+                    contrast_limits = (0, 255)
+
                 # add img pyramid to napari viewer
                 self._viewer.add_image(
                         img_pyramid,
@@ -1580,7 +1524,7 @@ class InSituData:
                         colormap=cmap,
                         blending=blending,
                         rgb=is_rgb,
-                        contrast_limits=self._images.metadata[img_name]["contrast_limits"],
+                        contrast_limits=contrast_limits,
                         scale=(pixel_size, pixel_size),
                         visible=is_visible
                     )
@@ -1650,31 +1594,33 @@ class InSituData:
                 select_data.max_height = 50
                 select_data.max_width = widgets_max_width
 
-            if filter_cells_widget is not None:
-                self.viewer.window.add_dock_widget(filter_cells_widget, name="Filter cells", area="right")
-                filter_cells_widget.max_height = 150
+            if show_points_widget is not None:
+                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right")
+                show_points_widget.max_height = 170
                 show_points_widget.max_width = widgets_max_width
 
-            if show_points_widget is not None:
-                self.viewer.window.add_dock_widget(show_points_widget, name="Show data", area="right", tabify=True)
-                show_points_widget.max_height = 150
-                show_points_widget.max_width = widgets_max_width
+
 
             if show_boundaries_widget is not None:
                 self._viewer.window.add_dock_widget(show_boundaries_widget, name="Show boundaries", area="right")
-                show_boundaries_widget.max_height = 80
+                #show_boundaries_widget.max_height = 80
                 show_boundaries_widget.max_width = widgets_max_width
 
             if locate_cells_widget is not None:
-                self._viewer.window.add_dock_widget(locate_cells_widget, name="Navigate to cell", area="right")
+                self._viewer.window.add_dock_widget(locate_cells_widget, name="Navigate to cell", area="right", tabify=True)
                 #locate_cells_widget.max_height = 130
                 locate_cells_widget.max_width = widgets_max_width
+
+            if filter_cells_widget is not None:
+                self.viewer.window.add_dock_widget(filter_cells_widget, name="Filter cells", area="right", tabify=True)
+                filter_cells_widget.max_height = 150
+                show_points_widget.max_width = widgets_max_width
 
             # add annotation widget to napari
             add_geom_widget = add_new_geometries_widget()
             #annot_widget.max_height = 100
             add_geom_widget.max_width = widgets_max_width
-            self._viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
+            self._viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right", add_vertical_stretch=True)
 
             # if show_region_widget is not None:
             #     self.viewer.window.add_dock_widget(show_region_widget, name="Show regions", area="right")
@@ -1683,7 +1629,6 @@ class InSituData:
 
             if show_geometries_widget is not None:
                 self._viewer.window.add_dock_widget(show_geometries_widget, name="Show geometries", area="right", tabify=True)
-                #show_annotations_widget.max_height = 100
                 show_geometries_widget.max_width = widgets_max_width
 
         # EVENTS
@@ -1963,21 +1908,20 @@ class InSituData:
 
     def reload(
         self,
+        skip: Optional[List] = None,
         verbose: bool = True
         ):
         data_meta = self._metadata["data"]
         current_modalities = [m for m in MODALITIES if getattr(self, m) is not None and m in data_meta]
-        # # check if there is a path for the modalities in self.metadata
-        # data_meta = self.metadata["data"]
-        # print(data_meta)
-        # for cm in current_modalities:
-        #     print(cm)
-        #     if cm in data_meta:
-        #         print('blubb')
-        #         pass
-        #     else:
-        #         print(f"No data path found for modality '{cm}'. Modality skipped during reload and needs to be saved first.")
-        #         #current_modalities.remove(cm)
+
+        if skip is not None:
+            # remove the modalities which are supposed to be skipped during reload
+            skip = convert_to_list(skip)
+            for s in skip:
+                try:
+                    current_modalities.remove(s)
+                except ValueError:
+                    pass
 
         if len(current_modalities) > 0:
             print(f"Reloading following modalities: {', '.join(current_modalities)}") if verbose else None

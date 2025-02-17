@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from skimage.color import hed2rgb, rgb2hed
 
 from .._exceptions import InvalidDataTypeError
-from .axes import ImageAxes
+from .axes import ImageAxes, get_height_and_width
 
 
 def resize_image(img: NDArray,
@@ -19,11 +19,15 @@ def resize_image(img: NDArray,
                  interpolation = cv2.INTER_LINEAR
                  ):
     '''
-    Resize image by scale_factor
+    Resize width and height of image by scale_factor. Resizing does not affect channels.
+    So far the function assumes images to be either grayscale (axes="YX"), RGB (axes="YXS") or multi-channel IF (axes="CYX").
+    Time-series images (e.g. "TCYX") are not supported yet.
     '''
     # read and interpret the image axes pattern
     image_axes = ImageAxes(pattern=axes)
     channel_axis = image_axes.C
+
+    assert image_axes.T is None, "Time-series images are not supported in `resize_image`."
 
     if (channel_axis is not None) & (channel_axis != len(img.shape)-1):
         # move channel axis to last position if it is not there already
@@ -53,6 +57,8 @@ def resize_image(img: NDArray,
 
     return img
 
+
+
 def fit_image_to_size_limit(image: NDArray,
                             axes: str,  # description of axes, e.g. YXS for RGB, CYX for IF, TYXS for time-series RGB
                             size_limit: int,
@@ -62,19 +68,21 @@ def fit_image_to_size_limit(image: NDArray,
     Function to resize image if necessary (warpAffine has a size limit for the image that is transformed).
     '''
     # retrieve image dimensions
-    orig_shape_image = image.shape
-    xy_shape_image = orig_shape_image[:2]
+    #orig_shape_image = image.shape
+    height_width_image = get_height_and_width(image=image, axes_config=ImageAxes(axes))
+    #xy_shape_image = orig_shape_image[:2]
 
-    sf_image = (size_limit-1) / np.max(xy_shape_image)
-    new_shape = [int(elem * sf_image) for elem in xy_shape_image]
+    sf_image = (size_limit-1) / np.max(height_width_image)
+    #new_shape = [int(elem * sf_image) for elem in height_width_image]
 
-    # if image has three dimensions (RGB) add third dimensions after resizing
-    if len(image.shape) == 3:
-            new_shape += [image.shape[-1]]
-    new_shape = tuple(new_shape)
+    # # if image has three dimensions (RGB) add third dimensions after resizing
+    # if len(image.shape) == 3:
+    #         new_shape += [image.shape[-1]]
+    # new_shape = tuple(new_shape)
 
     # resize image
-    resized_image = resize_image(image, dim=(new_shape[1], new_shape[0]), axes=axes)
+    #resized_image = resize_image(image, dim=(new_shape[1], new_shape[0]), axes=axes)
+    resized_image = resize_image(image, scale_factor=sf_image, axes=axes)
 
     if return_scale_factor:
         return resized_image, sf_image
@@ -138,7 +146,7 @@ def scale_to_max_width(image: np.ndarray,
 
     # resizing - caution: order of dimensions is reversed in OpenCV compared to numpy
     image_scaled = resize_image(img=image, dim=(new_shape[1], new_shape[0]), axes=axes)
-    print(f"{print_spacer}Rescaled to following dimensions: {image_scaled.shape}") if verbose else None
+    print(f"{print_spacer}Rescaled from {image.shape} to following dimensions: {image_scaled.shape}") if verbose else None
 
     return image_scaled
 
@@ -274,3 +282,20 @@ def clip_image_histogram(
     lp, up = np.percentile(image, (lower_perc, upper_perc))
     image = np.clip((image - lp) * 255.0 / (up - lp), 0, 255).astype(np.uint8)
     return image
+
+def otsu_thresholding(image: np.ndarray) -> np.ndarray:
+    # Apply GaussianBlur to reduce image noise if necessary
+    #blur = cv2.GaussianBlur(image, (5, 5), 0)
+    # Apply Otsu's thresholding
+    _, otsu_image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return otsu_image
+
+def _get_contrast_limits(img):
+    # retrieve metadata
+    img_max = img[0].max() if isinstance(img, list) else img.max()
+    try:
+        img_max = img_max.compute()
+    except AttributeError:
+        img_max = img_max
+
+    return (0, img_max)

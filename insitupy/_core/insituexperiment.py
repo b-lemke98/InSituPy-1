@@ -11,6 +11,7 @@ import pandas as pd
 import scanpy as sc
 from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
+from tqdm import tqdm
 
 import insitupy
 from insitupy import InSituData, differential_gene_expression
@@ -373,8 +374,7 @@ class InSituExperiment:
     def load_all(self,
                  skip: Optional[str] = None,
                  ):
-        for xd in self._data:
-            print(xd.sample_id)
+        for xd in tqdm(self._data):
             for f in LOAD_FUNCS:
                 if skip is None or skip not in f:
                     func = getattr(xd, f)
@@ -384,13 +384,11 @@ class InSituExperiment:
                         print(err)
 
     def load_annotations(self):
-        for xd in self._data:
-            print(xd.sample_id)
+        for xd in tqdm(self._data):
             xd.load_annotations()
 
     def load_cells(self):
-        for xd in self._data:
-            print(xd.sample_id)
+        for xd in tqdm(self._data):
             xd.load_cells()
 
     def load_images(self,
@@ -399,22 +397,19 @@ class InSituExperiment:
                     load_cell_segmentation_images: bool = True
                     ):
 
-        for xd in self._data:
-            print(xd.sample_id)
+        for xd in tqdm(self._data):
             xd.load_images(names=names,
                            nuclei_type=nuclei_type,
                            load_cell_segmentation_images=load_cell_segmentation_images)
 
     def load_regions(self):
-        for xd in self._data:
-            print(xd.sample_id)
+        for xd in tqdm(self._data):
             xd.load_regions()
 
     def load_transcripts(self,
                         transcript_filename: str = "transcripts.parquet"
                         ):
-        for xd in self._data:
-            print(xd.sample_id)
+        for xd in tqdm(self._data):
             xd.load_transcripts()
 
     def plot_umaps(self,
@@ -680,11 +675,13 @@ class InSituExperiment:
         return experiment
 
     def remove_history(self):
-        for xd in self._data:
-            print(xd.sample_id)
-            xd.remove_history()
+        for xd in tqdm(self._data):
+            xd.remove_history(verbose=False)
 
-    def save(self):
+    def save(self,
+             verbose: bool = False,
+             **kwargs
+             ):
         if self.path is None:
             print("No save path found in '.self'. First save the InSituExperiment using '.saveas()'.")
             return
@@ -693,9 +690,11 @@ class InSituExperiment:
             if not np.all(parent_path_identical):
                 print(f"Saving process failed. Save path of some InSituData objects did not lie inside the InSituExperiment save path: {self.metadata['uid'][parent_path_identical].values}")
             else:
-                for xd in self._data:
-                    print(xd.sample_id)
-                    xd.save()
+                for xd in tqdm(self._data):
+                    xd.save(
+                        verbose=verbose,
+                        **kwargs
+                        )
 
 
     def saveas(self, path: Union[str, os.PathLike, Path],
@@ -715,7 +714,7 @@ class InSituExperiment:
         print(f"Saving InSituExperiment to {str(path)}") if verbose else None
 
         # Iterate over the datasets and save each one in a numbered subfolder
-        for index, dataset in enumerate(self._data):
+        for index, dataset in enumerate(tqdm(self._data)):
             subfolder_path = path / f"data-{str(index).zfill(3)}"
             dataset.saveas(subfolder_path, verbose=False, **kwargs)
 

@@ -7,9 +7,7 @@ from parse import *
 from scipy.sparse import csr_matrix
 
 from insitupy import __version__
-from insitupy.utils._scanorama import scanorama
-
-from .._core._checks import check_integer_counts
+from insitupy._core._checks import check_integer_counts
 
 
 def normalize_and_transform_anndata(adata,
@@ -56,7 +54,6 @@ def test_transformation(adata, target_sum=1e4, layer=None):
 
     # create a copy of the anndata
     _adata = adata.copy()
-    counts = _adata.X
 
     # Check if the matrix consists of raw integer counts
     if layer is None:
@@ -109,7 +106,6 @@ def test_transformation(adata, target_sum=1e4, layer=None):
 def reduce_dimensions_anndata(adata,
                               umap: bool = True,
                               tsne: bool = False,
-                              batch_correction_key: Optional[str] = None,
                               perform_clustering: bool = True,
                               verbose: bool = True,
                               tsne_lr: int = 1000,
@@ -124,8 +120,6 @@ def reduce_dimensions_anndata(adata,
             If True, perform UMAP dimensionality reduction. Default is True.
         tsne (bool, optional):
             If True, perform t-SNE dimensionality reduction. Default is True.
-        batch_correction_key (str, optional):
-            Batch key for performing batch correction using scanorama. Default is None, indicating no batch correction.
         verbose (bool, optional):
             If True, print progress messages during dimensionality reduction. Default is True.
         tsne_lr (int, optional):
@@ -142,36 +136,14 @@ def reduce_dimensions_anndata(adata,
         None: This method modifies the input matrix in place, reducing its dimensionality using specified techniques and
             batch correction if applicable. It does not return any value.
     """
-    if batch_correction_key is None:
-        # dimensionality reduction
-        print("Dimensionality reduction...") if verbose else None
-        sc.pp.pca(adata)
-        if umap:
-            sc.pp.neighbors(adata)
-            sc.tl.umap(adata)
-        if tsne:
-            sc.tl.tsne(adata, n_jobs=tsne_jobs, learning_rate=tsne_lr)
-
-    else:
-        # PCA
-        sc.pp.pca(adata)
-
-        neigh_uncorr_key = 'neighbors_uncorrected'
-        sc.pp.neighbors(adata, key_added=neigh_uncorr_key)
-
-        if perform_clustering:
-            # clustering
-            sc.tl.leiden(adata, neighbors_key=neigh_uncorr_key, key_added='leiden_uncorrected')
-
-        # batch correction
-        print(f"Batch correction using scanorama for {batch_correction_key}...") if verbose else None
-        hvgs = list(adata.var_names[adata.var['highly_variable']])
-        adata = scanorama(adata, batch_key=batch_correction_key, hvg=hvgs, verbose=False, **kwargs)
-
-        # find neighbors
-        sc.pp.neighbors(adata, use_rep="X_scanorama")
+    # dimensionality reduction
+    print("Dimensionality reduction...") if verbose else None
+    sc.pp.pca(adata)
+    if umap:
+        sc.pp.neighbors(adata)
         sc.tl.umap(adata)
-        sc.tl.tsne(adata, use_rep="X_scanorama")
+    if tsne:
+        sc.tl.tsne(adata, n_jobs=tsne_jobs, learning_rate=tsne_lr)
 
     if perform_clustering:
         # clustering

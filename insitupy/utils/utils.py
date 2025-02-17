@@ -1,10 +1,14 @@
 import math
 import os
 from datetime import datetime
+from typing import Optional, Tuple, Union
 from uuid import uuid4
+from warnings import warn
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from numpy import ndarray
 from pandas.api.types import is_numeric_dtype, is_string_dtype
 from parse import datetime
@@ -345,3 +349,45 @@ def exclude_index(array, exclude_index):
         np.ndarray: A new array with the element at exclude_index excluded.
     """
     return np.concatenate((array[:exclude_index], array[exclude_index+1:]))
+
+def _crop_transcripts(
+    transcript_df: pd.DataFrame,
+    shape: Optional[Polygon] = None,
+    xlim: Optional[Tuple[int, int]] = None,
+    ylim: Optional[Tuple[int, int]] = None,
+    verbose: bool = True
+    ):
+
+    if shape is not None:
+        if xlim is not None and ylim is not None:
+            if verbose:
+                warn("Both xlim/ylim and shape are provided. Shape will be used for cropping.")
+
+        warn("Filtering transcripts based on a shape can take long.")
+        points = gpd.points_from_xy(x=transcript_df.loc[:, ("coordinates", "x")].values,
+                                    y=transcript_df.loc[:, ("coordinates", "y")].values)
+        mask = shape.contains(points)
+
+        # get minimum x and y values
+        minx, miny, _, _ = shape.bounds
+
+    else:
+        if xlim is None or ylim is None:
+            raise ValueError("Either both xlim and ylim must be provided, or shape must be provided.")
+
+        # infer mask for selection
+        xmask = (transcript_df["coordinates", "x"] >= xlim[0]) & (transcript_df["coordinates", "x"] <= xlim[1])
+        ymask = (transcript_df["coordinates", "y"] >= ylim[0]) & (transcript_df["coordinates", "y"] <= ylim[1])
+        mask = xmask & ymask
+
+        minx = xlim[0]
+        miny = ylim[0]
+
+    # select
+    transcript_df = transcript_df.loc[mask, :].copy()
+
+    # move origin again to 0 by subtracting the lower limits from the coordinates
+    transcript_df["coordinates", "x"] -= minx
+    transcript_df["coordinates", "y"] -= miny
+
+    return transcript_df

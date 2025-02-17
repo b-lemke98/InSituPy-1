@@ -3,26 +3,31 @@ from math import ceil
 from numbers import Number
 from pathlib import Path
 from typing import List, Literal, Optional, Union
+from warnings import warn
 
 import dask.array as da
+import numpy as np
 import pandas as pd
 import scanpy as sc
 import toml
 import zarr
-from rasterio.features import rasterize
 from zarr.errors import ArrayNotFoundError
 
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
                                         CellData, RegionsData, ShapesData)
 from insitupy.io.baysor import read_baysor_polygons
 from insitupy.io.files import read_json
-from insitupy.utils.utils import convert_to_list
+from insitupy.utils.utils import convert_int_to_xenium_hex, convert_to_list
 
 
 def read_baysor_cells(
     baysor_output: Union[str, os.PathLike, Path],
     pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
     ) -> CellData:
+    try:
+        from rasterio.features import rasterize
+    except ImportError:
+        raise ImportError("This function requires the rasterio package, please install with `pip install rasterio`.")
 
     # convert to pathlib path
     baysor_output = Path(baysor_output)
@@ -121,17 +126,30 @@ def read_celldata(
     # check whether it is zipped or not
     suffix = bound_path.name.split(".", maxsplit=1)[-1]
 
-    # read cell ids and seg_mask_values
-    cell_ids = da.from_zarr(bound_path, component="cell_id")
+
+
+    try:
+        # read cell ids and seg_mask_values
+        cell_names = da.from_zarr(bound_path, component="cell_names")
+    except ArrayNotFoundError:
+        # if cell names is not found, the data might come from an older InSituPy version which contained a cell_id instead
+        try:
+            # read cell ids and seg_mask_values
+            cell_ids = da.from_zarr(bound_path, component="cell_id").compute()
+            cell_names = np.array([convert_int_to_xenium_hex(elem[0], elem[1]) for elem in cell_ids])
+        except ArrayNotFoundError:
+            # if no cell_id is present, this means that the data is from a new InSituPy version which is good.
+            pass
 
     try:
         # in older datasets sometimes seg_mask_value is missing
         seg_mask_value = da.from_zarr(bound_path, component="seg_mask_value")
     except ArrayNotFoundError:
+        warn("No `seg_mask_value` component found in boundaries zarr storage. This can lead to problems when syncing `.boundaries` and `.matrix`.")
         seg_mask_value = None
 
-    # create boundaries data object
-    boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
+    # initialize boundaries data object
+    boundaries = BoundariesData(cell_names=cell_names, seg_mask_value=seg_mask_value)
 
     # retrieve the boundaries data
     bound_data = {}
