@@ -1,33 +1,35 @@
-[tool.poetry]
+[project]
 name = "insitupy"
-version = "0.5.6"#<<COOKIETEMPLE_FORCE_BUMP>>
+version = "0.5.6" #<<COOKIETEMPLE_FORCE_BUMP>>
 description = "Package introducing the InSituPy framework to analyze single-cell spatial transcriptomics data."
-license = "BSD-3-Clause"
-authors = ["jwrth <j.wirth@tum.de>"]
+license = {text = "BSD-3-Clause"}
+authors = [
+    {name = "Johannes Wirth", email = "jwrth <j.wirth@tum.de>"}
+]
+requires-python = ">=3.9.0,<3.10.0"
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.9.18"
-scanpy = {version = "1.10.3", extras = ["leiden"]}
-numpy = "1.26.4"
-napari = {version = "0.4.18", extras = ["all"]}
-dask-image = "2023.8.1"
-parse = "1.19.1"
-dask = "^2023.9.2"
-opencv-python = "4.8.0.76"
-scikit-image = "^0.21.0"
-geopandas = "^0.14.4"
-fiona = "1.10.0"
-openpyxl = "^3.1.2"
-pytest = "^7.4.2"
-xmltodict = "0.13.0"
-zarr = "^2.16.1"
-pyarrow = "^14.0.1"
-fastparquet = "^2023.10.1"
-toml = "^0.10.2"
-plottable = "0.1.5"
-adjusttext = "^1.3.0"
-scikit-misc = "0.3.1"
+dependencies = [
+    "scanpy[leiden]==1.10.3",
+    "numpy==1.26.4",
+    "napari[all]==0.4.18",
+    "dask-image==2023.8.1",
+    "parse==1.19.1",
+    "dask (>=2023.9.2,<2024.0.0)",
+    "opencv-python==4.8.0.76",
+    "scikit-image (>=0.21.0,<1.0.0)",
+    "geopandas (>=0.14.4,<1.0.0)",
+    "fiona==1.10.0",
+    "openpyxl (>=3.1.2,<4.0.0)",
+    "pytest (>=7.4.2,<8.0.0)",
+    "xmltodict==0.13.0",
+    "zarr (>=2.16.1,<3.0.0)",
+    "pyarrow (>=14.0.1,<15.0.0)",
+    "fastparquet (>=2023.10.1,<2024.0.0)",
+    "toml (>=0.10.2,<1.0.0)",
+    "plottable==0.1.5",
+    "adjusttext (>=1.3.0,<2.0.0)",
+    "scikit-misc==0.3.1",
+]
 
 [build-system]
 requires = ["poetry-core"]
