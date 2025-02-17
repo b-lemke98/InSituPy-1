@@ -35,7 +35,13 @@ This might conflict with the backwards compatibility of this version! If there a
    conda activate insitupy
    ```
 
-### Method 1: Installation from Cloned Repository
+### Method 1: From PyPi
+
+   ```bash
+   pip install insitupy-spatial
+   ```
+
+### Method 2: Installation from Cloned Repository
 
 1. **Clone the repository to your local machine:**
 
@@ -62,7 +68,7 @@ This might conflict with the backwards compatibility of this version! If there a
    pip install -e .
    ```
 
-### Method 2: Direct Installation from GitHub
+### Method 3: Direct Installation from GitHub
 
 1. **Install directly from GitHub:**
 
