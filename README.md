@@ -9,8 +9,16 @@ Currently the analysis is focused on data from the [_Xenium In Situ_](https://ww
 
 ## Latest changes
 
-## Update to `0.5.0`
-### Major changes in reading/loading logic!
+### Update to `0.6.0`
+* Changed reading logic of `cell_names` in `BoundariesData`: this might lead to issues with backward compatibility but generalizes the reading of boundaries data opening it for other technologies.
+* Adapt viewer for smaller screens
+* Revised automated registration pipeline:
+  * Fixed issue with large multiplexed IF images.
+  * Area dependent number of minimum matches to make registration pipeline also work on small images.
+* add registration demo notebook for pancreas data
+
+### Update to `0.5.0`
+#### Major changes in reading/loading logic!
 This might conflict with the backwards compatibility of this version! If there are issues with loading reading `InSituPy` projects saved with older version, please let me know to find workarounds!
 * Reduced focus on Xenium method in data structure
 * `InSituData.read()` substitutes `read_xenium` for reading of `InSituPy` projects. `read_xenium` used now to read data from Xenium data folders
