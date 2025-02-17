@@ -1,5 +1,5 @@
 [project]
-name = "insitupy"
+name = "insitupy-spatial"
 version = "0.6.0" #<<COOKIETEMPLE_FORCE_BUMP>>
 description = "Package introducing the InSituPy framework to analyze single-cell spatial transcriptomics data."
 license = {text = "BSD-3-Clause"}
