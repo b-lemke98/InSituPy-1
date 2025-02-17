@@ -50,7 +50,8 @@ from insitupy.plotting import volcano_plot
 from insitupy.utils.deg import create_deg_dataframe
 from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
                                           reduce_dimensions_anndata)
-from insitupy.utils.utils import convert_to_list, get_nrows_maxcols
+from insitupy.utils.utils import (_crop_transcripts, convert_to_list,
+                                  get_nrows_maxcols)
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
 from .._exceptions import (InSituDataMissingObject,
@@ -531,7 +532,6 @@ class InSituData:
              xlim: Optional[Tuple[int, int]] = None,
              ylim: Optional[Tuple[int, int]] = None,
              inplace: bool = False
-             #layer_name: Optional[str] = None,
             ):
         """
         Crop the data based on the provided parameters.
@@ -545,83 +545,35 @@ class InSituData:
         Raises:
             ValueError: If none of region_tuple, layer_name, or xlim/ylim are provided.
         """
+        # check if the changes are supposed to be made in place or not
+        if inplace:
+            _self = self
+        else:
+            _self = self.copy()
+
         # if layer_name is None and region_tuple is None and (xlim is None or ylim is None):
         #     raise ValueError("At least one of shape_layer, region_tuple, or xlim/ylim must be provided.")
-        if region_tuple is None and (xlim is None or ylim is None):
-            raise ValueError("At least one of `region_tuple` or `xlim`/`ylim` must be provided.")
+        if region_tuple is None:
+            if xlim is None or ylim is None:
+                raise ValueError("If shape is None, both xlim and ylim must not be None.")
 
-        # retrieve pixel size of data
-        #pixel_size = self.metadata["method_params"]["pixel_size"]
-
-        if region_tuple is not None:
-
+            # make sure there are no negative values in the limits
+            xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
+            ylim = tuple(np.clip(ylim, a_min=0, a_max=None))
+        else:
             # extract regions dataframe
             region_key = region_tuple[0]
             region_name = region_tuple[1]
             region_df = self._regions[region_key]
 
             # extract geometry
-            geometry = region_df[region_df["name"] == region_name]["geometry"].item()
-
-            use_shape = True
-
-        # elif layer_name is not None:
-        #     try:
-        #         # extract shape layer for cropping from napari viewer
-        #         layer = self.viewer.layers[layer_name]
-        #     except KeyError:
-        #         raise KeyError(f"Shape layer selected for cropping ('{layer_name}') was not found in layers.")
-
-        #     # check the type of the element
-        #     if not isinstance(layer, napari.layers.Shapes):
-        #         raise WrongNapariLayerTypeError(found=type(layer), wanted=napari.layers.Shapes)
-
-        #     # make sure the layer contains only one element
-        #     if len(layer.data) != 1:
-        #         raise NotOneElementError(layer.data)
-
-        #     # select the shape from list
-        #     crop_window = layer.data[0].copy()
-        #     # crop_window *= pixel_size
-        #     shape_type = layer.shape_type[0]
-
-        #     geometry = convert_napari_shape_to_polygon_or_line(
-        #         napari_shape_data=crop_window,
-        #         shape_type=shape_type
-        #         )
-
-        #     use_shape = True
-
-        else:
-            # if xlim or ylim is not none, assert that both are not None
-            #if xlim is not None or ylim is not None:
-            assert np.all([elem is not None for elem in [xlim, ylim]]), "If `region_tuple` is None, both `xlim` and `ylim` need to be set instead."
-            use_shape = False
-
-        # # assert that either shape_layer is given or xlim/ylim
-        # assert np.any([elem is not None for elem in [shape_layer, xlim, ylim]]), "No values given for either `shape_layer` or `xlim/ylim`."
-
-        if use_shape:
-            # convert to metric unit (normally µm)
-            #geometry = scale_func(geometry, xfact=pixel_size, yfact=pixel_size, origin=(0,0))
+            shape = region_df[region_df["name"] == region_name]["geometry"].item()
+            #use_shape = True
 
             # extract x and y limits from the geometry
-            bounding_box = geometry.bounds # (minx, miny, maxx, maxy)
-            xlim = (bounding_box[0], bounding_box[2])
-            ylim = (bounding_box[1], bounding_box[3])
-
-            # xlim = (crop_window[:, 1].min(), crop_window[:, 1].max())
-            # ylim = (crop_window[:, 0].min(), crop_window[:, 0].max())
-
-        # make sure there are no negative values in the limits
-        xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
-        ylim = tuple(np.clip(ylim, a_min=0, a_max=None))
-
-        # check if the changes are supposed to be made in place or not
-        if inplace:
-            _self = self
-        else:
-            _self = self.copy()
+            minx, miny, maxx, maxy = shape.bounds # (minx, miny, maxx, maxy)
+            xlim = (minx, maxx)
+            ylim = (miny, maxy)
 
         try:
             # if the object was previously cropped, check if the current window is identical with the previous one
@@ -634,28 +586,25 @@ class InSituData:
 
         if _self.cells is not None:
             _self.cells.crop(
-                xlim=xlim, ylim=ylim, inplace=True
+                shape=shape,
+                xlim=xlim, ylim=ylim,
+                inplace=True, verbose=False
             )
 
         if _self.alt is not None:
             alt = _self.alt
             for k, alt_cells in alt.items():
                 alt_cells.crop(
-                    xlim=xlim, ylim=ylim, inplace=True
+                    shape=shape,
+                    xlim=xlim, ylim=ylim, inplace=True, verbose=False
                 )
 
         if _self.transcripts is not None:
-            # infer mask for selection
-            xmask = (_self.transcripts["coordinates", "x"] >= xlim[0]) & (_self.transcripts["coordinates", "x"] <= xlim[1])
-            ymask = (_self.transcripts["coordinates", "y"] >= ylim[0]) & (_self.transcripts["coordinates", "y"] <= ylim[1])
-            mask = xmask & ymask
-
-            # select
-            _self.transcripts = _self.transcripts.loc[mask, :].copy()
-
-            # move origin again to 0 by subtracting the lower limits from the coordinates
-            _self.transcripts["coordinates", "x"] -= xlim[0]
-            _self.transcripts["coordinates", "y"] -= ylim[0]
+            _self.transcripts = _crop_transcripts(
+                transcript_df=_self.transcripts,
+                shape=shape,
+                xlim=xlim, ylim=ylim, verbose=False
+            )
 
         if self._images is not None:
             _self.images.crop(xlim=xlim, ylim=ylim)
@@ -663,18 +612,18 @@ class InSituData:
         if self._annotations is not None:
 
             _self.annotations.crop(
+                shape=shape,
                 xlim=tuple([elem for elem in xlim]),
-                ylim=tuple([elem for elem in ylim])
-                # xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
-                # ylim=tuple([elem / pixel_size for elem in ylim])
+                ylim=tuple([elem for elem in ylim]),
+                verbose=False
                 )
 
         if self._regions is not None:
             _self.regions.crop(
+                shape=shape,
                 xlim=tuple([elem for elem in xlim]),
-                ylim=tuple([elem for elem in ylim])
-                # xlim=tuple([elem / pixel_size for elem in xlim]), # transform back to pixel coordinates before cropping
-                # ylim=tuple([elem / pixel_size for elem in ylim])
+                ylim=tuple([elem for elem in ylim]),
+                verbose=False
             )
 
         if _self.metadata is not None:
@@ -698,17 +647,11 @@ class InSituData:
                     empty_alt_hist_dict = {k: [] for k in _self.metadata["history"]["alt"].keys()}
                     _self.metadata["history"]["alt"] = empty_alt_hist_dict
 
-        # sometimes modalities like annotations or regions can be empty in the meantime
-        # here such empty modalities are removed
-        #_self.remove_empty_modalities()
-
         if inplace:
             if self._viewer is not None:
                 del _self.viewer # delete viewer
         else:
             return _self
-
-
 
 
     def hvg(self,

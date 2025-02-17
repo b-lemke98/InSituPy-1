@@ -296,16 +296,26 @@ class ShapesData(DeepCopyMixin):
                     print(f"Added {new_n - old_n} new {self._shape_name} to {existing_str}key '{key}'")
 
     def crop(self,
-             xlim, ylim
+             shape,
+             xlim,
+             ylim,
+             verbose=True
              ):
-        limit_poly = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
+        if shape is None:
+            if (xlim is None) or (ylim is None):
+                raise ValueError("If shape is None, both xlim and ylim must not be None.")
+            else:
+                if verbose:
+                    warnings.warn("Both xlim/ylim and shape are provided. Shape will be used for cropping.")
+        else:
+            shape = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
 
         new_metadata = {}
         for i, n in enumerate(self._metadata.keys()):
             shapesdf = self[n]
 
             # select annotations that intersect with the selected area
-            mask = [limit_poly.intersects(elem) for elem in shapesdf["geometry"]]
+            mask = [shape.intersects(elem) for elem in shapesdf["geometry"]]
             shapesdf = shapesdf.loc[mask, :].copy()
 
             # move origin to zero after cropping
@@ -672,25 +682,56 @@ class CellData(DeepCopyMixin):
         return deepcopy(self)
 
     def crop(self,
-             xlim: Optional[Tuple[int, int]] = None,
-             ylim: Optional[Tuple[int, int]] = None,
-             inplace: bool = False
-             ):
+            xlim: Optional[Tuple[int, int]] = None,
+            ylim: Optional[Tuple[int, int]] = None,
+            shape: Optional[Union[Polygon, MultiPolygon]] = None,
+            inplace: bool = False,
+            verbose: bool = True
+            ):
+
         # check if the changes are supposed to be made in place or not
         if inplace:
             _self = self
         else:
             _self = self.copy()
 
-        # make sure there are no negative values in the limits
-        xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
-        ylim = tuple(np.clip(ylim, a_min=0, a_max=None))
-
-        # infer mask from cell coordinates
+        # retrieve cell coordinates
         cell_coords = _self.matrix.obsm['spatial'].copy()
-        xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
-        ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
-        mask = xmask & ymask
+
+        # Ensure that either both xlim and ylim are not None or shape is not None
+        if (xlim is None or ylim is None) and shape is None:
+            raise ValueError("Either both xlim and ylim must be provided, or shape must be provided.")
+        # if xlim is not None and ylim is not None and shape is not None:
+        #     warnings.warn("Both xlim/ylim and shape are provided. Shape will be used for cropping.")
+
+        if shape is not None:
+            if xlim is not None and ylim is not None:
+                if verbose:
+                    warnings.warn("Both xlim/ylim and shape are provided. Shape will be used for cropping.")
+
+            # create shapely objects from cell coordinates
+            cells = gpd.points_from_xy(cell_coords[:, 0], cell_coords[:, 1])
+
+            # create a mask based on the shape
+            mask = shape.contains(cells)
+
+            # get bounding box of shape
+            minx, miny, maxx, maxy = shape.bounds # (minx, miny, maxx, maxy)
+            xlim = (minx, maxx)
+            ylim = (miny, maxy)
+
+        else:
+            if xlim is None or ylim is None:
+                raise ValueError("Either both xlim and ylim must be provided, or shape must be provided.")
+
+            # make sure there are no negative values in the limits
+            xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
+            ylim = tuple(np.clip(ylim, a_min=0, a_max=None))
+
+            # create a mask based on xlim and ylim
+            xmask = (cell_coords[:, 0] >= xlim[0]) & (cell_coords[:, 0] <= xlim[1])
+            ymask = (cell_coords[:, 1] >= ylim[0]) & (cell_coords[:, 1] <= ylim[1])
+            mask = xmask & ymask
 
         # select
         _self.matrix = _self.matrix[mask, :].copy()
@@ -701,7 +742,11 @@ class CellData(DeepCopyMixin):
             )
 
         # shift coordinates to correct for change of coordinates during cropping
-        _self.shift(x=-xlim[0], y=-ylim[0])
+        if shape is not None:
+            minx, miny, _, _ = shape.bounds
+            _self.shift(x=-minx, y=-miny)
+        else:
+            _self.shift(x=-xlim[0], y=-ylim[0])
 
         # sync the ids and names
         _self.sync_cell_ids()

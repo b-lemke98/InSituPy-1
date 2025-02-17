@@ -165,8 +165,6 @@ class ImageRegistration:
                 flipped = True # set flipped flag to True
 
             # Get features
-
-
             # adjust contrast of both image and template
             if adjust_contrast_method is not None:
                 self.verboseprint(f"\t\t\tAdjust contrast with {adjust_contrast_method} method...")

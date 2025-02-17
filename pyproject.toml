@@ -1,13 +1,12 @@
 [tool.poetry]
 name = "insitupy"
-version = "0.5.5"#<<COOKIETEMPLE_FORCE_BUMP>>
+version = "0.5.6"#<<COOKIETEMPLE_FORCE_BUMP>>
 description = "Package introducing the InSituPy framework to analyze single-cell spatial transcriptomics data."
 license = "BSD-3-Clause"
 authors = ["jwrth <j.wirth@tum.de>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-# mandatory dependencies
 python = "^3.9.18"
 scanpy = {version = "1.10.3", extras = ["leiden"]}
 numpy = "1.26.4"
