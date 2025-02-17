@@ -5,7 +5,7 @@
 </p>
 
 InSituPy is a Python package designed to facilitate the analysis of single-cell spatial transcriptomics data. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissue sections and across multiple samples.
-Currently the analysis is focused on data from the [_Xenium In Situ_](https://www.10xgenomics.com/platforms/xenium) methodology but a broader range of reading functions will be implemented in the future. 
+Currently the analysis is focused on data from the [_Xenium In Situ_](https://www.10xgenomics.com/platforms/xenium) methodology but a broader range of reading functions will be implemented in the future.
 
 ## Latest changes
 
@@ -43,25 +43,14 @@ This might conflict with the backwards compatibility of this version! If there a
    git checkout dev
    ```
 
-3. **(Windows Only)** Download and install the `annoy` package from the provided wheel file. If your Python version is different from `3.9`, make sure to download the correct wheel [here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#annoy) and adapt the installation code accordingly:
+3. **Install the required packages using `pip` within the conda environment:**
 
    ```bash
-   pip install wheels\annoy-1.17.0-cp39-cp39-win_amd64.whl
-   ```
-
-   *(Note: Skip this step if you're on Mac or Linux.)*
-
-4. **Install the required packages using `pip` within the conda environment:**
-
-   ```bash
-   # for installation without napari use
+   # basic installation
    pip install .
 
-   # for installation with napari use
-   pip install .[napari]
-
    # for developmental purposes add the -e flag
-   pip install -e .[napari]
+   pip install -e .
    ```
 
 ### Method 2: Direct Installation from GitHub
@@ -71,12 +60,6 @@ This might conflict with the backwards compatibility of this version! If there a
    ```bash
    # for installation without napari use
    pip install git+https://github.com/jwrth/InSituPy.git
-
-   # for installation with napari use
-   pip install git+https://github.com/jwrth/InSituPy.git#egg=InSituPy[napari]
-
-   # for developmental purposes, use the dev branch
-   pip install git+https://github.com/jwrth/InSituPy.git@dev#egg=InSituPy[napari]
    ```
 
 Make sure you have Conda installed on your system before proceeding with these steps. If not, you can install Miniconda or Anaconda from [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html).
@@ -108,7 +91,7 @@ These tutorials focus on the preprocessing, analysis and handling of individual 
 
 #### Experiment-level analysis
 
-This set of tutorials focuses on 
+This set of tutorials focuses on
 
 1. [Analyze multiple samples at once with InSituPy](notebooks/07_InSituPy_InSituExperiment.ipynb) - Introduces the main concepts behind the `InSituExperiment` class and how to work with multiple samples at once.
 2. [Differential gene expression analysis](notebooks/08_InSituPy_differential_gene_expression.ipynb) - Perform differential gene expression analysis within one sample and across multiple samples.
