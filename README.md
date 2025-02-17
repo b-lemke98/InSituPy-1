@@ -9,7 +9,7 @@ Currently the analysis is focused on data from the [_Xenium In Situ_](https://ww
 
 ## Latest changes
 
-### Update to `0.6.0`
+### Update to `>=0.6.0`
 * Changed reading logic of `cell_names` in `BoundariesData`: this might lead to issues with backward compatibility but generalizes the reading of boundaries data opening it for other technologies.
 * Adapt viewer for smaller screens
 * Revised automated registration pipeline:
