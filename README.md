@@ -85,6 +85,8 @@ To ensure that the InSituPy package is available as a kernel in Jupyter notebook
 
 ### Documentation
 
+__The Documentation is not online yet and will be made public in the next weeks__!
+
 For detailed instructions on using InSituPy, refer to the [official documentation](https://InSituPy.readthedocs.io), which will be made public after publication. The documentation will provide comprehensive guides on installation, usage, and advanced features.
 
 
