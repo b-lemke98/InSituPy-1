@@ -9,6 +9,8 @@ Currently the analysis is focused on data from the [_Xenium In Situ_](https://ww
 
 ## Latest changes
 
+*!!!Warning: This repository is under very active development and it cannot be guaranteed that releases contain changes that might impair backwards compatibility. If you observe any such thing, please feel free to contact us to solve the problem. Thanks!*
+
 ### Update to `>=0.6.0`
 * Changed reading logic of `cell_names` in `BoundariesData`: this might lead to issues with backward compatibility but generalizes the reading of boundaries data opening it for other technologies.
 * Adapt viewer for smaller screens
