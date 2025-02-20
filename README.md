@@ -11,7 +11,12 @@ Currently the analysis is focused on data from the [_Xenium In Situ_](https://ww
 
 *!!!Warning: This repository is under very active development and it cannot be guaranteed that releases contain changes that might impair backwards compatibility. If you observe any such thing, please feel free to contact us to solve the problem. Thanks!*
 
-### Update to `>=0.6.0`
+### Update to `0.6.2`
+* Transcripts are loaded now as dask dataframes instead of pandas dataframes. This makes loading of the transcript data much faster! In case this leads to bugs in other functionalities, please let me know!
+* fixing bugs in "build from scratch" demo
+* add saving possibility to `plot_overview()`
+
+### Update to `0.6.1`
 * Changed reading logic of `cell_names` in `BoundariesData`: this might lead to issues with backward compatibility but generalizes the reading of boundaries data opening it for other technologies.
 * Adapt viewer for smaller screens
 * Revised automated registration pipeline:
