@@ -43,7 +43,7 @@ class InSituExperiment:
             str: A string summarizing the InSituExperiment object.
         """
         num_samples = len(self._metadata)
-        sample_summary = self._metadata.to_string(index=True, col_space=4)
+        sample_summary = self._metadata.to_string(index=True, col_space=4, max_colwidth=15, max_cols=10)
         return (f"{tf.Bold}InSituExperiment{tf.ResetAll} with {num_samples} samples:\n"
                 f"{sample_summary}")
 
@@ -551,7 +551,7 @@ class InSituExperiment:
         # Load each dataset
         data = []
         dataset_paths = sorted([elem for elem in path.glob("data-*") if elem.is_dir()])
-        for dataset_path in dataset_paths:
+        for dataset_path in tqdm(dataset_paths):
             dataset = InSituData.read(dataset_path)
             data.append(dataset)
 
@@ -593,9 +593,9 @@ class InSituExperiment:
 
         # Determine file type and read the configuration file
         if config_path.suffix in ['.csv']:
-            config = pd.read_csv(config_path)
+            config = pd.read_csv(config_path, dtype=str)
         elif config_path.suffix in ['.xlsx', '.xls']:
-            config = pd.read_excel(config_path)
+            config = pd.read_excel(config_path, dtype=str)
         else:
             raise ValueError("Unsupported file type. Please provide a CSV or Excel file.")
 
@@ -610,7 +610,9 @@ class InSituExperiment:
         experiment = cls()
 
         # Iterate over each row in the configuration file
-        for _, row in config.iterrows():
+        # for _, row in tqdm(config.iterrows()):
+        for i in tqdm(range(len(config))):
+            row = config.iloc[i, :]
             dataset_path = Path(row['directory'])
 
             # Check if the path is relative and if so, append the current path
@@ -622,9 +624,9 @@ class InSituExperiment:
                 raise FileNotFoundError(f"No such directory found: {str(dataset_path)}")
 
             if mode == "insitupy":
-                dataset = InSituData(dataset_path)
+                dataset = InSituData.read(dataset_path)
             elif mode == "xenium":
-                dataset = read_xenium(dataset_path)
+                dataset = read_xenium(dataset_path, verbose=False)
             else:
                 raise ValueError("Invalid mode. Supported modes are 'insitupy' and 'xenium'.")
 
@@ -683,7 +685,7 @@ class InSituExperiment:
              **kwargs
              ):
         if self.path is None:
-            print("No save path found in '.self'. First save the InSituExperiment using '.saveas()'.")
+            print("No save path found in `.path`. First save the InSituExperiment using '.saveas()'.")
             return
         else:
             parent_path_identical = [d.path.parent == self.path for d in self.data]
@@ -741,7 +743,16 @@ class InSituExperiment:
             return dataset.viewer
 
 
-    def plot_overview(self, colums_to_plot: List[str] = [], layer: str = None, index: bool = True, qc_width: float = 4.0):
+    def plot_overview(
+        self,
+        colums_to_plot: List[str] = [],
+        layer: str = None,
+        index: bool = True,
+        qc_width: float = 4.0,
+        savepath: Union[str, os.PathLike, Path] = None,
+        save_only: bool = False,
+        dpi_save: int = 300
+        ):
         """
         Plots an overview table with metadata and quality control metrics.
 
@@ -903,6 +914,9 @@ class InSituExperiment:
                     footer_divider=True, ax=ax, row_divider_kw={"linewidth": 1, "linestyle": (0, (1, 5))},
                     col_label_divider_kw={"linewidth": 1, "linestyle": "-"}, column_border_kw={"linewidth": 1, "linestyle": "-"},
                     index_col=col_id,)
+
+        # save and show figure
+        save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=False)
 
         plt.show()
 
