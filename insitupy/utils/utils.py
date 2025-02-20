@@ -5,6 +5,7 @@ from typing import Optional, Tuple, Union
 from uuid import uuid4
 from warnings import warn
 
+import dask.dataframe as dd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -351,7 +352,7 @@ def exclude_index(array, exclude_index):
     return np.concatenate((array[:exclude_index], array[exclude_index+1:]))
 
 def _crop_transcripts(
-    transcript_df: pd.DataFrame,
+    transcript_df: Union[pd.DataFrame, dd.DataFrame],
     shape: Optional[Polygon] = None,
     xlim: Optional[Tuple[int, int]] = None,
     ylim: Optional[Tuple[int, int]] = None,
@@ -375,19 +376,33 @@ def _crop_transcripts(
         if xlim is None or ylim is None:
             raise ValueError("Either both xlim and ylim must be provided, or shape must be provided.")
 
-        # infer mask for selection
-        xmask = (transcript_df["coordinates", "x"] >= xlim[0]) & (transcript_df["coordinates", "x"] <= xlim[1])
-        ymask = (transcript_df["coordinates", "y"] >= ylim[0]) & (transcript_df["coordinates", "y"] <= ylim[1])
+        try:
+            # infer mask for selection
+            xmask = (transcript_df["coordinates", "x"] >= xlim[0]) & (transcript_df["coordinates", "x"] <= xlim[1])
+            ymask = (transcript_df["coordinates", "y"] >= ylim[0]) & (transcript_df["coordinates", "y"] <= ylim[1])
+            grouped_df = True
+        except KeyError:
+            xmask = (transcript_df["x_location"] >= xlim[0]) & (transcript_df["x_location"] <= xlim[1])
+            ymask = (transcript_df["y_location"] >= ylim[0]) & (transcript_df["y_location"] <= ylim[1])
+            grouped_df = False
+
+        # create filtering mask
         mask = xmask & ymask
 
+        # get minimum x and y for shifting the coordinates after cropping
         minx = xlim[0]
         miny = ylim[0]
 
     # select
     transcript_df = transcript_df.loc[mask, :].copy()
 
-    # move origin again to 0 by subtracting the lower limits from the coordinates
-    transcript_df["coordinates", "x"] -= minx
-    transcript_df["coordinates", "y"] -= miny
+    if grouped_df:
+        # move origin again to 0 by subtracting the lower limits from the coordinates
+        transcript_df["coordinates", "x"] -= minx
+        transcript_df["coordinates", "y"] -= miny
+    else:
+        # move origin again to 0 by subtracting the lower limits from the coordinates
+        transcript_df["x_location"] -= minx
+        transcript_df["y_location"] -= miny
 
     return transcript_df

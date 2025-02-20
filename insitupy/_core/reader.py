@@ -5,6 +5,7 @@ from typing import Literal, Optional, Union
 from uuid import uuid4
 from warnings import warn
 
+import dask.dataframe as dd
 import pandas as pd
 from parse import *
 
@@ -27,7 +28,9 @@ def read_xenium(
     # names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
     nuclei_type: Literal["focus", "mip", ""] = "mip",
     load_cell_segmentation_images: bool = True,
-    verbose: bool = True
+    verbose: bool = True,
+    transcript_mode: Literal["pandas", "dask"] = "dask",
+    restructure_transcripts: bool = False
     ) -> InSituData:
 
     path = Path(path) # make sure the path is a pathlib path
@@ -70,7 +73,9 @@ def read_xenium(
                         metadata=metadata,
                         slide_id=slide_id,
                         sample_id=sample_id,
-                        from_insitudata=False)
+                        from_insitudata=False,
+
+                        )
 
     # LOAD CELLS
     if verbose:
@@ -130,8 +135,18 @@ def read_xenium(
     transcript_filename = "transcripts.parquet"
     if verbose:
         print("Loading transcripts...", flush=True)
-    transcript_dataframe = pd.read_parquet(data.path / transcript_filename)
 
-    data.transcripts = _restructure_transcripts_dataframe(transcript_dataframe)
+    if transcript_mode == "pandas":
+        transcript_dataframe = pd.read_parquet(data.path / transcript_filename)
+
+        if restructure_transcripts:
+            data.transcripts = _restructure_transcripts_dataframe(transcript_dataframe)
+        else:
+            data.transcripts = transcript_dataframe
+    elif transcript_mode == "dask":
+        # Load the transcript data using Dask
+        data.transcripts = dd.read_parquet(data.path / transcript_filename)
+    else:
+        raise ValueError(f"Invalid value for `transcript_mode`: {transcript_mode}")
 
     return data
