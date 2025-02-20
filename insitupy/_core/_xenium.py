@@ -164,14 +164,16 @@ def _read_binned_expression(
     return arr
 
 
-def _restructure_transcripts_dataframe(dataframe):
+def _restructure_transcripts_dataframe(dataframe: pd.DataFrame, decode:bool = False):
 
-    # decode columns
-    dataframe = dataframe.apply(lambda x: decode_robust_series(x), axis=0)
+    if decode:
+        # decode columns
+        dataframe = dataframe.apply(lambda x: decode_robust_series(x), axis=0)
+
     # set index and rename columns
     dataframe = dataframe.set_index("transcript_id")
     dataframe = dataframe.rename({
-        "cell_id": "xenium_cell_id",
+        "cell_id": "cell_id",
         "x_location": "x",
         "y_location": "y",
         "z_location": "z",
@@ -179,7 +181,7 @@ def _restructure_transcripts_dataframe(dataframe):
     }, axis=1)
 
     # reorder dataframe
-    column_names_ordered = ["x", "y", "z", "gene", "qv", "overlaps_nucleus", "fov_name", "nucleus_distance", "xenium_cell_id"]
+    column_names_ordered = ["x", "y", "z", "gene", "qv", "overlaps_nucleus", "fov_name", "nucleus_distance", "cell_id"]
     in_df = [elem in dataframe.columns for elem in column_names_ordered]
     column_names_ordered = [elem for i, elem in zip(in_df, column_names_ordered) if i]
     dataframe = dataframe.loc[:, column_names_ordered]

@@ -13,6 +13,7 @@ from uuid import uuid4
 from warnings import warn
 
 import anndata
+import dask.dataframe as dd
 import geopandas as gpd
 import matplotlib
 import matplotlib.pyplot as plt
@@ -560,6 +561,7 @@ class InSituData:
             # make sure there are no negative values in the limits
             xlim = tuple(np.clip(xlim, a_min=0, a_max=None))
             ylim = tuple(np.clip(ylim, a_min=0, a_max=None))
+            shape = None
         else:
             # extract regions dataframe
             region_key = region_tuple[0]
@@ -992,21 +994,29 @@ class InSituData:
             NoProjectLoadWarning()
 
     def load_transcripts(self,
-                        verbose: bool = False
+                        verbose: bool = False,
+                        mode: Literal["pandas", "dask"] = "dask",
                         ):
         # read transcripts
         if verbose:
             print("Loading transcripts...", flush=True)
 
         if self._from_insitudata:
-            # check if matrix data is stored in this InSituData
+            # check if transcript data is stored in this InSituData
             try:
                 transcripts_path = self._metadata["data"]["transcripts"]
             except KeyError:
                 if verbose:
                     raise ModalityNotFoundError(modality="transcripts")
             else:
-                self._transcripts = pd.read_parquet(self._path / transcripts_path)
+                if mode == "pandas":
+                    self._transcripts = pd.read_parquet(self._path / transcripts_path)
+                elif mode == "dask":
+                    # Load the transcript data using Dask
+                    self._transcripts = dd.read_parquet(self._path / transcripts_path)
+                else:
+                    raise ValueError(f"Invalid value for `mode`: {mode}")
+
 
         else:
             NoProjectLoadWarning()
