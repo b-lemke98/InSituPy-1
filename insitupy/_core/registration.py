@@ -26,6 +26,7 @@ def register_images(
     channel_name_for_registration: Optional[str] = None,  # name used for the nuclei image. Only required for IF images.
     template_image_name: str = "nuclei",
     save_registered_images: bool = True,
+    output_dir: Union[str, os.PathLike, Path] = None,
     min_good_matches_per_area: int = 5, # unit: 1/mm²
     test_flipping: bool = True,
     decon_scale_factor: float = 0.2,
@@ -66,8 +67,12 @@ def register_images(
     if image_type == "IF" and channel_name_for_registration is None:
         raise ValueError(f'If `image_type" is "IF", `channel_name_for_registration is not allowed to be `None`.')
 
-    # define output directory
-    output_dir = data.path.parent / "registered_images"
+    if output_dir is None:
+        # define output directory
+        output_dir = data.path.parent / "registered_images"
+    else:
+        output_dir = Path(output_dir) / "registered_images"
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     # if output_dir.is_dir() and not force:
     #     raise FileExistsError(f"Output directory {output_dir} exists already. If you still want to run the registration, set `force=True`.")
