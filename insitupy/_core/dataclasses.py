@@ -420,7 +420,7 @@ class BoundariesData(DeepCopyMixin):
     '''
     def __init__(self,
                  cell_names: Union[da.core.Array, np.ndarray, List],
-                 seg_mask_value: Optional[Union[da.core.Array, np.ndarray, List]] = None,
+                 seg_mask_value: Optional[Union[da.core.Array, np.ndarray, List]],
                  ):
         """
         Initialize the BoundariesData object.
@@ -437,11 +437,13 @@ class BoundariesData(DeepCopyMixin):
 
         # store cell ids
         #self._cell_ids = da.from_array(np.array(cell_ids, dtype=np.uint32))
-        self._cell_names = da.from_array(np.array(cell_names))
+        self._cell_names = da.from_array(np.array(cell_names, dtype=str))
 
         self._seg_mask_value = seg_mask_value
         if self._seg_mask_value is not None:
             self._seg_mask_value = da.from_array(np.array(seg_mask_value, dtype=np.uint32))
+        else:
+            raise ValueError("Argument 'seg_mask_value' is None. This argument is required to be set.")
 
         self._data = dict()
 
