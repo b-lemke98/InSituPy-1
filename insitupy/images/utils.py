@@ -206,14 +206,14 @@ def create_img_pyramid(img: Union[np.ndarray, da.core.Array],
         img = img[::scale_steps, ::scale_steps]
         #img = resize_image(img, scale_factor=1/scale_steps, axes=axes, interpolation=cv2.INTER_LINEAR)
 
-        # check dtype of image
-        if img.dtype not in [np.dtype('uint16'), np.dtype('uint8')]:
-            warnings.warn("Image does not have dtype 'uint8' or 'uint16'. Is converted to 'uint16'.")
+        # # check dtype of image
+        # if img.dtype not in [np.dtype('uint16'), np.dtype('uint8')]:
+        #     warnings.warn("Image does not have dtype 'uint8' or 'uint16'. Is converted to 'uint16'.")
 
-            if img.dtype == np.dtype('int8'):
-                img = img.astype('uint8')
-            else:
-                img = img.astype('uint16')
+        #     if img.dtype == np.dtype('int8'):
+        #         img = img.astype('uint8')
+        #     else:
+        #         img = img.astype('uint16')
 
         try:
             # rechunk to prevent dask errors
