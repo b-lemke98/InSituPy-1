@@ -305,10 +305,11 @@ class ShapesData(DeepCopyMixin):
             if (xlim is None) or (ylim is None):
                 raise ValueError("If shape is None, both xlim and ylim must not be None.")
             else:
+                shape = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
+        else:
+            if (xlim is not None) and (ylim is not None):
                 if verbose:
                     warnings.warn("Both xlim/ylim and shape are provided. Shape will be used for cropping.")
-        else:
-            shape = Polygon([(xlim[0], ylim[0]), (xlim[1], ylim[0]), (xlim[1], ylim[1]), (xlim[0], ylim[1])])
 
         new_metadata = {}
         for i, n in enumerate(self._metadata.keys()):
