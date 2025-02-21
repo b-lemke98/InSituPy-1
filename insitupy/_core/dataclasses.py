@@ -886,6 +886,88 @@ class CellData(DeepCopyMixin):
                     # add to object
                     setattr(self._boundaries, n, df)
 
+class MultiCellData(DeepCopyMixin):
+    '''
+    Data object containing multiple CellData objects.
+    '''
+    def __init__(self):
+        self._data = dict()
+        self._key_main = None
+
+    def __repr__(self):
+        if self._key_main is not None:
+            repr = (
+                f"{tf.Bold+'Main CellData: '+tf.ResetAll}"
+                f"{self._key_main}\n"
+                f"{self._data[self._key_main].__repr__()}\n"
+            )
+        for key in self._data.keys():
+            if key != self._key_main:
+                repr += f"{tf.Bold+'Alternative CellData: '+tf.ResetAll}"
+                repr += f"{key}\n"
+                repr += f"{self._data[key].__repr__()}\n"
+        return repr
+
+    def __getitem__(self, key):
+        if key == "main":
+            return self._data.get(self._key_main)
+        else:
+            return self._data.get(key)
+
+    def __setitem__(self, key: str, item):
+        self._data[key] = item
+
+    @property
+    def is_main(self):
+        return self._is_main
+
+    def add_celldata(self,
+                     cd: CellData,
+                     key: str,
+                     is_main: bool = False):
+        if key in self._data.keys():
+            print(f"Overwriting {key}.")
+        self._data[key] = cd
+        if is_main:
+            self._key_main = key
+
+    def save(self,
+             path: Union[str, os.PathLike, Path],
+             boundaries_zipped: bool = False,
+             boundaries_as_pyramid: bool = True,
+             overwrite: bool = False,
+             ):
+
+        path = Path(path)
+        multicelldata_metadata = {"key_main": self._key_main, "all_keys": list(self._data.keys())}
+        # check if the output file should be overwritten
+        check_overwrite_and_remove_if_true(path, overwrite=overwrite)
+
+        # create directory
+        path.mkdir(parents=True, exist_ok=True)
+        for key in self._data.keys():
+            save_path = path / key
+            self._data[key].save(save_path, boundaries_zipped, boundaries_as_pyramid, overwrite)
+
+
+        # add version to metadata
+        multicelldata_metadata["version"] = __version__
+
+        # save metadata
+        write_dict_to_json(dictionary=multicelldata_metadata, file=path / ".multicelldata")
+
+    def get_all_keys(self):
+        return self._data.keys()
+    
+    def crop(self,
+            xlim: Optional[Tuple[int, int]] = None,
+            ylim: Optional[Tuple[int, int]] = None,
+            shape: Optional[Union[Polygon, MultiPolygon]] = None,
+            inplace: bool = False,
+            verbose: bool = True):
+        for key in self._data.keys():
+            self._data[key].crop(xlim=xlim, ylim=ylim, shape=shape, inplace=inplace, verbose=verbose)
+
 
 class ImageData(DeepCopyMixin):
     '''

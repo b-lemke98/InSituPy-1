@@ -14,7 +14,7 @@ import zarr
 from zarr.errors import ArrayNotFoundError
 
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
-                                        CellData, RegionsData, ShapesData)
+                                        CellData, RegionsData, ShapesData, MultiCellData)
 from insitupy.io.baysor import read_baysor_polygons
 from insitupy.io.files import read_json
 from insitupy.utils.utils import convert_int_to_xenium_hex, convert_to_list
@@ -258,4 +258,25 @@ def read_shapesdata(
     data.metadata = metadata
     return data
 
-
+def read_multicelldata(
+        path: Union[str, os.PathLike, Path],
+        old: Optional[bool] = False,
+        path_upper: Optional[Union[str, os.PathLike, Path]] = None,
+        alt_path_dict: Optional[dict] = None,
+    ) -> MultiCellData:
+    path = Path(path)
+    mcd = MultiCellData()
+    if not old:
+        celldata_metadata = read_json(path / ".multicelldata")
+        for key in celldata_metadata["all_keys"]:
+            cd = read_celldata(path / key)
+            mcd.add_celldata(cd=cd, key=key, is_main=(key == celldata_metadata["key_main"]))
+    else:
+        cd = read_celldata(path)
+        mcd.add_celldata(cd=cd, key="main", is_main=True)
+        if path_upper is not None and alt_path_dict is not None:
+            path_upper = Path(path_upper)
+            for k, p in alt_path_dict.items():
+                cd = read_celldata(path=path_upper / p)
+                mcd.add_celldata(cd=cd, key=k)
+    return mcd
