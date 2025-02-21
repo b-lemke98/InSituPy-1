@@ -532,7 +532,8 @@ class InSituData:
              region_tuple: Optional[Tuple[str, str]] = None,
              xlim: Optional[Tuple[int, int]] = None,
              ylim: Optional[Tuple[int, int]] = None,
-             inplace: bool = False
+             inplace: bool = False,
+             verbose: bool = False
             ):
         """
         Crop the data based on the provided parameters.
@@ -598,14 +599,15 @@ class InSituData:
             for k, alt_cells in alt.items():
                 alt_cells.crop(
                     shape=shape,
-                    xlim=xlim, ylim=ylim, inplace=True, verbose=False
+                    xlim=xlim, ylim=ylim, inplace=True,
+                    verbose=verbose
                 )
 
         if _self.transcripts is not None:
             _self.transcripts = _crop_transcripts(
                 transcript_df=_self.transcripts,
                 shape=shape,
-                xlim=xlim, ylim=ylim, verbose=False
+                xlim=xlim, ylim=ylim, verbose=verbose
             )
 
         if self._images is not None:
@@ -617,7 +619,7 @@ class InSituData:
                 shape=shape,
                 xlim=tuple([elem for elem in xlim]),
                 ylim=tuple([elem for elem in ylim]),
-                verbose=False
+                verbose=verbose
                 )
 
         if self._regions is not None:
@@ -625,7 +627,7 @@ class InSituData:
                 shape=shape,
                 xlim=tuple([elem for elem in xlim]),
                 ylim=tuple([elem for elem in ylim]),
-                verbose=False
+                verbose=verbose
             )
 
         if _self.metadata is not None:
