@@ -3,11 +3,13 @@ from typing import Literal, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import scanpy as sc
+import seaborn as sns
 from parse import *
 from scipy.sparse import csr_matrix
 
 from insitupy import __version__
 from insitupy._core._checks import check_integer_counts
+from insitupy.utils.utils import textformat as tf
 
 
 def normalize_and_transform_anndata(adata,
@@ -99,6 +101,66 @@ def test_transformation(adata, target_sum=1e4, layer=None):
 
 
     plt.tight_layout()
+    plt.show()
+
+
+def plot_qc_metrics(adata):
+    """
+    Plots the QC metrics calculated by sc.pp.calculate_qc_metrics.
+
+    Parameters:
+    adata : AnnData
+        Annotated data matrix with QC metrics calculated.
+    """
+    # QC metrics in .obs
+    obs_metrics = ['total_counts', 'n_genes_by_counts', 'pct_counts_mt']
+    # QC metrics in .var
+    var_metrics = ['n_cells_by_counts', 'mean_counts', 'pct_dropout_by_counts', 'total_counts']
+
+    # Check if all metrics exist in .obs
+    obs_metrics = [metric for metric in obs_metrics if metric in adata.obs]
+    if len(obs_metrics) == 0:
+        print("Warning: No .obs metrics found in adata.obs")
+
+    # Check if all metrics exist in .var
+    var_metrics = [metric for metric in var_metrics if metric in adata.var]
+    if len(var_metrics) == 0:
+        print("Warning: No .var metrics found in adata.var")
+
+    fig, axes = plt.subplots(2, max(len(obs_metrics), len(var_metrics)), figsize=(20, 10))
+
+    # Add titles to each row
+    if len(obs_metrics) > 0:
+        axes[0, 0].annotate('.obs Metrics', xy=(0, 0.5), xytext=(-axes[0, 0].yaxis.labelpad - 5, 0),
+                            xycoords=axes[0, 0].yaxis.label, textcoords='offset points',
+                            size='large', ha='right', va='center', rotation=90, weight='bold')
+
+    if len(var_metrics) > 0:
+        axes[1, 0].annotate('.var Metrics', xy=(0, 0.5), xytext=(-axes[1, 0].yaxis.labelpad - 5, 0),
+                            xycoords=axes[1, 0].yaxis.label, textcoords='offset points',
+                            size='large', ha='right', va='center', rotation=90, weight='bold')
+
+    for i, metric in enumerate(obs_metrics):
+        sns.histplot(adata.obs[metric], bins=50, color='skyblue', edgecolor='black', kde=False, ax=axes[0, i])
+        axes[0, i].set_title(metric)
+        axes[0, i].set_xlabel('Value')
+        axes[0, i].set_ylabel('Frequency')
+
+    for i, metric in enumerate(var_metrics):
+        sns.histplot(adata.var[metric], bins=50, color='skyblue', edgecolor='black', kde=False, ax=axes[1, i])
+        axes[1, i].set_title(metric)
+        axes[1, i].set_xlabel('Value')
+        axes[1, i].set_ylabel('Frequency')
+
+    # Remove empty subplots
+    if len(obs_metrics) < len(var_metrics):
+        for j in range(len(obs_metrics), len(var_metrics)):
+            fig.delaxes(axes[0, j])
+    elif len(var_metrics) < len(obs_metrics):
+        for j in range(len(var_metrics), len(obs_metrics)):
+            fig.delaxes(axes[1, j])
+
+    plt.tight_layout(rect=[0, 0, 1, 1])
     plt.show()
 
 
