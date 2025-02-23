@@ -72,13 +72,13 @@ if WITH_NAPARI:
 
             if len(config.masks) > 0:
                 @magicgui(
-                    call_button='Add',
+                    call_button='Show',
                     key={'choices': config.masks, 'label': 'Masks:'}
                 )
                 def add_boundaries_widget(
                     key
                 ):
-                    layer_name = f"{config.current_data_name}-{key}"
+                    layer_name = f"{config.current_data_name}-boundaries-{key}"
 
                     if layer_name not in viewer.layers:
                         # get geopandas dataframe with regions
