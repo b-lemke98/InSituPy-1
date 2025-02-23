@@ -918,8 +918,8 @@ class MultiCellData(DeepCopyMixin):
         self._data[key] = item
 
     @property
-    def is_main(self):
-        return self._is_main
+    def key_main(self):
+        return self._key_main
 
     def add_celldata(self,
                      cd: CellData,

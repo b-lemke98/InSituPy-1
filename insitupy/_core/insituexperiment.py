@@ -17,6 +17,7 @@ import insitupy
 from insitupy import InSituData, differential_gene_expression
 from insitupy._constants import LOAD_FUNCS
 from insitupy._core._checks import is_integer_counts
+from insitupy._core.insitudata import InSituData
 from insitupy._core.reader import read_xenium
 from insitupy._exceptions import ModalityNotFoundError
 from insitupy.io.files import check_overwrite_and_remove_if_true
@@ -136,7 +137,7 @@ class InSituExperiment:
             else:
                 raise ValueError("Invalid mode. Supported modes are 'insitupy' and 'xenium'.")
 
-        assert isinstance(dataset, insitupy._core.insitudata.InSituData), "Loaded dataset is not an InSituData object."
+        assert isinstance(dataset, InSituData), "Loaded dataset is not an InSituData object."
 
         # # set a unique ID
         # dataset._set_uid()
@@ -890,7 +891,7 @@ class InSituExperiment:
             if data.cells is None:
                 warnings.warn("Counts were not loaded. Loading.")
                 data.load_cells()
-            if data.cells is None or data.cells.key_main is None or data.cells["main"].matrix is None:
+            if data.cells is None or data.cells.key_main is None or data.cells[data.cells.key_main].matrix is None or data.cells["main"].matrix is None:
                 warnings.warn("Counts are not defined or loaded.")
                 list_gene_count.append(0)
                 list_transcript_count.append(0)
