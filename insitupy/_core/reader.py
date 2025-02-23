@@ -20,7 +20,7 @@ from insitupy._exceptions import InvalidXeniumDirectory
 from insitupy.io.files import read_json
 from insitupy.utils.utils import convert_to_list
 
-from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData
+from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData, MultiCellData
 
 
 def read_xenium(
@@ -84,7 +84,9 @@ def read_xenium(
     # read celldata
     matrix = _read_matrix_from_xenium(path=data.path)
     boundaries = _read_boundaries_from_xenium(path=data.path, pixel_size=pixel_size)
-    data.cells = CellData(matrix=matrix, boundaries=boundaries)
+    data.cells = MultiCellData()
+    cd = CellData(matrix=matrix, boundaries=boundaries)
+    data.cells.add_celldata(cd=cd, key="main", is_main=True)
 
 
     # LOAD IMAGES

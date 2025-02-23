@@ -126,7 +126,7 @@ class InSituData:
             self._path = self._path.resolve()
 
         # check if all modalities are empty
-        is_empty = np.all([elem is None for elem in [self._images, self._cells, self._alt, self._annotations, self._transcripts, self._regions]])
+        is_empty = np.all([elem is None for elem in [self._images, self._cells, self._annotations, self._transcripts, self._regions]])
 
         # if is_empty:
         #     repr = f"{tf.Bold+tf.Red}InSituData{tf.ResetAll}\nEmpty"
@@ -245,7 +245,7 @@ class InSituData:
     def cells(self):
         """Return cell data of the InSituData object.
         Returns:
-            insitupy._core.dataclasses.CellData: Cell data.
+            insitupy._core.dataclasses.MultiCellData: Cell data.
         """
         return self._cells
 

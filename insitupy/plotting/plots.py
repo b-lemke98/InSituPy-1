@@ -87,6 +87,7 @@ def plot_cellular_composition(
     return_data: bool = False,
     save_only: bool = False,
     dpi_save: int = 300,
+    layer: str = "main"
     ):
 
     """
@@ -131,7 +132,10 @@ def plot_cellular_composition(
     _check_assignment(data=data, key=key, force_assignment=force_assignment, modality=modality)
 
     # retrieve data
-    adata = data.cells.matrix
+    try:
+        adata = data.cells[layer].matrix
+    except:
+        raise ValueError(f"No {layer} layers in InSituData.cells")
     assignment_series = adata.obsm[modality][key]
     cats = sorted([elem for elem in assignment_series.unique() if (elem != "unassigned") & ("&" not in elem)])
 
