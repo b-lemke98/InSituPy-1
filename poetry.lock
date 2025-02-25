@@ -713,6 +713,27 @@ distributed = ["distributed (==2023.9.2)"]
 test = ["pandas[test]", "pre-commit", "pytest", "pytest-cov", "pytest-rerunfailures", "pytest-timeout", "pytest-xdist"]
 
 [[package]]
+name = "dask-geopandas"
+version = "0.4.2"
+description = "Parallel GeoPandas with Dask"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "dask_geopandas-0.4.2-py3-none-any.whl", hash = "sha256:84985d7453887a1416cb2602d1f6a8f9b10246f1d958306a4241214f9fa44a5f"},
+    {file = "dask_geopandas-0.4.2.tar.gz", hash = "sha256:0c9b35f9b81506fe30e88d7b9ca38efda1829aae2336ba284706a5302b117a6a"},
+]
+
+[package.dependencies]
+dask = {version = ">=2022.06.0", extras = ["dataframe"]}
+geopandas = ">=0.12"
+packaging = "*"
+shapely = ">=2.0"
+
+[package.extras]
+test = ["pytest"]
+
+[[package]]
 name = "dask-image"
 version = "2023.8.1"
 description = "Distributed image processing"
@@ -4773,4 +4794,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9.0,<3.10.0"
-content-hash = "9051b7b3f5c70f63f7445b7c688367e02aa9faed65c6663a5a4798fcd5e813c9"
+content-hash = "f638427db8976e939df91b228a6dac671c8122e22af010f892a65d9bfc692e32"

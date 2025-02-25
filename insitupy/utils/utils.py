@@ -364,10 +364,31 @@ def _crop_transcripts(
             if verbose:
                 warn("Both xlim/ylim and shape are provided. Shape will be used for cropping.")
 
-        warn("Filtering transcripts based on a shape can take long.")
-        points = gpd.points_from_xy(x=transcript_df.loc[:, ("coordinates", "x")].values,
-                                    y=transcript_df.loc[:, ("coordinates", "y")].values)
-        mask = shape.contains(points)
+        try:
+            points = gpd.points_from_xy(x=transcript_df.loc[:, ("coordinates", "x")].values,
+                                        y=transcript_df.loc[:, ("coordinates", "y")].values)
+            warn("Filtering transcripts based on a shape may take longer if transcripts are stored as pandas dataframe instead of dask dataframe.")
+            grouped_df = True
+        except KeyError:
+            try:
+                import dask_geopandas as dask_gpd
+            except ImportError:
+                warn("Filtering transcripts based on a shape may take longer if `dask_geopandas` is not installed.")
+
+                # load the dataframe into memory to generate points
+                print("Load transcript dataframe into memory...")
+                transcript_df = transcript_df.compute()
+                # generate points without dask_geopandas
+                points = gpd.points_from_xy(x=transcript_df.loc[:, "x_location"].values,
+                                            y=transcript_df.loc[:, "y_location"].values)
+            else:
+                # generate points with dask_geopandas
+                points = dask_gpd.points_from_xy(df=transcript_df, x="x_location", y="y_location")
+            grouped_df = False
+
+        # create mask
+        #mask = shape.contains(points)
+        mask = points.within(shape)
 
         # get minimum x and y values
         minx, miny, _, _ = shape.bounds
