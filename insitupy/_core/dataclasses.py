@@ -984,8 +984,9 @@ class MultiCellData(DeepCopyMixin):
 
         counts = counts.loc[:, ~counts.columns.str.startswith('Neg')]
         counts = counts.loc[:, ~counts.columns.str.startswith('Unas')]
+        obsm = {"spatial": np.stack([meta["centroid_x"].to_numpy(), meta["centroid_y"].to_numpy()], axis=1)}
 
-        adata = AnnData(X=counts, obs=meta)
+        adata = AnnData(X=counts, obs=meta, obsm=obsm)
 
         baysor_polygons = read_baysor_polygons(path_baysor_polygons)
 
