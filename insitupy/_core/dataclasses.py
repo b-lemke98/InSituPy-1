@@ -5,6 +5,7 @@ from numbers import Number
 from os.path import relpath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
+from math import ceil
 
 import cv2
 import dask.array as da
@@ -14,7 +15,8 @@ import pandas as pd
 import zarr
 from anndata import AnnData
 from parse import *
-from shapely import MultiPoint, MultiPolygon, Point, Polygon, affinity
+from shapely import MultiPoint, MultiPolygon, Point, Polygon, affinity, wkt
+from rasterio.features import rasterize
 
 from insitupy import __version__
 from insitupy._constants import FORBIDDEN_ANNOTATION_NAMES
@@ -26,6 +28,7 @@ from ..images.io import read_image, write_ome_tiff, write_zarr
 from ..images.utils import create_img_pyramid, crop_dask_array_or_pyramid
 from ..io.files import check_overwrite_and_remove_if_true, write_dict_to_json
 from ..io.geo import parse_geopandas, write_qupath_geojson
+from ..io.baysor import read_baysor_polygons
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._mixins import DeepCopyMixin
@@ -967,6 +970,46 @@ class MultiCellData(DeepCopyMixin):
             verbose: bool = True):
         for key in self._data.keys():
             self._data[key].crop(xlim=xlim, ylim=ylim, shape=shape, inplace=inplace, verbose=verbose)
+
+    def add_proseg(self,
+                   path_counts: Union[str, os.PathLike, Path],
+                   path_metadata:  Union[str, os.PathLike, Path],
+                   path_baysor_polygons: Union[str, os.PathLike, Path],
+                   pixel_size: float,
+                   key: str = "proseg",
+                   is_main: bool = False
+                   ):
+        counts = pd.read_csv(path_counts)
+        meta = pd.read_csv(path_metadata)
+
+        counts = counts.loc[:, ~counts.columns.str.startswith('Neg')]
+        counts = counts.loc[:, ~counts.columns.str.startswith('Unas')]
+
+        adata = AnnData(X=counts, obs=meta)
+
+        baysor_polygons = read_baysor_polygons(path_baysor_polygons)
+
+        def divide_polygon(polygon_wkt, constant):
+            polygon = wkt.loads(polygon_wkt)
+            divided_polygon = affinity.scale(polygon, xfact=1/constant, yfact=1/constant, origin=(0, 0))
+            return divided_polygon
+
+        baysor_polygons['geometry'] = baysor_polygons['geometry'].apply(lambda x: divide_polygon(x.wkt, pixel_size))
+        baysor_polygons["maxx"] = baysor_polygons["maxx"] / pixel_size
+        baysor_polygons["maxy"] = baysor_polygons["maxy"] / pixel_size
+        polygon_bounds = baysor_polygons.geometry.bounds
+        xmax = ceil(polygon_bounds.loc[:, "maxx"].max())
+        ymax = ceil(polygon_bounds.loc[:, "maxy"].max())
+
+        img = rasterize(list(zip(baysor_polygons["geometry"], baysor_polygons["cell"])), out_shape=(ymax,xmax))
+        img = da.from_array(img)
+
+        cell_ids = da.from_array(adata.obs["cell"].values) # extract cell ids from adata
+        seg_mask_value = da.from_array(sorted(baysor_polygons["cell"]))
+        boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
+        boundaries.add_boundaries(data={f"cellular": img}, pixel_size=pixel_size)
+        celldata = CellData(matrix=adata, boundaries=boundaries)
+        self.add_celldata(cd=celldata, key=key, is_main=is_main)
 
 
 class ImageData(DeepCopyMixin):
