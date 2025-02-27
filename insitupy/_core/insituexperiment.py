@@ -110,6 +110,14 @@ class InSituExperiment:
         """
         return self._path
 
+    def _check_obs_uniqueness(self):
+        """
+        Check if the observation names are unique across all datasets.
+        """
+        all_obs = pd.concat([d.cells.matrix.obs for d in self._data], axis=0, ignore_index=False)
+        if not all_obs.index.is_unique:
+            warnings.warn("Observation names are not unique across all datasets.")
+
     def add(self,
             data: Union[str, os.PathLike, Path, insitupy.InSituData],
             mode: Literal["insitupy", "xenium"] = "insitupy",
@@ -251,7 +259,7 @@ class InSituExperiment:
     def dge(self,
             data_id: int,
             data_annotation_tuple: Optional[Tuple[str, str]] = None, # tuple of annotation key and names
-            ref_id: Optional[int] = None,
+            ref_id: Optional[Union[int, List[int], Literal["rest"]]] = None,
             ref_annotation_tuple: Optional[Union[Literal["rest"], Tuple[str, str]]] = None,
             obs_tuple: Optional[Tuple[str, str]] = None,
             region_tuple: Optional[Tuple[str, str]] = None,
@@ -277,7 +285,7 @@ class InSituExperiment:
         Args:
             data_id (int): Identifier for the primary dataset within the `InSituExperiment` object.
             data_annotation_tuple (Tuple[str, str]): Tuple containing the annotation key and name for the primary data.
-            ref_id (Optional[int]): Identifier for the reference dataset within the `InSituExperiment` object.
+            ref_id (Optional[Union[int, List[int], Literal["rest"]]]): Identifier or list of identifiers for the reference dataset within the `InSituExperiment` object.
             ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
             obs_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
             region_tuple (Optional[Tuple[str, str]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
@@ -310,8 +318,23 @@ class InSituExperiment:
         data_name = self.metadata.loc[data_id, name_col]
 
         if ref_id is not None:
-            ref_data = self.data[ref_id]
-            ref_name = self.metadata.loc[ref_id, name_col]
+            if ref_id == "rest":
+                ref_data = [d for i, (m, d) in enumerate(self.iterdata()) if i != data_id]
+                ref_name = [m[name_col] for i, (m, d) in enumerate(self.iterdata()) if i != data_id]
+                ref_name = ", ".join(ref_name)
+
+            elif isinstance(ref_id, int):
+                ref_data = self.data[ref_id]
+                ref_name = self.metadata.loc[ref_id, name_col]
+            elif isinstance(ref_id, list):
+                ref_data = [self.data[i] for i in ref_id]
+                ref_name = [self.metadata.iloc[i][name_col] for i in ref_id]
+                ref_name = ", ".join(ref_name)
+            else:
+                raise ValueError(f"Argument `ref_id` has to be either int, list of int or 'rest'. Instead: {ref_id}")
+
+            # ref_data = self.data[ref_id]
+            # ref_name = self.metadata.loc[ref_id, name_col]
         else:
             ref_data = None
             ref_name = data_name
@@ -529,6 +552,9 @@ class InSituExperiment:
 
         # Disconnect object from save path
         new_experiment._path = None
+
+        # check if observation names are unique
+        new_experiment._check_obs_uniqueness()
 
         return new_experiment
 

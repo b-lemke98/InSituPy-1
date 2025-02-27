@@ -2069,7 +2069,7 @@ def calc_distance_of_cells_from(
 def differential_gene_expression(
     data: InSituData,
     data_annotation_tuple: Optional[Tuple[str, str]] = None,
-    ref_data: Optional[InSituData] = None,
+    ref_data: Optional[Union[InSituData, List[InSituData]]] = None,
     ref_annotation_tuple: Optional[Union[Literal["rest"], Tuple[str, str]]] = None,
     obs_tuple: Optional[Tuple[str, str]] = None,
     region_tuple: Optional[Tuple[str, str]] = None,
@@ -2131,10 +2131,12 @@ def differential_gene_expression(
 
     # extract annotation information
     if data_annotation_tuple is None:
+        assert ref_annotation_tuple is None, "If `data_annotation_tuple` is None, `ref_annotation_tuple` must be None."
         annotation_key = None
         annotation_name = None
-        assert ref_annotation_tuple is None
     else:
+        if ref_data is None:
+            assert ref_annotation_tuple is not None, "If `ref_data` is None and `data_annotation_tuple` is not None, `ref_annotation_tuple` must not be None."
         annotation_key = data_annotation_tuple[0]
         annotation_name = data_annotation_tuple[1]
 
@@ -2169,18 +2171,18 @@ def differential_gene_expression(
         _check_assignment(data=data, key=region_key, force_assignment=force_assignment, modality="regions")
 
     # extract main anndata
-    adata1 = data.cells.matrix.copy()
+    adata_data = data.cells.matrix.copy()
 
     if region_tuple is not None:
         # select only one region
-        region_mask = [region_name in elem for elem in adata1.obsm["regions"][region_key]]
+        region_mask = [region_name in elem for elem in adata_data.obsm["regions"][region_key]]
         assert np.any(region_mask), f"Region '{region_name}' not found in key '{region_key}'."
 
         print(f"Restrict analysis to region '{region_name}' from key '{region_key}'.", flush=True)
-        adata1 = adata1[region_mask].copy()
+        adata_data = adata_data[region_mask].copy()
 
     if data_annotation_tuple is not None:
-        col_with_id = adata1.obsm["annotations"].apply(
+        col_with_id = adata_data.obsm["annotations"].apply(
             func=lambda row: _substitution_func(
                 row=row,
                 annotation_key=annotation_key,
@@ -2200,44 +2202,75 @@ def differential_gene_expression(
             col_with_id = col_with_id.apply(func=lambda x: f"1-{x}")
 
         # add the column to obs
-        adata1.obs[comb_col_name] = col_with_id
+        adata_data.obs[comb_col_name] = col_with_id
 
     if ref_data is not None:
-        # process reference_data if it is not None
-        if ref_annotation_tuple is None and data_annotation_tuple is not None:
-            ref_annotation_tuple = data_annotation_tuple
+        if isinstance(ref_data, InSituData):
+            # generate a list from ref_data
+            ref_data = [ref_data]
+        elif isinstance(ref_data, list):
+            pass
+        else:
+            raise ValueError("`ref_data` must be an InSituData object or a list of InSituData objects.")
 
-        if ref_annotation_key is not None:
-            _check_assignment(data=ref_data, key=ref_annotation_key, force_assignment=force_assignment, modality="annotations")
+        adata_ref_concat = []
+        sample_ids_ref_list = []
+        for rd in ref_data:
 
-            # extract reference anndata
-        adata2 = ref_data.cells.matrix.copy()
-        # repeat the same as for adata1 for adata2
-        if ref_annotation_tuple is not None:
-            col_with_id_ref = adata2.obsm["annotations"].apply(
-                func=lambda row: _substitution_func(
-                    row=row,
-                    annotation_key=ref_annotation_key,
-                    annotation_name=reference_name,
-                    reference_name=None,
-                    check_reference=check_reference_during_substitution,
-                    ignore_duplicate_assignments=ignore_duplicate_assignments
-                    ), axis=1
-                )
-            col_with_id_ref = col_with_id_ref.apply(func=lambda x: f"2-{x}")
+            # process reference_data if it is not None
+            if ref_annotation_tuple is None and data_annotation_tuple is not None:
+                ref_annotation_tuple = data_annotation_tuple
 
-            # check that the reference_name exists inside the column
-            assert np.any(col_with_id_ref == f"2-{reference_name}"), f"reference_name '{reference_name}' not found under reference_key '{ref_annotation_key}'."
+            if ref_annotation_key is not None:
+                _check_assignment(data=rd, key=ref_annotation_key, force_assignment=force_assignment, modality="annotations")
 
-            # add column to obs
-            adata2.obs[comb_col_name] = col_with_id_ref
+                # extract reference anndata
+            adata_ref = rd.cells.matrix.copy()
+            # repeat the same as for adata1 for adata2
+            if ref_annotation_tuple is not None:
+                col_with_id_ref = adata_ref.obsm["annotations"].apply(
+                    func=lambda row: _substitution_func(
+                        row=row,
+                        annotation_key=ref_annotation_key,
+                        annotation_name=reference_name,
+                        reference_name=None,
+                        check_reference=check_reference_during_substitution,
+                        ignore_duplicate_assignments=ignore_duplicate_assignments
+                        ), axis=1
+                    )
+                col_with_id_ref = col_with_id_ref.apply(func=lambda x: f"2-{x}")
+
+                # check that the reference_name exists inside the column
+                assert np.any(col_with_id_ref == f"2-{reference_name}"), f"reference_name '{reference_name}' not found under reference_key '{ref_annotation_key}'."
+
+                # add column to obs
+                adata_ref.obs[comb_col_name] = col_with_id_ref
+
+            # collect data
+            adata_ref_concat.append(adata_ref)
+
+            # collect sample ids
+            sample_ids_ref_list.append(rd.sample_id)
+
+        if len(adata_ref_concat) > 1:
+            adata_ref = anndata.concat(adata_ref_concat)
+
+            # check for duplicated ids
+            duplicated_ids = adata_ref.obs_names.duplicated()
+            if duplicated_ids.any():
+                print("Duplicated `obs_names` found in reference data. Removing duplicates.")
+                adata_ref = adata_ref[~duplicated_ids]
+        else:
+            adata_ref = adata_ref_concat[0]
+
+        sample_ids_ref = ", ".join(sample_ids_ref_list)
 
         if data_annotation_tuple is None and ref_annotation_tuple is None:
-            adata1.obs[comb_col_name]="adata1"
-            adata2.obs[comb_col_name]="adata2"
+            adata_data.obs[comb_col_name]="adata_data"
+            adata_ref.obs[comb_col_name]="adata_ref"
 
         # combine anndatas
-        adata_combined = anndata.concat([adata1, adata2])
+        adata_combined = anndata.concat([adata_data, adata_ref])
 
         # create settings for rank_genes_groups
         if data_annotation_tuple is not None and ref_annotation_tuple is not None:
@@ -2247,13 +2280,14 @@ def differential_gene_expression(
         if title is None:
             # create plot title for later
             if data_annotation_tuple is not None and ref_annotation_tuple is not None:
-                plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {ref_data.sample_id}"
+                plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {sample_ids_ref}"
             if data_annotation_tuple is None and ref_annotation_tuple is None:
-                plot_title = f"{data.sample_id} vs.{ref_data.sample_id}"
+                plot_title = f"{data.sample_id} vs. {sample_ids_ref}"
         else:
             plot_title = title
     else:
-        adata_combined = adata1
+        # if ref_data is None
+        adata_combined = adata_data
         rgg_groups = [annotation_name]
         rgg_reference = reference_name
 
@@ -2265,6 +2299,7 @@ def differential_gene_expression(
     if obs_tuple is not None:
         # filter for observation value
         adata_combined = adata_combined[adata_combined.obs[obs_tuple[0]] == obs_tuple[1]].copy()
+
         if data_annotation_tuple is None and ref_annotation_tuple is None:
             rgg_groups = list(adata_combined.obs[comb_col_name].unique())
             #rgg_reference=ref_data.sample_id
@@ -2281,6 +2316,7 @@ def differential_gene_expression(
         # add column to .obs for its use in rank_genes_groups()
         adata_combined.obs = adata_combined.obs.filter([comb_col_name]) # empty obs
         #adata_combined.obs[comb_col_name] = adata_combined.obsm["annotations"][comb_col_name]
+
         print(f"Calculate differentially expressed genes with Scanpy's `rank_genes_groups` using '{method}'.")
         sc.tl.rank_genes_groups(adata=adata_combined,
                                 groupby=comb_col_name,
