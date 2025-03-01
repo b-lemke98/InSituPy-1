@@ -11,30 +11,7 @@ Currently the analysis is focused on data from the [_Xenium In Situ_](https://ww
 
 *!!!Warning: This repository is under very active development and it cannot be guaranteed that releases contain changes that might impair backwards compatibility. If you observe any such thing, please feel free to contact us to solve the problem. Thanks!*
 
-### Update to `0.6.3`
-
-* fix bug in `ShapesData.crop()`
-* add `plot_qc_metrices` function and show how to determine the filtering threshold in analysis demo notebook
-
-### Update to `0.6.2`
-* Transcripts are loaded now as dask dataframes instead of pandas dataframes. This makes loading of the transcript data much faster! In case this leads to bugs in other functionalities, please let me know!
-* fixing bugs in "build from scratch" demo
-* add saving possibility to `plot_overview()`
-
-### Update to `0.6.1`
-* Changed reading logic of `cell_names` in `BoundariesData`: this might lead to issues with backward compatibility but generalizes the reading of boundaries data opening it for other technologies.
-* Adapt viewer for smaller screens
-* Revised automated registration pipeline:
-  * Fixed issue with large multiplexed IF images.
-  * Area dependent number of minimum matches to make registration pipeline also work on small images.
-* add registration demo notebook for pancreas data
-* by default remove history of variable data when calling `.save()`
-
-### Update to `0.5.0`
-#### Major changes in reading/loading logic!
-This might conflict with the backwards compatibility of this version! If there are issues with loading reading `InSituPy` projects saved with older version, please let me know to find workarounds!
-* Reduced focus on Xenium method in data structure
-* `InSituData.read()` substitutes `read_xenium` for reading of `InSituPy` projects. `read_xenium` used now to read data from Xenium data folders
+For the latest developments check out the [releases](https://github.com/SpatialPathology/InSituPy/releases).
 
 ## Installation
 
