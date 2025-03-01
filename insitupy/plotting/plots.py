@@ -138,7 +138,7 @@ def plot_cellular_composition(
     # calculate compositions
     compositions = {}
     for cat in cats:
-        idx = assignment_series[assignment_series.str.contains(cat)].index
+        idx = assignment_series[assignment_series == cat].index
         compositions[cat] = adata.obs[cell_type_col].loc[idx].value_counts(normalize=True) * 100 # calculate percentage
     compositions = pd.DataFrame(compositions)
 
