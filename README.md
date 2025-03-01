@@ -35,7 +35,7 @@ For the latest developments check out the [releases](https://github.com/SpatialP
 1. **Clone the repository to your local machine:**
 
    ```bash
-   git clone https://github.com/jwrth/InSituPy.git
+   git clone https://github.com/SpatialPathology/InSituPy.git
    ```
 
 2. **Navigate to the cloned repository and select the right branch:**
@@ -63,7 +63,7 @@ For the latest developments check out the [releases](https://github.com/SpatialP
 
    ```bash
    # for installation without napari use
-   pip install git+https://github.com/jwrth/InSituPy.git
+   pip install git+https://github.com/SpatialPathology/InSituPy.git
    ```
 
 Make sure you have Conda installed on your system before proceeding with these steps. If not, you can install Miniconda or Anaconda from [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html).
