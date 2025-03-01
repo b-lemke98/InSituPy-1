@@ -25,15 +25,18 @@ if WITH_NAPARI:
     import napari
     from napari.types import LayerDataTuple
 
-    def _add_annotations_as_layer(
+    def _add_geometries_as_layer(
         dataframe: pd.DataFrame,
         viewer: napari.Viewer,
         layer_name: str,
         #scale_factor: Union[Tuple, List, np.ndarray],
+        edge_width: Number = 10, # µm
+        opacity: float = 1,
         rgb_color: Optional[Tuple] = None,
         show_names: bool = False,
         allow_duplicate_layers: bool = False,
-        mode: Literal["Annotations", "Regions"] = "Annotations"
+        mode: Literal["Annotations", "Regions"] = "Annotations",
+        tolerance: Number = 5
         ):
 
         # list to store information on shapes
@@ -87,6 +90,8 @@ if WITH_NAPARI:
 
             if annotation_type == "polygon_like":
                 for p in data:
+                    # simplify polygon for visualization
+                    p = p.simplify(tolerance)
                     # extract exterior coordinates from shapely object
                     # Note: the last coordinate is removed since it is identical with the first
                     # in shapely objects, leading sometimes to visualization bugs in napari
@@ -182,9 +187,10 @@ if WITH_NAPARI:
                     name=layer_name_with_symbol,
                     properties=properties_dict,
                     shape_type=shape_type_list,
-                    edge_width=10, # µm
+                    edge_width=edge_width, # µm
                     edge_color=color_list["Shapes"],
                     face_color='transparent',
+                    opacity=opacity,
                     #scale=scale_factor,
                     text=text_dict
                     )

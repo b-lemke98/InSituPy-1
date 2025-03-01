@@ -75,7 +75,7 @@ if WITH_NAPARI:
     from napari.layers import Layer, Points, Shapes
 
     #from napari.layers.shapes.shapes import Shapes
-    from ._layers import _add_annotations_as_layer
+    from ._layers import _add_geometries_as_layer
     from ._widgets import _initialize_widgets, add_new_geometries_widget
 
 
