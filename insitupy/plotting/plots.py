@@ -76,7 +76,7 @@ def plot_cellular_composition(
     cell_type_col: str,
     key: str,
     modality: Literal["regions", "annotations"] = "regions",
-    plot_type: Literal["pie", "bar"] = "pie",
+    plot_type: Literal["pie", "bar", "barh"] = "barh",
     force_assignment: bool = False,
     max_cols: int = 4,
     savepath: Union[str, os.PathLike, Path] = None,
@@ -177,12 +177,24 @@ def plot_cellular_composition(
         # Add a legend
         fig.legend(wedges, compositions.index, loc='center left', bbox_to_anchor=(0.92, 0.5))
 
-    elif plot_type == "bar":
+    elif plot_type in ["bar", "barh"]:
         # Plot a single stacked bar plot
-        compositions.T.plot(kind='bar', stacked=True, figsize=(1*len(cats), 6), width=0.7, color=DEFAULT_CATEGORICAL_CMAP.colors)
-        plt.title('Proportions of Cell Types by Area')
-        plt.ylabel('%')
-        plt.xlabel('Area')
+        if plot_type == "bar":
+            fig_width = 1*len(cats)
+            fig_height = 6
+            ylabel = "%"
+            xlabel = modality
+        else:
+            fig_width = 6
+            fig_height = 1*len(cats)
+            ylabel = modality
+            xlabel = "%"
+        compositions.T.plot(kind=plot_type, stacked=True, figsize=(fig_width, fig_height),
+                            width=0.7,
+                            color=DEFAULT_CATEGORICAL_CMAP.colors)
+        plt.title('Cell type composition')
+        plt.ylabel(ylabel)
+        plt.xlabel(xlabel)
         plt.legend(title='Cell Types', bbox_to_anchor=(1.05, 1), loc='upper left')
 
     save_and_show_figure(savepath=savepath, fig=plt.gcf(), save_only=save_only, dpi_save=dpi_save, tight=False)
