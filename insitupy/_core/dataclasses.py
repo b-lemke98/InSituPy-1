@@ -979,8 +979,26 @@ class MultiCellData(DeepCopyMixin):
                    key: str = "proseg",
                    is_main: bool = False
                    ):
-        counts = pd.read_csv(path_counts)
-        meta = pd.read_csv(path_metadata)
+        
+        path_counts = str(path_counts)
+        path_metadata = str(path_metadata)
+        
+        if path_counts.endswith(".parquet"):
+            counts = pd.read_parquet(path_counts)
+        elif path_counts.endswith("csv.gz"):
+            counts = pd.read_csv(path_counts, compression='gzip')
+        else:
+            counts = pd.read_csv(path_counts)
+
+        if path_metadata.endswith(".parquet"):
+            meta = pd.read_parquet(path_metadata)
+        elif path_metadata.endswith("csv.gz"):
+            meta = pd.read_csv(path_metadata, compression='gzip')
+        else:
+            meta = pd.read_csv(path_metadata)
+
+        counts.index = counts.index.astype(str)
+        meta.index = meta.index.astype(str)
 
         counts = counts.loc[:, ~counts.columns.str.startswith('Neg')]
         counts = counts.loc[:, ~counts.columns.str.startswith('Unas')]
@@ -1005,9 +1023,9 @@ class MultiCellData(DeepCopyMixin):
         img = rasterize(list(zip(baysor_polygons["geometry"], baysor_polygons["cell"])), out_shape=(ymax,xmax))
         img = da.from_array(img)
 
-        cell_ids = da.from_array(adata.obs["cell"].values) # extract cell ids from adata
+        cell_ids = da.from_array(adata.obs["cell"].values)
         seg_mask_value = da.from_array(sorted(baysor_polygons["cell"]))
-        boundaries = BoundariesData(cell_ids=cell_ids, seg_mask_value=seg_mask_value)
+        boundaries = BoundariesData(cell_names=cell_ids, seg_mask_value=seg_mask_value)
         boundaries.add_boundaries(data={f"cellular": img}, pixel_size=pixel_size)
         celldata = CellData(matrix=adata, boundaries=boundaries)
         self.add_celldata(cd=celldata, key=key, is_main=is_main)
