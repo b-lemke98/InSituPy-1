@@ -261,7 +261,7 @@ class InSituExperiment:
             data_annotation_tuple: Optional[Tuple[str, str]] = None, # tuple of annotation key and names
             ref_id: Optional[Union[int, List[int], Literal["rest"]]] = None,
             ref_annotation_tuple: Optional[Union[Literal["rest"], Tuple[str, str]]] = None,
-            obs_tuple: Optional[Tuple[str, str]] = None,
+            cell_type_tuple: Optional[Tuple[str, str]] = None,
             region_tuple: Optional[Tuple[str, str]] = None,
             plot_volcano: bool = True,
             method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
@@ -287,7 +287,7 @@ class InSituExperiment:
             data_annotation_tuple (Tuple[str, str]): Tuple containing the annotation key and name for the primary data.
             ref_id (Optional[Union[int, List[int], Literal["rest"]]]): Identifier or list of identifiers for the reference dataset within the `InSituExperiment` object.
             ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
-            obs_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
+            cell_type_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
             region_tuple (Optional[Tuple[str, str]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
             plot_volcano (bool, optional): Whether to generate a volcano plot of the results. Defaults to True.
             method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']], optional): Statistical method to use for differential expression analysis. Defaults to 't-test'.
@@ -359,8 +359,8 @@ class InSituExperiment:
 
         # create title if necessary
         if title is None:
-            if obs_tuple is not None:
-                cell_title_part = f"\n{obs_tuple[0]}: {obs_tuple[1]}"
+            if cell_type_tuple is not None:
+                cell_title_part = f"\n{cell_type_tuple[0]}: {cell_type_tuple[1]}"
             else:
                 cell_title_part = ""
             title = f"{data_annot_name}{data_name} vs. {ref_annot_name}{ref_name}{cell_title_part}"
@@ -370,7 +370,7 @@ class InSituExperiment:
             ref_data=ref_data,
             data_annotation_tuple=data_annotation_tuple,
             ref_annotation_tuple=ref_annotation_tuple,
-            obs_tuple=obs_tuple,
+            cell_type_tuple=cell_type_tuple,
             region_tuple=region_tuple,
             plot_volcano=plot_volcano,
             method=method,

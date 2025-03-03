@@ -48,7 +48,7 @@ from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_celldata, read_shapesdata)
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting import volcano_plot
-from insitupy.utils.deg import create_deg_dataframe
+from insitupy.utils.dge import create_deg_dataframe
 from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
                                           reduce_dimensions_anndata)
 from insitupy.utils.utils import (_crop_transcripts, convert_to_list,
@@ -2069,9 +2069,11 @@ def calc_distance_of_cells_from(
 def differential_gene_expression(
     data: InSituData,
     data_annotation_tuple: Optional[Tuple[str, str]] = None,
+    data_cell_type_tuple: Optional[Tuple[str, str]] = None,
     ref_data: Optional[Union[InSituData, List[InSituData]]] = None,
     ref_annotation_tuple: Optional[Union[Literal["rest"], Tuple[str, str]]] = None,
-    obs_tuple: Optional[Tuple[str, str]] = None,
+    ref_cell_type_tuple: Optional[Tuple[str, str]] = None,
+    #cell_type_tuple: Optional[Tuple[str, str]] = None,
     region_tuple: Optional[Tuple[str, str]] = None,
     plot_volcano: bool = True,
     method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
@@ -2095,7 +2097,7 @@ def differential_gene_expression(
         data_annotation_tuple (Tuple[str, str]): Tuple containing the annotation key and name.
         ref_data (Optional[InSituData], optional): Reference in situ data object for comparison. Defaults to None.
         ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
-        obs_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
+        cell_type_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
         region_tuple (Optional[Tuple[str, str]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
         plot_volcano (bool, optional): Whether to generate a volcano plot of the results. Defaults to True.
         method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']], optional): Statistical method to use for differential expression analysis. Defaults to 't-test'.
@@ -2128,41 +2130,84 @@ def differential_gene_expression(
     """
 
     comb_col_name = "combined_annotation_column"
+    # comparable_modalities = ["datasets", "annotations", "cell_types"]
 
-    # extract annotation information
-    if data_annotation_tuple is None:
-        assert ref_annotation_tuple is None, "If `data_annotation_tuple` is None, `ref_annotation_tuple` must be None."
-        annotation_key = None
-        annotation_name = None
-    else:
-        if ref_data is None:
-            assert ref_annotation_tuple is not None, "If `ref_data` is None and `data_annotation_tuple` is not None, `ref_annotation_tuple` must not be None."
-        annotation_key = data_annotation_tuple[0]
-        annotation_name = data_annotation_tuple[1]
+    # config_dict = {
+    #     "datasets": {"data": None, "reference": None},
+    #     "annotations": {"data": None, "reference": None},
+    #     "cell_types": {"data": None, "reference": None},
+    #     "regions": {"data": None, "reference": None}
+    #     }
 
-    # extract information from reference tuple (added if re_annotation_tuple is None)
-    if ref_annotation_tuple == "rest":
-        assert ref_data is None, "If `reference_tuple` is 'rest', `reference_data` must be None."
-        ref_annotation_key = None
-        reference_name = "rest"
-    elif isinstance(ref_annotation_tuple, tuple) and (len(ref_annotation_tuple) == 2):
-        ref_annotation_key = ref_annotation_tuple[0]
-        reference_name = ref_annotation_tuple[1]
-    elif ref_annotation_tuple == None:
-        ref_annotation_key = None
-        reference_name = None
-    else:
-        raise ValueError("`reference_tuple` is neither 'rest' nor a 2-tuple.")
+    # Check which type of comparisons will be done
+    # set dataset configuration
+    if ref_data is not None:
+        config_dict["datasets"]["compare"] = True
 
-    # check if the annotations in data and reference nceed to be checked
-    if annotation_key is not None:
-        _check_assignment(data=data, key=annotation_key, force_assignment=force_assignment, modality="annotations")
+    # # set annotation configuration
+    # if data_annotation_tuple is None:
+    #     if ref_annotation_tuple is not None:
+    #         raise ValueError("If `data_annotation_tuple` is None, `ref_annotation_tuple` must be None.")
+    #     else:
+    #         data_annotation_key = None
+    #         data_annotation_name = None
+    # else:
+    #     data_annotation_key = data_annotation_tuple[0]
+    #     data_annotation_name = data_annotation_tuple[1]
+        # config_dict["annotations"]["select"] = True
+    if ref_annotation_tuple is not None:
+        # config_dict["annotations"]["compare"] = True
 
-    # check if the reference needs to be checked
-    check_reference_during_substitution = True if ref_data is None else False
+        # extract information from tuple
+        if ref_annotation_tuple == "rest":
+            if not ref_data is None:
+                raise ValueError("If `reference_tuple` is 'rest', `reference_data` must be None.")
+            # ref_annotation_key = None
+            # ref_annotation_name = "rest"
+        else:
+            if not isinstance(ref_annotation_tuple, tuple):
+                raise ValueError(f"Unknown type of ref_annotation_tuple: {type(ref_annotation_tuple)}. Must be either tuple, 'rest' or None.")
+        # elif isinstance(ref_annotation_tuple, tuple):
+        #     ref_annotation_key = ref_annotation_tuple[0]
+        #     ref_annotation_name = ref_annotation_tuple[1]
+    # else:
+    #     ref_annotation_key = None
+    #     ref_annotation_name = None
 
-    if region_tuple is not None:
-        assert ref_data is None, "If `region_tuple` is given, `reference_data` must be None."
+    # # set cell type configuration
+    # if data_cell_type_tuple is None:
+    #     if ref_cell_type_tuple is not None:
+    #         raise ValueError("If `data_cell_type_tuple` is None, `ref_cell_type_tuple` must be None.")
+    # else:
+    #     config_dict["cell_types"]["select"] = True
+    #     if ref_cell_type_tuple is not None:
+    #         config_dict["cell_types"]["compare"] = True
+
+    # # set region configuration
+    # if region_tuple is not None:
+    #     config_dict["regions"]["select"] = True
+
+    # # check if the current configuration is allowed
+    # if not np.any([config_dict[m]["compare"] for m in comparable_modalities]):
+    #     raise ValueError("No comparison planned. At least one comparison must be planned.")
+
+
+
+
+
+    # # check if the annotations in data and reference needs to be checked
+    # if data_annotation_key is not None:
+    #     _check_assignment(data=data, key=data_annotation_key, force_assignment=force_assignment, modality="annotations")
+
+    # check if the reference needs to be checked for duplicate assignments
+    # only needs to be done if there is no reference data and therefore a cell could be within the same annotation
+    check_for_duplicate_assignment = True if ref_data is None else False
+
+    # extract main anndata
+    adata_data = data.cells.matrix.copy()
+
+    if config_dict["regions"]["select"]:
+        #assert ref_data is None, "If `region_tuple` is given, `reference_data` must be None."
 
         region_key = region_tuple[0]
         region_name = region_tuple[1]
@@ -2170,10 +2215,6 @@ def differential_gene_expression(
         # assign region
         _check_assignment(data=data, key=region_key, force_assignment=force_assignment, modality="regions")
 
-    # extract main anndata
-    adata_data = data.cells.matrix.copy()
-
-    if region_tuple is not None:
         # select only one region
         region_mask = [region_name in elem for elem in adata_data.obsm["regions"][region_key]]
         assert np.any(region_mask), f"Region '{region_name}' not found in key '{region_key}'."
@@ -2181,20 +2222,20 @@ def differential_gene_expression(
         print(f"Restrict analysis to region '{region_name}' from key '{region_key}'.", flush=True)
         adata_data = adata_data[region_mask].copy()
 
-    if data_annotation_tuple is not None:
+    if compare_annotations:
         col_with_id = adata_data.obsm["annotations"].apply(
             func=lambda row: _substitution_func(
                 row=row,
-                annotation_key=annotation_key,
-                annotation_name=annotation_name,
-                reference_name=reference_name,
-                check_reference=check_reference_during_substitution,
+                annotation_key=data_annotation_key,
+                annotation_name=data_annotation_name,
+                reference_name=ref_annotation_name,
+                check_reference=check_for_duplicate_assignment,
                 ignore_duplicate_assignments=ignore_duplicate_assignments
                 ), axis=1
             )
 
         # check that the annotation_name exists inside the column
-        assert np.any(col_with_id == annotation_name), f"annotation_name '{annotation_name}' not found under annotation_key '{annotation_key}'."
+        assert np.any(col_with_id == data_annotation_name), f"annotation_name '{data_annotation_name}' not found under annotation_key '{data_annotation_key}'."
 
         # mark the annotations with 1 or 2 depending if it is adata1 or adata2
         if ref_data is not None:
@@ -2204,7 +2245,7 @@ def differential_gene_expression(
         # add the column to obs
         adata_data.obs[comb_col_name] = col_with_id
 
-    if ref_data is not None:
+    if compare_two_datasets:
         if isinstance(ref_data, InSituData):
             # generate a list from ref_data
             ref_data = [ref_data]
@@ -2232,16 +2273,16 @@ def differential_gene_expression(
                     func=lambda row: _substitution_func(
                         row=row,
                         annotation_key=ref_annotation_key,
-                        annotation_name=reference_name,
+                        annotation_name=ref_annotation_name,
                         reference_name=None,
-                        check_reference=check_reference_during_substitution,
+                        check_reference=check_for_duplicate_assignment,
                         ignore_duplicate_assignments=ignore_duplicate_assignments
                         ), axis=1
                     )
                 col_with_id_ref = col_with_id_ref.apply(func=lambda x: f"2-{x}")
 
                 # check that the reference_name exists inside the column
-                assert np.any(col_with_id_ref == f"2-{reference_name}"), f"reference_name '{reference_name}' not found under reference_key '{ref_annotation_key}'."
+                assert np.any(col_with_id_ref == f"2-{ref_annotation_name}"), f"reference_name '{ref_annotation_name}' not found under reference_key '{ref_annotation_key}'."
 
                 # add column to obs
                 adata_ref.obs[comb_col_name] = col_with_id_ref
@@ -2274,13 +2315,13 @@ def differential_gene_expression(
 
         # create settings for rank_genes_groups
         if data_annotation_tuple is not None and ref_annotation_tuple is not None:
-            rgg_groups = [f"1-{annotation_name}"]
-            rgg_reference = f"2-{reference_name}"
+            rgg_groups = [f"1-{data_annotation_name}"]
+            rgg_reference = f"2-{ref_annotation_name}"
 
         if title is None:
             # create plot title for later
             if data_annotation_tuple is not None and ref_annotation_tuple is not None:
-                plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {sample_ids_ref}"
+                plot_title = f"'{data_annotation_name}' in {data.sample_id} vs. '{ref_annotation_name}' in {sample_ids_ref}"
             if data_annotation_tuple is None and ref_annotation_tuple is None:
                 plot_title = f"{data.sample_id} vs. {sample_ids_ref}"
         else:
@@ -2288,17 +2329,17 @@ def differential_gene_expression(
     else:
         # if ref_data is None
         adata_combined = adata_data
-        rgg_groups = [annotation_name]
-        rgg_reference = reference_name
+        rgg_groups = [data_annotation_name]
+        rgg_reference = ref_annotation_name
 
         if title is None:
-            plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {data.sample_id}"
+            plot_title = f"'{data_annotation_name}' in {data.sample_id} vs. '{ref_annotation_name}' in {data.sample_id}"
         else:
             plot_title = title
 
-    if obs_tuple is not None:
+    if cell_type_tuple is not None:
         # filter for observation value
-        adata_combined = adata_combined[adata_combined.obs[obs_tuple[0]] == obs_tuple[1]].copy()
+        adata_combined = adata_combined[adata_combined.obs[cell_type_tuple[0]] == cell_type_tuple[1]].copy()
 
         if data_annotation_tuple is None and ref_annotation_tuple is None:
             rgg_groups = list(adata_combined.obs[comb_col_name].unique())

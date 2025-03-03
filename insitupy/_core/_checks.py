@@ -169,7 +169,7 @@ def _substitution_func(
     row,
     annotation_key,
     annotation_name,
-    check_reference,
+    check_for_duplicate_assignment_of_reference,
     reference_name=None,
     ignore_duplicate_assignments=False
     ):
@@ -180,7 +180,7 @@ def _substitution_func(
     try:
         split_name = elem.split(" & ")
         if annotation_name in split_name:
-            if check_reference:
+            if check_for_duplicate_assignment_of_reference:
                 if reference_name in split_name:
                     if not ignore_duplicate_assignments:
                         raise ValueError(f"Cell '{row.name}' was found to belong to both the annotation and the reference. To ignore this and use only the annotation assignment, use `ignore_duplicate_assignments=True`. Assignment that was found is: {elem}")
