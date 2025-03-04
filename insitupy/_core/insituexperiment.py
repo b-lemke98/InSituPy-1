@@ -258,14 +258,15 @@ class InSituExperiment:
 
     def dge(self,
             data_id: int,
-            data_annotation_tuple: Optional[Tuple[str, str]] = None, # tuple of annotation key and names
             ref_id: Optional[Union[int, List[int], Literal["rest"]]] = None,
-            ref_annotation_tuple: Optional[Union[Literal["rest"], Tuple[str, str]]] = None,
-            cell_type_tuple: Optional[Tuple[str, str]] = None,
+            data_annotation_tuple: Optional[Tuple[str, str]] = None,
+            data_cell_type_tuple: Optional[Tuple[str, str]] = None,
+            ref_annotation_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
+            ref_cell_type_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
             region_tuple: Optional[Tuple[str, str]] = None,
             plot_volcano: bool = True,
             method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
-            ignore_duplicate_assignments: bool = False,
+            exclude_ambiguous_assignments: bool = False,
             force_assignment: bool = False,
             name_col: str = "sample_id",
             title: Optional[str] = None,
@@ -339,42 +340,44 @@ class InSituExperiment:
             ref_data = None
             ref_name = data_name
 
-        if data_annotation_tuple is None:
-            data_annot_name = ""
-        elif isinstance(data_annotation_tuple, tuple):
-            data_annot_name = f"'{data_annotation_tuple[1]}' in "
-        elif data_annotation_tuple == "rest":
-            data_annot_name = f"'{data_annotation_tuple}' in "
-        else:
-            raise ValueError(f"Argument `data_annotation_tuple` has to be either tuple, 'rest' or None. Instead: {data_annotation_tuple}")
+        # if data_annotation_tuple is None:
+        #     data_annot_name = ""
+        # elif isinstance(data_annotation_tuple, tuple):
+        #     data_annot_name = f"'{data_annotation_tuple[1]}' in "
+        # elif data_annotation_tuple == "rest":
+        #     data_annot_name = f"'{data_annotation_tuple}' in "
+        # else:
+        #     raise ValueError(f"Argument `data_annotation_tuple` has to be either tuple, 'rest' or None. Instead: {data_annotation_tuple}")
 
-        if ref_annotation_tuple is None:
-            ref_annot_name = ""
-        elif isinstance(ref_annotation_tuple, tuple):
-            ref_annot_name = f"'{ref_annotation_tuple[1]}' in "
-        elif ref_annotation_tuple == "rest":
-            ref_annot_name = f"'{ref_annotation_tuple}' in "
-        else:
-            raise ValueError(f"Argument `ref_annotation_tuple` has to be either tuple, 'rest' or None. Instead: {ref_annotation_tuple}")
+        # if ref_annotation_tuple is None:
+        #     ref_annot_name = ""
+        # elif isinstance(ref_annotation_tuple, tuple):
+        #     ref_annot_name = f"'{ref_annotation_tuple[1]}' in "
+        # elif ref_annotation_tuple == "rest":
+        #     ref_annot_name = f"'{ref_annotation_tuple}' in "
+        # else:
+        #     raise ValueError(f"Argument `ref_annotation_tuple` has to be either tuple, 'rest' or None. Instead: {ref_annotation_tuple}")
 
-        # create title if necessary
-        if title is None:
-            if cell_type_tuple is not None:
-                cell_title_part = f"\n{cell_type_tuple[0]}: {cell_type_tuple[1]}"
-            else:
-                cell_title_part = ""
-            title = f"{data_annot_name}{data_name} vs. {ref_annot_name}{ref_name}{cell_title_part}"
+        # # create title if necessary
+        # if title is None:
+        #     if cell_type_tuple is not None:
+        #         cell_title_part = f"\n{cell_type_tuple[0]}: {cell_type_tuple[1]}"
+        #     else:
+        #         cell_title_part = ""
+        #     title = f"{data_annot_name}{data_name} vs. {ref_annot_name}{ref_name}{cell_title_part}"
+        title = f"{data_name} vs. {ref_name}"
 
         dge_res = differential_gene_expression(
             data=data,
             ref_data=ref_data,
             data_annotation_tuple=data_annotation_tuple,
+            data_cell_type_tuple=data_cell_type_tuple,
             ref_annotation_tuple=ref_annotation_tuple,
-            cell_type_tuple=cell_type_tuple,
+            ref_cell_type_tuple=ref_cell_type_tuple,
             region_tuple=region_tuple,
             plot_volcano=plot_volcano,
             method=method,
-            ignore_duplicate_assignments=ignore_duplicate_assignments,
+            exclude_ambiguous_assignments=exclude_ambiguous_assignments,
             force_assignment=force_assignment,
             title = title,
             savepath = savepath,
