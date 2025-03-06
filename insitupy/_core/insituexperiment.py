@@ -257,13 +257,14 @@ class InSituExperiment:
         return deepcopy(self)
 
     def dge(self,
-            data_id: int,
+            target_id: int,
             ref_id: Optional[Union[int, List[int], Literal["rest"]]] = None,
-            data_annotation_tuple: Optional[Tuple[str, str]] = None,
-            data_cell_type_tuple: Optional[Tuple[str, str]] = None,
+            target_annotation_tuple: Optional[Tuple[str, str]] = None,
+            target_cell_type_tuple: Optional[Tuple[str, str]] = None,
+            target_region_tuple: Optional[Tuple[str, str]] = None,
             ref_annotation_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
             ref_cell_type_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
-            region_tuple: Optional[Tuple[str, str]] = None,
+            ref_region_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
             plot_volcano: bool = True,
             method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
             exclude_ambiguous_assignments: bool = False,
@@ -284,30 +285,33 @@ class InSituExperiment:
         a single InSituData object or between two InSituData objects.
 
         Args:
-            data_id (int): Identifier for the primary dataset within the `InSituExperiment` object.
-            data_annotation_tuple (Tuple[str, str]): Tuple containing the annotation key and name for the primary data.
-            ref_id (Optional[Union[int, List[int], Literal["rest"]]]): Identifier or list of identifiers for the reference dataset within the `InSituExperiment` object.
-            ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
-            cell_type_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
-            region_tuple (Optional[Tuple[str, str]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
+            target_id (int): Index for the target dataset in the `InSituExperiment` object.
+            ref_id (Optional[Union[int, List[int], Literal["rest"]]]): Index or list of indices for the reference dataset in the `InSituExperiment` object.
+            target_annotation_tuple (Optional[Tuple[str, str]]): Tuple containing the annotation key and name for the primary data.
+            target_cell_type_tuple (Optional[Tuple[str, str]]): Tuple specifying an observation key and value to filter the primary data.
+            target_region_tuple (Optional[Tuple[str, str]]): Tuple specifying a region key and name to restrict the analysis to a specific region in the primary data.
+            ref_annotation_tuple (Optional[Union[Literal["rest", "same"], Tuple[str, str]]]): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "same".
+            ref_cell_type_tuple (Optional[Union[Literal["rest", "same"], Tuple[str, str]]]): Tuple specifying an observation key and value to filter the reference data. Defaults to "same".
+            ref_region_tuple (Optional[Union[Literal["rest", "same"], Tuple[str, str]]]): Tuple specifying a region key and name to restrict the analysis to a specific region in the reference data. Defaults to "same".
             plot_volcano (bool, optional): Whether to generate a volcano plot of the results. Defaults to True.
             method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']], optional): Statistical method to use for differential expression analysis. Defaults to 't-test'.
-            ignore_duplicate_assignments (bool, optional): Whether to ignore duplicate assignments in the data. Defaults to False.
+            exclude_ambiguous_assignments (bool, optional): Whether to exclude ambiguous assignments in the data. Defaults to False.
             force_assignment (bool, optional): Whether to force assignment of annotations and regions. Defaults to False.
             name_col (str, optional): Column name in metadata to use for naming samples. Defaults to "sample_id".
             title (Optional[str], optional): Title for the volcano plot. If not provided, a title is generated based on the data and reference names. Defaults to None.
-            savepath (Union[str, os.PathLike, Path], optional): Path to save the plot (default is None).
-            save_only (bool): If True, only save the plot without displaying it (default is False).
-            dpi_save (int): Dots per inch (DPI) for saving the plot (default is 300).
+            savepath (Union[str, os.PathLike, Path], optional): Path to save the plot. Defaults to None.
+            save_only (bool): If True, only save the plot without displaying it. Defaults to False.
+            dpi_save (int): Dots per inch (DPI) for saving the plot. Defaults to 300.
+            **kwargs: Additional keyword arguments to pass to the `differential_gene_expression` function.
 
         Returns:
             None
 
         Example:
             >>> analysis.dge(
-                    data_id=1,
+                    target_id=1,
                     ref_id=2,
-                    data_annotation_tuple=("cell_type", "neuron"),
+                    target_annotation_tuple=("cell_type", "neuron"),
                     ref_annotation_tuple=("cell_type", "astrocyte"),
                     plot_volcano=True,
                     method='wilcoxon'
@@ -315,66 +319,40 @@ class InSituExperiment:
         """
 
         # get data and extract information about experiment
-        data = self.data[data_id]
-        data_name = self.metadata.loc[data_id, name_col]
+        target = self.data[target_id]
+        target_name = self.metadata.loc[target_id, name_col]
 
         if ref_id is not None:
             if ref_id == "rest":
-                ref_data = [d for i, (m, d) in enumerate(self.iterdata()) if i != data_id]
-                ref_name = [m[name_col] for i, (m, d) in enumerate(self.iterdata()) if i != data_id]
+                ref = [d for i, (m, d) in enumerate(self.iterdata()) if i != target_id]
+                ref_name = [m[name_col] for i, (m, d) in enumerate(self.iterdata()) if i != target_id]
                 ref_name = ", ".join(ref_name)
 
             elif isinstance(ref_id, int):
-                ref_data = self.data[ref_id]
+                ref = self.data[ref_id]
                 ref_name = self.metadata.loc[ref_id, name_col]
             elif isinstance(ref_id, list):
-                ref_data = [self.data[i] for i in ref_id]
+                ref = [self.data[i] for i in ref_id]
                 ref_name = [self.metadata.iloc[i][name_col] for i in ref_id]
                 ref_name = ", ".join(ref_name)
             else:
                 raise ValueError(f"Argument `ref_id` has to be either int, list of int or 'rest'. Instead: {ref_id}")
 
-            # ref_data = self.data[ref_id]
-            # ref_name = self.metadata.loc[ref_id, name_col]
         else:
-            ref_data = None
-            ref_name = data_name
+            ref = None
+            ref_name = target_name
 
-        # if data_annotation_tuple is None:
-        #     data_annot_name = ""
-        # elif isinstance(data_annotation_tuple, tuple):
-        #     data_annot_name = f"'{data_annotation_tuple[1]}' in "
-        # elif data_annotation_tuple == "rest":
-        #     data_annot_name = f"'{data_annotation_tuple}' in "
-        # else:
-        #     raise ValueError(f"Argument `data_annotation_tuple` has to be either tuple, 'rest' or None. Instead: {data_annotation_tuple}")
-
-        # if ref_annotation_tuple is None:
-        #     ref_annot_name = ""
-        # elif isinstance(ref_annotation_tuple, tuple):
-        #     ref_annot_name = f"'{ref_annotation_tuple[1]}' in "
-        # elif ref_annotation_tuple == "rest":
-        #     ref_annot_name = f"'{ref_annotation_tuple}' in "
-        # else:
-        #     raise ValueError(f"Argument `ref_annotation_tuple` has to be either tuple, 'rest' or None. Instead: {ref_annotation_tuple}")
-
-        # # create title if necessary
-        # if title is None:
-        #     if cell_type_tuple is not None:
-        #         cell_title_part = f"\n{cell_type_tuple[0]}: {cell_type_tuple[1]}"
-        #     else:
-        #         cell_title_part = ""
-        #     title = f"{data_annot_name}{data_name} vs. {ref_annot_name}{ref_name}{cell_title_part}"
-        title = f"{data_name} vs. {ref_name}"
+        title = f"{target_name} vs. {ref_name}"
 
         dge_res = differential_gene_expression(
-            data=data,
-            ref_data=ref_data,
-            data_annotation_tuple=data_annotation_tuple,
-            data_cell_type_tuple=data_cell_type_tuple,
+            target=target,
+            ref=ref,
+            target_annotation_tuple=target_annotation_tuple,
+            target_cell_type_tuple=target_cell_type_tuple,
+            target_region_tuple=target_region_tuple,
             ref_annotation_tuple=ref_annotation_tuple,
             ref_cell_type_tuple=ref_cell_type_tuple,
-            region_tuple=region_tuple,
+            ref_region_tuple=ref_region_tuple,
             plot_volcano=plot_volcano,
             method=method,
             exclude_ambiguous_assignments=exclude_ambiguous_assignments,

@@ -240,7 +240,7 @@ class ShapesData(DeepCopyMixin):
             annot_df = new_df
 
             # collect additional variables for reporting
-            new_annotations_added = True # dataframe will be added later
+            new_geometries_added = True # dataframe will be added later
             existing_str = ""
             old_n = 0
             new_n = len(annot_df)
@@ -255,10 +255,10 @@ class ShapesData(DeepCopyMixin):
             new_n = len(annot_df)
 
             # collect additional variables for reporting
-            new_annotations_added = new_n > old_n
+            new_geometries_added = new_n > old_n
             existing_str = "existing "
 
-        if new_annotations_added:
+        if new_geometries_added:
             add = True
             if self._assert_uniqueness:
                 # check if the shapes data for this key is unique (same number of names than indices)

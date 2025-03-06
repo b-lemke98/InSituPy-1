@@ -192,6 +192,7 @@ def plot_cellular_composition(
         compositions.T.plot(kind=plot_type, stacked=True, figsize=(fig_width, fig_height),
                             width=0.7,
                             color=DEFAULT_CATEGORICAL_CMAP.colors)
+        plt.gca().invert_yaxis()
         plt.title('Cell type composition')
         plt.ylabel(ylabel)
         plt.xlabel(xlabel)
