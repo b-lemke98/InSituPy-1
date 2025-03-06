@@ -1,5 +1,6 @@
 import json
 import os
+from numbers import Number
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -427,3 +428,18 @@ class StringDB:
 
             sdb = StringDB(return_results=False)
             sdb.call_stringdb_network(genes=target_genes, species=organism, prefix=prefix, output_format=output_format, save=True, **kwargs)
+
+
+
+def get_up_down_genes(dge_results,
+                      pval_threshold: Number = 0.05,
+                      logfold_threshold: Number = 1
+                      ):
+    pval_mask = dge_results['pvals'] < pval_threshold
+    lfc_mask_up = dge_results['logfoldchanges'] > logfold_threshold
+    lfc_mask_down = dge_results['logfoldchanges'] < -logfold_threshold
+
+    genes_up = dge_results[lfc_mask_up & pval_mask]['gene'].tolist()
+    genes_down = dge_results[lfc_mask_down & pval_mask]['gene'].tolist()
+
+    return genes_up, genes_down

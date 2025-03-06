@@ -26,7 +26,7 @@ if WITH_NAPARI:
     from magicgui import magic_factory, magicgui
     from magicgui.widgets import FunctionGui
 
-    from ._layers import _add_annotations_as_layer
+    from ._layers import _add_geometries_as_layer
 
     def _initialize_widgets(
         xdata # InSituData object
@@ -350,13 +350,17 @@ if WITH_NAPARI:
                         geom_type={"choices": choices, "label": "Type:"},
                         key={"choices": annot_keys, "label": "Key:"},
                         annot_class={"choices": first_classes, "label": "Class:"},
+                        edge_width={'min': 1, 'max': 40, 'step': 10, 'label': 'Edge width:'},
+                        opacity={'min': 0.0, 'max': 1.0, 'step': 0.1, 'label': 'Opacity:'},
                         show_names={'label': 'Show names'}
                     )
                     def show_geometries_widget(
                         geom_type,
                         key,
                         annot_class,
-                        tolerance: Number = 2,
+                        edge_width: int = 10,
+                        opacity: float = 1,
+                        tolerance: Number = 5,
                         show_names: bool = False
                         ):
 
@@ -387,7 +391,7 @@ if WITH_NAPARI:
                                 class_df = annot_df[annot_df["name"] == cl].copy()
 
                                 # simplify polygons for visualization
-                                class_df["geometry"] = class_df["geometry"].simplify(tolerance)
+                                # class_df["geometry"] = class_df["geometry"].simplify(tolerance)
 
                                 if not "color" in class_df.columns:
                                     # create a RGB color with range 0-255 for this key
@@ -396,14 +400,17 @@ if WITH_NAPARI:
                                     rgb_color = None
 
                                 # add layer to viewer
-                                _add_annotations_as_layer(
+                                _add_geometries_as_layer(
                                     dataframe=class_df,
                                     viewer=viewer,
                                     layer_name=layer_name,
                                     #scale_factor=scale_factor,
+                                    edge_width=edge_width,
+                                    opacity=opacity,
                                     rgb_color=rgb_color,
                                     show_names=show_names,
-                                    mode=geom_type
+                                    mode=geom_type,
+                                    tolerance=tolerance
                                 )
 
                     # connect key change with update function
