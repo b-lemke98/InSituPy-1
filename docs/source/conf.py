@@ -34,3 +34,8 @@ html_theme = 'sphinx_rtd_theme'
 
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
+
+nbsphinx_thumbnails = {
+    'tutorials/01_InSituPy_demo_register_images': 'tutorials/demo_screenshots/common_features.png',
+    'tutorials/07_InSituPy_InSituExperiment': 'tutorials/demo_screenshots/insituexperiment_structure.png',
+}

@@ -26,8 +26,15 @@ Contributions are welcome! If you find any issues or have suggestions for new fe
 ```{toctree}
 ---
 maxdepth: 2
-caption: Contents:
+caption: Main
 ---
 usage
+```
+
+```{toctree}
+---
+maxdepth: 2
+caption: Tutorials
+---
 tutorials
 ```
