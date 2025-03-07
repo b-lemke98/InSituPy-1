@@ -28,6 +28,5 @@ Contributions are welcome! If you find any issues or have suggestions for new fe
 :maxdepth: 2
 
 usage.md
-api.md
-tutorials/
+tutorials
 ```
