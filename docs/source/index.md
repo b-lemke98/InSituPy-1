@@ -22,3 +22,12 @@ Currently the analysis is focused on data from the [_Xenium In Situ_](https://ww
 ## Contributing
 
 Contributions are welcome! If you find any issues or have suggestions for new features, please open an [issue](https://github.com/SpatialPathology/InSituPy/issues) or submit a pull request.
+
+```{toctree}
+:hidden: true
+:maxdepth: 2
+
+usage.md
+api.md
+tutorials/
+```
