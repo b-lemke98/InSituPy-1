@@ -15,9 +15,27 @@ These tutorials focus on the preprocessing, analysis and handling of individual 
 7. [Explore gene expression along axis](notebooks/06_InSituPy_gene_expression_along_axis_pattern.ipynb) - Example cases showing how to correlate gene expression with e.g. the distance to histological annotations.
 8. [Build an `InSituData` object from scratch](notebooks/09_InSituPy_build_objects_from_scratch.ipynb) - General introduction on how to build an `InSituData` object from scratch.
 
+```{nbgallery}
+tutorials/00_InSituPy_demo_datasets.ipynb
+tutorials/01_InSituPy_demo_register_images.ipynb
+tutorials/02_InSituPy_demo_analyze.ipynb
+tutorials/03_InSituPy_demo_annotations.ipynb
+tutorials/04_InSituPy_demo_crop.ipynb
+tutorials/05_InSituPy_cell_type_annotation.ipynb
+tutorials/06_InSituPy_gene_expression_along_axis.ipynb
+tutorials/09_InSituPy_build_objects_from_scratch.ipynb
+tutorials/10_InSituPy_differential_gene_expression_publication.ipynb
+tutorials/XX_InSituPy_extract_individual_images.ipynb
+```
+
 ## Experiment-level analysis
 
 This set of tutorials focuses on
 
 1. [Analyze multiple samples at once with InSituPy](notebooks/07_InSituPy_InSituExperiment.ipynb) - Introduces the main concepts behind the `InSituExperiment` class and how to work with multiple samples at once.
 2. [Differential gene expression analysis](notebooks/08_InSituPy_differential_gene_expression.ipynb) - Perform differential gene expression analysis within one sample and across multiple samples.
+
+```{nbgallery}
+tutorials/07_InSituPy_InSituExperiment.ipynb
+tutorials/08_InSituPy_differential_gene_expression.ipynb
+```
