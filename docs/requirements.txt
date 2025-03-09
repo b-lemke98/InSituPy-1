@@ -3,3 +3,6 @@ sphinx_book_theme
 myst-nb
 myst-parser
 ipython
+sphinx_copybutton
+sphinx_design
+sphinx_autodoc_typehints

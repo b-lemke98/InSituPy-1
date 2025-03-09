@@ -11,16 +11,17 @@ version = "0.6.6" #<<COOKIETEMPLE_FORCE_BUMP>>
 # -- General configuration
 
 extensions = [
-    'sphinx.ext.duration',
-    'sphinx.ext.doctest',
-    'sphinx.ext.autodoc',
-    'sphinx.ext.autosummary',
-    'sphinx.ext.intersphinx',
+    "sphinx.ext.duration",
+    "sphinx.ext.doctest",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx_copybutton",
     "sphinx_autodoc_typehints",
     "sphinx.ext.mathjax",
-    'myst_nb'
+    "sphinx_design", # can be used for things such as cards
+    "myst_nb"
 ]
 
 autosummary_generate = True
