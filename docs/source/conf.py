@@ -16,8 +16,11 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
-    'myst_nb',
-    'nbsphinx'
+    "sphinx.ext.napoleon",
+    "sphinx_copybutton",
+    "sphinx_autodoc_typehints",
+    "sphinx.ext.mathjax",
+    'myst_nb'
 ]
 
 autosummary_generate = True
@@ -64,8 +67,3 @@ html_theme = 'sphinx_book_theme'
 
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
-
-nbsphinx_thumbnails = {
-    'tutorials/01_InSituPy_demo_register_images': 'tutorials/demo_screenshots/common_features.png',
-    'tutorials/07_InSituPy_InSituExperiment': 'tutorials/demo_screenshots/insituexperiment_structure.png',
-}
