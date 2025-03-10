@@ -2,6 +2,17 @@
 
 Notebooks demonstrating the use of `InSituPy` for analyzing single-cell spatial transcriptomics data.
 
+The tutorial is structured in three main topics:
+
+```{cards}
+:column: 1
+
+:link: preprocessing
+:link-type: ref
+:link-alt: Preprocessing Tutorial
+
+This card links to the preprocessing tutorial.
+
 
 ```{toctree}
 :hidden: false

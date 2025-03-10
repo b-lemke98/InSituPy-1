@@ -25,9 +25,12 @@ Contributions are welcome! If you find any issues or have suggestions for new fe
 
 ```{toctree}
 :hidden: false
-:maxdepth: 2
+:maxdepth: 3
 
 usage.md
 tutorials/index.md
+tutorials/preprocessing/index.md
+tutorials/sample_level/index.md
+tutorials/multisample_level/index.md
 api.md
 ```
