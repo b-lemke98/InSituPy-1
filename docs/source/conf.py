@@ -27,7 +27,6 @@ copyright = '2025, Johannes Wirth'
 author = 'Johannes Wirth'
 release = get_version("../../insitupy/__init__.py")
 version = get_version("../../insitupy/__init__.py")
-#version = "0.6.6" #<<COOKIETEMPLE_FORCE_BUMP>>
 
 # -- General configuration
 
