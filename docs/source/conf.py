@@ -69,5 +69,14 @@ html_static_path = ["_static"]
 html_title = project
 html_logo = "_static/img/insitupy_logo.png"
 
+html_theme_options = {
+    "repository_url": "https://github.com/SpatialPathology/InSituPy",
+    "use_repository_button": True,
+    "use_edit_page_button": True,
+    "use_source_button": True,
+    "use_issues_button": True,
+    "path_to_docs": "./docs",
+}
+
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
