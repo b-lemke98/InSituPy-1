@@ -57,12 +57,11 @@ To ensure that the InSituPy package is available as a kernel in Jupyter notebook
 
 ## Getting started
 
-### Documentation
+```{eval-rst}
+.. card:: Tutorials for `InSituPy`
+    :link: tutorials/index
+    :link-type: doc
 
-__The Documentation is not online yet and will be made public in the next weeks__!
+    Tutorials introducing the concepts behind `InSituPy`.
 
-(For detailed instructions on using InSituPy, refer to the [official documentation](https://InSituPy.readthedocs.io), which will be made public after publication. The documentation will provide comprehensive guides on installation, usage, and advanced features.)
-
-### Example data
-
-If you want to test the pipeline on different example datasets, [this notebook](notebooks/00_InSituPy_demo_datasets.ipynb) provides an overview of functions to download _Xenium In Situ_ data from official sources.
+```

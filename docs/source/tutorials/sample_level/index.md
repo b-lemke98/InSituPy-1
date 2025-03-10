@@ -51,5 +51,4 @@ These tutorials focus on the preprocessing, analysis and handling of individual 
 05_InSituPy_cell_type_annotation.ipynb
 06_InSituPy_gene_expression_along_axis.ipynb
 09_InSituPy_build_objects_from_scratch.ipynb
-10_InSituPy_differential_gene_expression_publication.ipynb
 ```
