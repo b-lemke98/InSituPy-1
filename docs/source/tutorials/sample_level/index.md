@@ -1,6 +1,6 @@
 # Sample-level analysis
 
-These tutorials focus on the preprocessing, analysis and handling of individual samples of single-cell spatial transcriptomics data.
+These tutorials focus on the preprocessing, analysis and handling of individual samples of single-cell spatial transcriptomics data. These notebooks can be run from top to bottom and require the notebook about [automated image registration](../preprocessing/01_InSituPy_demo_register_images.ipynb) to be run first.
 
 ```{eval-rst}
 .. card:: First analysis steps
