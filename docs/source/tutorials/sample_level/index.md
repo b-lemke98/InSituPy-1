@@ -2,6 +2,45 @@
 
 These tutorials focus on the preprocessing, analysis and handling of individual samples of single-cell spatial transcriptomics data.
 
+```{eval-rst}
+.. card:: First analysis steps
+    :link: 02_InSituPy_demo_analyze
+    :link-type: doc
+
+    Tutorial with introduction into first steps of analysis including filtering, preprocessing and dimensionality reduction.
+
+.. card:: Annotations in `InSituPy`
+    :link: 03_InSituPy_demo_annotations
+    :link-type: doc
+
+    Tutorial introducing how to import annotations and regions from external sources like QuPath or add them in the napari viewer.
+
+.. card:: Crop data
+    :link: 04_InSituPy_demo_crop
+    :link-type: doc
+
+    Tutorial showing how to crop data.
+
+.. card:: Cell type annotation
+    :link: 05_InSituPy_cell_type_annotation
+    :link-type: doc
+
+    Tutorial showing different options to perform cell type annotation.
+
+.. card:: Explore gene expression along an axis
+    :link: 06_InSituPy_gene_expression_along_axis
+    :link-type: doc
+
+    Demonstration on how to explore gene expression along an axis of the dataset.
+
+.. card:: Build an `InSituData` object from scratch
+    :link: 09_InSituPy_build_objects_from_scratch
+    :link-type: doc
+
+    Tutorial on how to generate an `InSituData` object from scratch.
+
+```
+
 ```{toctree}
 :hidden: true
 :maxdepth: 1

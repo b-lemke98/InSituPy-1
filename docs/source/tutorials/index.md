@@ -12,8 +12,7 @@ The tutorial is structured in three main topics:
 
     Tutorials focusing on preprocessing steps that are necessary before actually getting started with the analysis.
 
-
-.. card:: Aanalysis of individual samples
+.. card:: Analysis of individual samples
     :link: sample_level/index
     :link-type: doc
     :link-alt: Tutorial on analysis of individual samples
@@ -27,6 +26,13 @@ The tutorial is structured in three main topics:
 
     This set of tutorials focuses on the analysis of multiple samples using the `InSituExperiment` class.
 
+.. card:: Manuscript-related analyses
+    :link: publication/index
+    :link-type: doc
+    :link-alt: Publication-related analyses
+
+    Notebooks including analyses shown in the manuscript.
+
 ```
 
 
@@ -37,4 +43,5 @@ The tutorial is structured in three main topics:
 preprocessing/index.md
 sample_level/index.md
 multisample_level/index.md
+publication/index.md
 ```
