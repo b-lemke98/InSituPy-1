@@ -1,7 +1,7 @@
 # Welcome to InSituPy's documentation!
 
 <p align="center">
-   <img src="https://github.com/SpatialPathology/InSituPy/blob/main/logo/insitupy_logo.png?raw=true?raw=true" width="500">
+   <img src="../_static/img/insitupy_logo.png" width="500">
 </p>
 
 InSituPy is a Python package designed to facilitate the analysis of single-cell spatial transcriptomics data. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissue sections and across multiple samples.
@@ -25,7 +25,7 @@ Contributions are welcome! If you find any issues or have suggestions for new fe
 
 ```{toctree}
 :hidden: false
-:maxdepth: 2
+:maxdepth: 3
 :glob:
 
 usage.md

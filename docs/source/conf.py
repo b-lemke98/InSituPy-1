@@ -60,11 +60,14 @@ intersphinx_mapping = {
 }
 intersphinx_disabled_domains = ['std']
 
-templates_path = ['_templates']
+#templates_path = ['_templates']
 
 # -- Options for HTML output
 
 html_theme = 'sphinx_book_theme'
+html_static_path = ["_static"]
+html_title = project
+html_logo = "_static/img/insitupy_logo.png"
 
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
