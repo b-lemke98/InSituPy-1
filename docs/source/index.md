@@ -1,17 +1,20 @@
 # Welcome to InSituPy's documentation!
 
-<p align="center">
-   <img src="|logo|" width="500">
-</p>
-
 Eval-rst approach:
 
 ```{eval-rst}
-.. image:: ../_static/img/insitupy_logo.png
+.. image:: _static/img/insitupy_logo.png
   :class: dark-light p-2
   :alt: InSituPy logo
   :align: center
   :width: 500px
+```
+
+```{image} _static/img/insitupy_logo.png
+:alt: InSituPy logo
+:class: dark-light p-2
+:width: 500px
+:align: center
 ```
 
 InSituPy is a Python package designed to facilitate the analysis of single-cell spatial transcriptomics data. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissue sections and across multiple samples.
