@@ -1,7 +1,7 @@
 # InSituPy: A framework for histology-guided, multi-sample  analysis of single-cell spatial transcriptomics data
 
 <p align="center">
-   <img src="./docs/_static/img/insitupy_logo.png" width="500">
+   <img src="./docs/source/_static/img/insitupy_logo_with_text.png" width="500">
 </p>
 
 InSituPy is a Python package designed to facilitate the analysis of single-cell spatial transcriptomics data. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissue sections and across multiple samples.

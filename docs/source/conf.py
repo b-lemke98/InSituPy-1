@@ -67,7 +67,7 @@ intersphinx_disabled_domains = ['std']
 html_theme = 'sphinx_book_theme'
 html_static_path = ["_static"]
 html_title = project
-html_logo = "_static/img/insitupy_logo.png"
+html_logo = "_static/img/insitupy_logo_with_name_wo_bg.png"
 
 html_theme_options = {
     "repository_url": "https://github.com/SpatialPathology/InSituPy",
@@ -76,6 +76,8 @@ html_theme_options = {
     "use_source_button": True,
     "use_issues_button": True,
     "path_to_docs": "./docs",
+    "display_version": True,
+    "logo_only": True
 }
 
 # -- Options for EPUB output

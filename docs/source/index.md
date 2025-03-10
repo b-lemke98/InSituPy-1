@@ -1,16 +1,6 @@
 # Welcome to InSituPy's documentation!
 
-Eval-rst approach:
-
-```{eval-rst}
-.. image:: _static/img/insitupy_logo.png
-  :class: dark-light p-2
-  :alt: InSituPy logo
-  :align: center
-  :width: 500px
-```
-
-```{image} _static/img/insitupy_logo.png
+```{image} _static/img/insitupy_logo_with_name_wo_bg.png
 :alt: InSituPy logo
 :class: dark-light p-2
 :width: 500px
