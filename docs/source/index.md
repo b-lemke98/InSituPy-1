@@ -1,8 +1,18 @@
 # Welcome to InSituPy's documentation!
 
 <p align="center">
-   <img src="../_static/img/insitupy_logo.png" width="500">
+   <img src="|logo|" width="500">
 </p>
+
+Eval-rst approach:
+
+```{eval-rst}
+.. image:: _static/img/insitupy_logo.png
+  :class: dark-light p-2
+  :alt: InSituPy logo
+  :align: center
+  :width: 500px
+```
 
 InSituPy is a Python package designed to facilitate the analysis of single-cell spatial transcriptomics data. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissue sections and across multiple samples.
 Currently the analysis is focused on data from the [_Xenium In Situ_](https://www.10xgenomics.com/platforms/xenium) methodology but a broader range of reading functions will be implemented in the future.

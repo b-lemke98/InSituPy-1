@@ -4,17 +4,14 @@ Notebooks demonstrating the use of `InSituPy` for analyzing single-cell spatial 
 
 The tutorial is structured in three main topics:
 
-```{cards}
-:column: 1
-```
+```{eval-rst}
+.. card:: Preprocessing
+    :link: preprocessing
+    :link-type: doc
+    :link-alt: Preprocessing Tutorial
 
-```{card} Preprocessing
-:link: preprocessing
-:link-type: ref
-:link-alt: Preprocessing Tutorial
+    This card links to the preprocessing tutorial.
 
-This card links to the preprocessing tutorial.
-```
 ```
 
 ```{toctree}
