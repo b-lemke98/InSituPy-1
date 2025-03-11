@@ -979,10 +979,23 @@ class MultiCellData(DeepCopyMixin):
                    key: str = "proseg",
                    is_main: bool = False
                    ):
+        """
+            Adds output of Proseg https://github.com/dcjones/proseg segmentation to the object.
+
+            Args:
+                path_counts (Union[str, os.PathLike, Path]): Path to the counts file (parquet or csv .gz or not).
+                path_metadata (Union[str, os.PathLike, Path]): Path to the metadata file (parquet or csv .gz or not).
+                path_baysor_polygons (Union[str, os.PathLike, Path]): Path to the Baysor-like polygons file.
+                pixel_size (float): Size of the pixel for scaling.
+                key (str, optional): Key to store the data. Defaults to "proseg".
+                is_main (bool, optional): Flag to indicate if this is the main data. Defaults to False.
+        """
         
+        # Convert paths to string format
         path_counts = str(path_counts)
         path_metadata = str(path_metadata)
         
+        # Read counts data based on file extension
         if path_counts.endswith(".parquet"):
             counts = pd.read_parquet(path_counts)
         elif path_counts.endswith("csv.gz"):
@@ -990,6 +1003,7 @@ class MultiCellData(DeepCopyMixin):
         else:
             counts = pd.read_csv(path_counts)
 
+        # Read metadata based on file extension
         if path_metadata.endswith(".parquet"):
             meta = pd.read_parquet(path_metadata)
         elif path_metadata.endswith("csv.gz"):
@@ -997,22 +1011,39 @@ class MultiCellData(DeepCopyMixin):
         else:
             meta = pd.read_csv(path_metadata)
 
+        # Ensure indices are strings
         counts.index = counts.index.astype(str)
         meta.index = meta.index.astype(str)
 
+        # Filter out unwanted columns
         counts = counts.loc[:, ~counts.columns.str.startswith('Neg')]
         counts = counts.loc[:, ~counts.columns.str.startswith('Unas')]
+
+        #Add spatial coordinates
         obsm = {"spatial": np.stack([meta["centroid_x"].to_numpy(), meta["centroid_y"].to_numpy()], axis=1)}
 
+        # Create AnnData object
         adata = AnnData(X=counts, obs=meta, obsm=obsm)
 
+        # Read Baysor polygons
         baysor_polygons = read_baysor_polygons(path_baysor_polygons)
 
         def divide_polygon(polygon_wkt, constant):
+            """
+                Scales the polygon by a given constant.
+
+                Args:
+                    polygon_wkt (str): Polygon in WKT format.
+                    constant (float): Scaling constant.
+
+                Returns:
+                    Polygon: Scaled polygon.
+            """
             polygon = wkt.loads(polygon_wkt)
             divided_polygon = affinity.scale(polygon, xfact=1/constant, yfact=1/constant, origin=(0, 0))
             return divided_polygon
 
+        # Scale Baysor polygons
         baysor_polygons['geometry'] = baysor_polygons['geometry'].apply(lambda x: divide_polygon(x.wkt, pixel_size))
         baysor_polygons["maxx"] = baysor_polygons["maxx"] / pixel_size
         baysor_polygons["maxy"] = baysor_polygons["maxy"] / pixel_size
@@ -1020,13 +1051,17 @@ class MultiCellData(DeepCopyMixin):
         xmax = ceil(polygon_bounds.loc[:, "maxx"].max())
         ymax = ceil(polygon_bounds.loc[:, "maxy"].max())
 
+        # Calculate bounds for rasterization
         img = rasterize(list(zip(baysor_polygons["geometry"], baysor_polygons["cell"])), out_shape=(ymax,xmax))
         img = da.from_array(img)
 
+        # Create boundaries data
         cell_ids = da.from_array(adata.obs["cell"].values)
         seg_mask_value = da.from_array(sorted(baysor_polygons["cell"]))
         boundaries = BoundariesData(cell_names=cell_ids, seg_mask_value=seg_mask_value)
         boundaries.add_boundaries(data={f"cellular": img}, pixel_size=pixel_size)
+
+        # Create cell data and add to object
         celldata = CellData(matrix=adata, boundaries=boundaries)
         self.add_celldata(cd=celldata, key=key, is_main=is_main)
 
