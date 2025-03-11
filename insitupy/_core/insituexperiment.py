@@ -14,11 +14,12 @@ from matplotlib.figure import Figure
 from tqdm import tqdm
 
 import insitupy
-from insitupy import InSituData, differential_gene_expression
+from insitupy import InSituData
 from insitupy._constants import LOAD_FUNCS
 from insitupy._core._checks import is_integer_counts
 from insitupy._core.reader import read_xenium
 from insitupy._exceptions import ModalityNotFoundError
+from insitupy.calc.dge import differential_gene_expression
 from insitupy.io.files import check_overwrite_and_remove_if_true
 from insitupy.io.plots import save_and_show_figure
 from insitupy.utils.utils import (convert_to_list, get_nrows_maxcols,
