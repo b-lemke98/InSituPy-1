@@ -67,7 +67,8 @@ from ..utils.utils import textformat as tf
 from ._layers import _create_points_layer
 from ._save import (_save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
-from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData, MultiCellData
+from .dataclasses import (AnnotationsData, CellData, ImageData, MultiCellData,
+                          RegionsData)
 
 # optional packages that are not always installed
 if WITH_NAPARI:
@@ -329,7 +330,7 @@ class InSituData:
                           ):
         '''
         Function to assign geometries (annotations or regions) to the anndata object in
-        InSituData.cells.matrix. Assignment information is added to the DataFrame in `.obs`.
+        InSituData.cells[layer].matrix. Assignment information is added to the DataFrame in `.obs`.
         '''
         # assert that prerequisites are met
         try:
@@ -2107,126 +2108,107 @@ def differential_gene_expression(
         verbose=verbose
     )
 
-    # extract main anndata
-    adata1 = data.cells.matrix.copy()
+    # original tuples for plotting the configuration table
+    orig_ref_annotation_tuple = ref_annotation_tuple
+    orig_ref_cell_type_tuple = ref_cell_type_tuple
 
-    if region_tuple is not None:
-        # select only one region
-        region_mask = [region_name in elem for elem in adata1.obsm["regions"][region_key]]
-        assert np.any(region_mask), f"Region '{region_name}' not found in key '{region_key}'."
+    if ref is None:
+        ref = target.copy()
 
-        print(f"Restrict analysis to region '{region_name}' from key '{region_key}'.", flush=True)
-        adata1 = adata1[region_mask].copy()
+        # TODO: Implement behavior for "rest"
+        # The "rest" argument is only implemented if ref_data is None in the beginning
+        if ref_annotation_tuple == "rest":
+            rest_annotations = [
+                elem
+                for elem in ref.cells["main"].matrix.obsm["annotations"][target_annotation_tuple[0]].unique()
+                if elem != target_annotation_tuple[1]
+                ]
+            ref_annotation_tuple = (target_annotation_tuple[0], rest_annotations)
 
-    if data_annotation_tuple is not None:
-        col_with_id = adata1.obsm["annotations"].apply(
-            func=lambda row: _substitution_func(
-                row=row,
-                annotation_key=annotation_key,
-                annotation_name=annotation_name,
-                reference_name=reference_name,
-                check_reference=check_reference_during_substitution,
-                ignore_duplicate_assignments=ignore_duplicate_assignments
-                ), axis=1
-            )
+        if ref_region_tuple == "rest":
+            rest_regions = [
+                elem
+                for elem in ref.cells["main"].matrix.obsm["regions"][target_region_tuple[0]].unique()
+                if elem != target_region_tuple[1]
+                ]
+            ref_region_tuple = (target_region_tuple[0], rest_regions)
 
-        # check that the annotation_name exists inside the column
-        assert np.any(col_with_id == annotation_name), f"annotation_name '{annotation_name}' not found under annotation_key '{annotation_key}'."
+        if ref_cell_type_tuple == "rest":
+            rest_cell_types = [
+                elem
+                for elem in ref.cells["main"].matrix.obs[target_cell_type_tuple[0]].unique()
+                if elem != target_cell_type_tuple[1]
+                ]
+            ref_cell_type_tuple = (target_cell_type_tuple[0], rest_cell_types)
 
-        # mark the annotations with 1 or 2 depending if it is adata1 or adata2
-        if ref_data is not None:
-            # add a 1- in front of the annotation to differentiate it later from the reference data
-            col_with_id = col_with_id.apply(func=lambda x: f"1-{x}")
-
-        # add the column to obs
-        adata1.obs[comb_col_name] = col_with_id
-
-    if ref_data is not None:
-        # process reference_data if it is not None
-        if ref_annotation_tuple is None and data_annotation_tuple is not None:
-            ref_annotation_tuple = data_annotation_tuple
-
-        if ref_annotation_key is not None:
-            _check_assignment(data=ref_data, key=ref_annotation_key, force_assignment=force_assignment, modality="annotations")
-
-            # extract reference anndata
-        adata2 = ref_data.cells.matrix.copy()
-        # repeat the same as for adata1 for adata2
-        if ref_annotation_tuple is not None:
-            col_with_id_ref = adata2.obsm["annotations"].apply(
-                func=lambda row: _substitution_func(
-                    row=row,
-                    annotation_key=ref_annotation_key,
-                    annotation_name=reference_name,
-                    reference_name=None,
-                    check_reference=check_reference_during_substitution,
-                    ignore_duplicate_assignments=ignore_duplicate_assignments
-                    ), axis=1
-                )
-            col_with_id_ref = col_with_id_ref.apply(func=lambda x: f"2-{x}")
-
-            # check that the reference_name exists inside the column
-            assert np.any(col_with_id_ref == f"2-{reference_name}"), f"reference_name '{reference_name}' not found under reference_key '{ref_annotation_key}'."
-
-            # add column to obs
-            adata2.obs[comb_col_name] = col_with_id_ref
-
-        if data_annotation_tuple is None and ref_annotation_tuple is None:
-            adata1.obs[comb_col_name]="adata1"
-            adata2.obs[comb_col_name]="adata2"
-
-        # combine anndatas
-        adata_combined = anndata.concat([adata1, adata2])
-
-        # create settings for rank_genes_groups
-        if data_annotation_tuple is not None and ref_annotation_tuple is not None:
-            rgg_groups = [f"1-{annotation_name}"]
-            rgg_reference = f"2-{reference_name}"
-
-        if title is None:
-            # create plot title for later
-            if data_annotation_tuple is not None and ref_annotation_tuple is not None:
-                plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {ref_data.sample_id}"
-            if data_annotation_tuple is None and ref_annotation_tuple is None:
-                plot_title = f"{data.sample_id} vs.{ref_data.sample_id}"
-        else:
-            plot_title = title
+    if isinstance(ref, InSituData):
+        # generate a list from ref_dta
+        ref = [ref]
+    elif isinstance(ref, list):
+        assert np.all([isinstance(elem, InSituData) for elem in ref]), "Not all elements of list given in `ref` are InSituData objects."
     else:
-        adata_combined = adata1
-        rgg_groups = [annotation_name]
-        rgg_reference = reference_name
+        raise ValueError("`ref` must be an InSituData object or a list of InSituData objects.")
 
-        if title is None:
-            plot_title = f"'{annotation_name}' in {data.sample_id} vs. '{reference_name}' in {data.sample_id}"
-        else:
-            plot_title = title
+    adata_ref_list = []
+    for rd in ref:
+        # select reference data for analysis
+        ad_ref = _select_data_for_dge(
+            data=rd,
+            annotation_tuple=ref_annotation_tuple,
+            cell_type_tuple=ref_cell_type_tuple,
+            region_tuple=ref_region_tuple,
+            force_assignment=force_assignment,
+            verbose=verbose
+        )
+        adata_ref_list.append(ad_ref)
 
-    if obs_tuple is not None:
-        # filter for observation value
-        adata_combined = adata_combined[adata_combined.obs[obs_tuple[0]] == obs_tuple[1]].copy()
-        if data_annotation_tuple is None and ref_annotation_tuple is None:
-            rgg_groups = list(adata_combined.obs[comb_col_name].unique())
-            #rgg_reference=ref_data.sample_id
-            print(f"Calculate differentially expressed genes with Scanpy's `rank_genes_groups` using '{method}'.")
-            sc.tl.rank_genes_groups(adata=adata_combined,
-                                    groupby=comb_col_name,
-                                    method=method)
-             # create dataframe from results
-            res_dict = create_deg_dataframe(
-                adata=adata_combined, groups=rgg_groups)
-            df = res_dict[rgg_groups[0]]
+    if len(adata_ref_list) > 1:
+        adata_ref = anndata.concat(adata_ref_list)
+    else:
+        adata_ref = adata_ref_list[0]
 
-    if data_annotation_tuple is not None and ref_annotation_tuple is not None:
-        # add column to .obs for its use in rank_genes_groups()
-        adata_combined.obs = adata_combined.obs.filter([comb_col_name]) # empty obs
-        #adata_combined.obs[comb_col_name] = adata_combined.obsm["annotations"][comb_col_name]
-        print(f"Calculate differentially expressed genes with Scanpy's `rank_genes_groups` using '{method}'.")
-        sc.tl.rank_genes_groups(adata=adata_combined,
-                                groupby=comb_col_name,
-                                groups=rgg_groups,
-                                reference=rgg_reference,
-                                method=method,
-                                )
+    # check before concatenation whether cells with identical names are found in both data and reference
+    if not set(adata_data.obs_names).isdisjoint(set(adata_ref.obs_names)):
+        n_duplicated_cells = len(set(adata_data.obs_names).intersection(set(adata_ref.obs_names)))
+        pct_duplicated_cells = round((n_duplicated_cells / 2) / (len(adata_data) + len(adata_data)) * 100, 1)
+
+        warn(
+            f"{n_duplicated_cells} ({pct_duplicated_cells}%) cells were found to belong to both data and reference. "
+            "This can happen due to overlapping annotations or non-unique cell names in the individual datasets. "
+            "If you are sure that the same cell cannot be found in both data and reference, you can ignore this warning. "
+            "To exclude ambiguously assigned cells from the analysis, use `exclude_ambiguous_assignments=True`."
+        )
+
+    # concatenate and ignore user warning about observations being not unique since we take care of this later by filtering out duplicate values if wanted.
+    with catch_warnings():
+        filterwarnings("ignore", message="Observation names are not unique. To make them unique, call `.obs_names_make_unique`.")
+        adata_combined = anndata.concat(
+            {
+                "DATA": adata_data,
+                "REFERENCE": adata_ref
+            },
+            label=dge_comparison_column
+        )
+
+    if exclude_ambiguous_assignments:
+        # check whether some cells are in both data and reference
+        duplicated_mask = adata_combined.obs_names.duplicated(keep=False)
+
+        if np.any(duplicated_mask):
+            print("Exclude ambiguously assigned cells...")
+            # remove duplicated values
+            adata_combined = adata_combined[~duplicated_mask].copy()
+
+    # add column to .obs for its use in rank_genes_groups()
+    #adata_combined.obs = adata_combined.obs.filter([dge_comparison_column]) # empty obs
+
+    print(f"Calculate differentially expressed genes with Scanpy's `rank_genes_groups` using '{method}'.")
+    sc.tl.rank_genes_groups(adata=adata_combined,
+                            groupby=dge_comparison_column,
+                            groups=["DATA"],
+                            reference="REFERENCE",
+                            method=method,
+                            )
 
     # create dataframe from results
     res_dict = create_deg_dataframe(
