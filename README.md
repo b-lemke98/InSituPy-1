@@ -1,7 +1,7 @@
 # InSituPy: A framework for histology-guided, multi-sample  analysis of single-cell spatial transcriptomics data
 
 <p align="center">
-   <img src="https://github.com/SpatialPathology/InSituPy/blob/main/logo/insitupy_logo.png?raw=true?raw=true" width="500">
+   <img src="./docs/source/_static/img/insitupy_logo_with_text.png" width="500">
 </p>
 
 InSituPy is a Python package designed to facilitate the analysis of single-cell spatial transcriptomics data. With InSituPy, you can easily load, visualize, and analyze the data, enabling and simplifying the comprehensive exploration of spatial gene expression patterns within tissue sections and across multiple samples.
@@ -11,30 +11,7 @@ Currently the analysis is focused on data from the [_Xenium In Situ_](https://ww
 
 *!!!Warning: This repository is under very active development and it cannot be guaranteed that releases contain changes that might impair backwards compatibility. If you observe any such thing, please feel free to contact us to solve the problem. Thanks!*
 
-### Update to `0.6.3`
-
-* fix bug in `ShapesData.crop()`
-* add `plot_qc_metrices` function and show how to determine the filtering threshold in analysis demo notebook
-
-### Update to `0.6.2`
-* Transcripts are loaded now as dask dataframes instead of pandas dataframes. This makes loading of the transcript data much faster! In case this leads to bugs in other functionalities, please let me know!
-* fixing bugs in "build from scratch" demo
-* add saving possibility to `plot_overview()`
-
-### Update to `0.6.1`
-* Changed reading logic of `cell_names` in `BoundariesData`: this might lead to issues with backward compatibility but generalizes the reading of boundaries data opening it for other technologies.
-* Adapt viewer for smaller screens
-* Revised automated registration pipeline:
-  * Fixed issue with large multiplexed IF images.
-  * Area dependent number of minimum matches to make registration pipeline also work on small images.
-* add registration demo notebook for pancreas data
-* by default remove history of variable data when calling `.save()`
-
-### Update to `0.5.0`
-#### Major changes in reading/loading logic!
-This might conflict with the backwards compatibility of this version! If there are issues with loading reading `InSituPy` projects saved with older version, please let me know to find workarounds!
-* Reduced focus on Xenium method in data structure
-* `InSituData.read()` substitutes `read_xenium` for reading of `InSituPy` projects. `read_xenium` used now to read data from Xenium data folders
+For the latest developments check out the [releases](https://github.com/SpatialPathology/InSituPy/releases).
 
 ## Installation
 
@@ -58,7 +35,7 @@ This might conflict with the backwards compatibility of this version! If there a
 1. **Clone the repository to your local machine:**
 
    ```bash
-   git clone https://github.com/jwrth/InSituPy.git
+   git clone https://github.com/SpatialPathology/InSituPy.git
    ```
 
 2. **Navigate to the cloned repository and select the right branch:**
@@ -86,7 +63,7 @@ This might conflict with the backwards compatibility of this version! If there a
 
    ```bash
    # for installation without napari use
-   pip install git+https://github.com/jwrth/InSituPy.git
+   pip install git+https://github.com/SpatialPathology/InSituPy.git
    ```
 
 Make sure you have Conda installed on your system before proceeding with these steps. If not, you can install Miniconda or Anaconda from [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html).
@@ -97,38 +74,7 @@ To ensure that the InSituPy package is available as a kernel in Jupyter notebook
 
 ### Documentation
 
-__The Documentation is not online yet and will be made public in the next weeks__!
-
-(For detailed instructions on using InSituPy, refer to the [official documentation](https://InSituPy.readthedocs.io), which will be made public after publication. The documentation will provide comprehensive guides on installation, usage, and advanced features.)
-
-
-### Tutorials
-
-Explore the tutorials in `./notebooks/` to learn how to use InSituPy:
-
-#### Sample level analysis
-
-These tutorials focus on the preprocessing, analysis and handling of individual samples.
-
-1. [Registration of additional images](notebooks/01_InSituPy_demo_register_images.ipynb) - Learn how to register additional images to the spatial transcriptomics data.
-    1. Alternatively this is also implemented for an example dataset from [pancreatic cancer](notebooks/pancreas/01panc_InSituPy_demo_register_images.ipynb)
-3. [Basic analysis functionalities](notebooks/02_InSituPy_demo_analyze.ipynb) - Learn about the basic functionalities, such as loading of data, basic preprocessing and interactive visualization with napari.
-4. [Add annotations](notebooks/03_InSituPy_demo_annotations.ipynb) - Learn how to add annotations from external software such as [QuPath](https://qupath.github.io/) and do annotations in the napari viewer.
-5. [Crop data](notebooks/04_InSituPy_demo_crop.ipynb) - Learn how to crop your data to focus your analysis on specific areas in the tissue.
-6. [Cell type annotation](notebooks/05_InSituPy_cell_type_annotation.ipynb) - Shows an example workflow to annotate the cell types.
-7. [Explore gene expression along axis](notebooks/06_InSituPy_gene_expression_along_axis_pattern.ipynb) - Example cases showing how to correlate gene expression with e.g. the distance to histological annotations.
-8. [Build an `InSituData` object from scratch](notebooks/09_InSituPy_build_objects_from_scratch.ipynb) - General introduction on how to build an `InSituData` object from scratch.
-
-#### Experiment-level analysis
-
-This set of tutorials focuses on
-
-1. [Analyze multiple samples at once with InSituPy](notebooks/07_InSituPy_InSituExperiment.ipynb) - Introduces the main concepts behind the `InSituExperiment` class and how to work with multiple samples at once.
-2. [Differential gene expression analysis](notebooks/08_InSituPy_differential_gene_expression.ipynb) - Perform differential gene expression analysis within one sample and across multiple samples.
-
-### Example data
-
-If you want to test the pipeline on different example datasets, [this notebook](notebooks/00_InSituPy_demo_datasets.ipynb) provides an overview of functions to download _Xenium In Situ_ data from official sources.
+For detailed instructions on using InSituPy, refer to the [official documentation](https://InSituPy.readthedocs.io).
 
 ## Features
 

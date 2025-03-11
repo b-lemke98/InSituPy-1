@@ -10,7 +10,7 @@ from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
-from warnings import warn
+from warnings import catch_warnings, filterwarnings, warn
 
 import anndata
 import dask.dataframe as dd
@@ -33,7 +33,7 @@ from tqdm import tqdm
 import insitupy._core.config as config
 from insitupy import WITH_NAPARI, __version__
 from insitupy._constants import ISPY_METADATA_FILE, LOAD_FUNCS, REGIONS_SYMBOL
-from insitupy._core._checks import _check_assignment, _substitution_func
+from insitupy._core._checks import _check_assignment
 from insitupy._core._save import _save_images
 from insitupy._core._xenium import (_read_binned_expression,
                                     _read_boundaries_from_xenium,
@@ -48,7 +48,7 @@ from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_multicelldata, read_shapesdata)
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting import volcano_plot
-from insitupy.utils.deg import create_deg_dataframe
+from insitupy.utils.dge import create_deg_dataframe
 from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
                                           reduce_dimensions_anndata)
 from insitupy.utils.utils import (_crop_transcripts, convert_to_list,
@@ -75,7 +75,7 @@ if WITH_NAPARI:
     from napari.layers import Layer, Points, Shapes
 
     #from napari.layers.shapes.shapes import Shapes
-    from ._layers import _add_annotations_as_layer
+    from ._layers import _add_geometries_as_layer
     from ._widgets import _initialize_widgets, add_new_geometries_widget
 
 
@@ -350,7 +350,7 @@ class InSituData:
                 name = f".cells[{layer}]"
             except:
                 raise ModalityNotFoundError(f"cells[{layer}]")
-            
+
         if keys == "all":
             keys = geom_attr.metadata.keys()
 
@@ -367,6 +367,14 @@ class InSituData:
             print(f"Assigning key '{key}'...")
             # extract pandas dataframe of current key
             geom_df = geom_attr[key]
+
+            # make sure the geom names do not contain any ampersand string (' % '),
+            # since this would interfere with the downstream analysis
+            if geom_df["name"].str.contains(' & ').any():
+                raise ValueError(
+                    f"The {geometry_type} with key '{key}' contains names with the ampersand string ' & '. "
+                    f"This is not allowed as it would interfere with downstream analysis."
+                    )
 
             # get unique list of annotation names
             geom_names = geom_df.name.unique()
@@ -1975,22 +1983,31 @@ def calc_distance_of_cells_from(
     adata.obsm["distance_from"][key_to_save] = min_dists
     print(f'Saved distances to `.cells["main"].matrix.obsm["distance_from"]["{key_to_save}"]`')
 
+from insitupy.utils._dge import _select_data_for_dge, _substitution_func
+
+
 def differential_gene_expression(
-    data: InSituData,
-    data_annotation_tuple: Optional[Tuple[str, str]] = None,
-    ref_data: Optional[InSituData] = None,
-    ref_annotation_tuple: Optional[Union[Literal["rest"], Tuple[str, str]]] = None,
-    obs_tuple: Optional[Tuple[str, str]] = None,
-    region_tuple: Optional[Tuple[str, str]] = None,
+    target: InSituData,
+    target_annotation_tuple: Optional[Tuple[str, str]] = None,
+    target_cell_type_tuple: Optional[Tuple[str, str]] = None,
+    target_region_tuple: Optional[Tuple[str, str]] = None,
+    ref: Optional[Union[InSituData, List[InSituData]]] = None,
+    ref_annotation_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
+    ref_cell_type_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
+    ref_region_tuple: Optional[Tuple[str, str]] = "same",
+    significance_threshold: Number = 0.05,
+    fold_change_threshold: Number = 1,
     plot_volcano: bool = True,
+    return_results: bool = False,
     method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
-    ignore_duplicate_assignments: bool = False,
+    exclude_ambiguous_assignments: bool = False,
     force_assignment: bool = False,
     title: Optional[str] = None,
     savepath: Union[str, os.PathLike, Path] = None,
     save_only: bool = False,
     dpi_save: int = 300,
-    **kwargs
+    verbose: bool = False,
+    **volcano_kwargs
 ):
     """
     Perform differential gene expression analysis on in situ sequencing data.
@@ -2000,85 +2017,98 @@ def differential_gene_expression(
     methods for differential expression analysis and can generate a volcano plot of the results.
 
     Args:
-        data (InSituData): The primary in situ data object.
-        data_annotation_tuple (Tuple[str, str]): Tuple containing the annotation key and name.
-        ref_data (Optional[InSituData], optional): Reference in situ data object for comparison. Defaults to None.
-        ref_annotation_tuple (Union[Literal["rest"], Tuple[str, str]], optional): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference. Defaults to "rest".
-        obs_tuple (Optional[Tuple[str, str]], optional): Tuple specifying an observation key and value to filter the data. Defaults to None.
-        region_tuple (Optional[Tuple[str, str]], optional): Tuple specifying a region key and name to restrict the analysis to a specific region. Defaults to None.
-        plot_volcano (bool, optional): Whether to generate a volcano plot of the results. Defaults to True.
-        method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']], optional): Statistical method to use for differential expression analysis. Defaults to 't-test'.
-        ignore_duplicate_assignments (bool, optional): Whether to ignore duplicate assignments in the data. Defaults to False.
-        force_assignment (bool, optional): Whether to force assignment of annotations and regions. Defaults to False.
-        title (Optional[str], optional): Title for the volcano plot. Defaults to None.
-        savepath (Union[str, os.PathLike, Path], optional): Path to save the plot (default is None).
-        save_only (bool): If True, only save the plot without displaying it (default is False).
-        dpi_save (int): Dots per inch (DPI) for saving the plot (default is 300).
-        **kwargs: Additional keyword arguments for the volcano plot.
+        target (InSituData): The primary in situ data object.
+        target_annotation_tuple (Optional[Tuple[str, str]]): Tuple containing the annotation key and name for the target data.
+        target_cell_type_tuple (Optional[Tuple[str, str]]): Tuple specifying an observation key and value to filter the target data by cell type.
+        target_region_tuple (Optional[Tuple[str, str]]): Tuple specifying a region key and name to restrict the analysis to a specific region in the target data.
+        ref (Optional[Union[InSituData, List[InSituData]]]): Reference in situ data object(s) for comparison. Defaults to None.
+        ref_annotation_tuple (Optional[Union[Literal["rest", "same"], Tuple[str, str]]]): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference, or "same" to use the same annotation as the target. Defaults to "same".
+        ref_cell_type_tuple (Optional[Union[Literal["rest", "same"], Tuple[str, str]]]): Tuple specifying an observation key and value to filter the reference data by cell type, or "rest" to use the rest of the data, or "same" to use the same cell type as the target. Defaults to "same".
+        ref_region_tuple (Optional[Tuple[str, str]]): Tuple specifying a region key and name to restrict the analysis to a specific region in the reference data. Defaults to None.
+        significance_threshold (float): P-value threshold for significance (default is 0.05).
+        fold_change_threshold (float): Log2 fold change threshold for up/down regulation (default is 1).
+        plot_volcano (bool): Whether to generate a volcano plot of the results. Defaults to True.
+        return_results (bool): Whether to return the results as dictionary including the dataframe differentially expressed genes and the parameters.
+        method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']]): Statistical method to use for differential expression analysis. Defaults to 't-test'.
+        exclude_ambiguous_assignments (bool): Whether to exclude ambiguous assignments in the data. Defaults to False.
+        force_assignment (bool): Whether to force assignment of annotations and regions even if it has been done before already. Defaults to False.
+        title (Optional[str]): Title for the volcano plot. Defaults to None.
+        savepath (Union[str, os.PathLike, Path]): Path to save the plot. Defaults to None.
+        save_only (bool): If True, only save the plot without displaying it. Defaults to False.
+        dpi_save (int): Dots per inch (DPI) for saving the plot. Defaults to 300.
+        verbose (bool): Whether to print detailed information during the analysis. Defaults to False.
+        **volcano_kwargs: Additional keyword arguments for the volcano plot.
 
     Returns:
         Union[None, Dict[str, Any]]: If `plot_volcano` is True, returns None. Otherwise, returns a dictionary with the results DataFrame and parameters used for the analysis.
 
     Raises:
         ValueError: If `ref_annotation_tuple` is neither 'rest' nor a 2-tuple.
-        AssertionError: If `ref_data` is provided when `ref_annotation_tuple` is 'rest'.
-        AssertionError: If `region_tuple` is provided when `ref_data` is not None.
+        AssertionError: If `ref` is provided when `ref_annotation_tuple` is 'rest'.
+        AssertionError: If `target_region_tuple` is provided when `ref` is not None.
         AssertionError: If the specified region or annotation is not found in the data.
 
     Example:
         >>> result = differential_gene_expression(
-                data=my_data,
-                data_annotation_tuple=("cell_type", "neuron"),
-                ref_data=my_ref_data,
+                target=my_data,
+                target_annotation_tuple=("pathologist", "tumor"),
+                ref=my_ref_data,
                 ref_annotation_tuple=("cell_type", "astrocyte"),
                 plot_volcano=True,
                 method='wilcoxon'
             )
     """
+    if not (plot_volcano | return_results):
+        raise ValueError("Both `plot_volcano` and `return_results` are False. At least one of them must be True.")
 
-    comb_col_name = "combined_annotation_column"
+    dge_comparison_column = "DGE_COMPARISON_COLUMN"
 
-    # extract annotation information
-    if data_annotation_tuple is None:
-        annotation_key = None
-        annotation_name = None
-        assert ref_annotation_tuple is None
-    else:
-        annotation_key = data_annotation_tuple[0]
-        annotation_name = data_annotation_tuple[1]
+    # pre-flight checks
+    if ref_annotation_tuple is not None:
+        if ref_annotation_tuple == "rest":
+            if ref is not None:
+                raise ValueError("Value 'rest' for `ref_annotation_tuple` is only allowed if no reference data is given (`ref=None`).")
+        elif ref_annotation_tuple == "same":
+            ref_annotation_tuple = target_annotation_tuple
+        elif not isinstance(ref_annotation_tuple, tuple):
+            raise ValueError(f"Unknown type of `ref_annotation_tuple`: {type(ref_annotation_tuple)}. Must be either tuple, 'rest', 'same' or None.")
+        else:
+            pass
 
-    # extract information from reference tuple (added if re_annotation_tuple is None)
-    if ref_annotation_tuple == "rest":
-        assert ref_data is None, "If `reference_tuple` is 'rest', `reference_data` must be None."
-        ref_annotation_key = None
-        reference_name = "rest"
-    elif isinstance(ref_annotation_tuple, tuple) and (len(ref_annotation_tuple) == 2):
-        ref_annotation_key = ref_annotation_tuple[0]
-        reference_name = ref_annotation_tuple[1]
-    elif ref_annotation_tuple == None:
-        ref_annotation_key = None
-        reference_name = None
-    else:
-        raise ValueError("`reference_tuple` is neither 'rest' nor a 2-tuple.")
+    if ref_region_tuple is not None:
+        if ref_region_tuple == "rest":
+            if ref is not None:
+                raise ValueError("Value 'rest' for `ref_region_tuple` is only allowed if no reference data is given (`ref=None`).")
+        elif ref_region_tuple == "same":
+            ref_region_tuple = target_region_tuple
+        elif not isinstance(ref_region_tuple, tuple):
+            raise ValueError(f"Unknown type of `ref_region_tuple`: {type(ref_region_tuple)}. Must be either tuple, 'rest', 'same' or None.")
+        else:
+            pass
 
-    # check if the annotations in data and reference nceed to be checked
-    if annotation_key is not None:
-        _check_assignment(data=data, key=annotation_key, force_assignment=force_assignment, modality="annotations")
+    if ref_cell_type_tuple is not None:
+        if ref_cell_type_tuple == "rest":
+            if ref is not None:
+                raise ValueError("Value 'rest' for `ref_cell_type_tuple` is only allowed if no reference data is given (`ref=None`).")
+        elif ref_cell_type_tuple == "same":
+            ref_cell_type_tuple = target_cell_type_tuple
+        elif not isinstance(ref_cell_type_tuple, tuple):
+            raise ValueError(f"Unknown type of `ref_cell_type_tuple`: {type(ref_cell_type_tuple)}. Must be either tuple, 'rest', 'same' or None.")
+        else:
+            pass
 
-    # check if the reference needs to be checked
-    check_reference_during_substitution = True if ref_data is None else False
-
-    if region_tuple is not None:
-        assert ref_data is None, "If `region_tuple` is given, `reference_data` must be None."
-
-        region_key = region_tuple[0]
-        region_name = region_tuple[1]
-
-        # assign region
-        _check_assignment(data=data, key=region_key, force_assignment=force_assignment, modality="regions")
+    # select data for analysis
+    adata_data = _select_data_for_dge(
+        data=target,
+        annotation_tuple=target_annotation_tuple,
+        cell_type_tuple=target_cell_type_tuple,
+        region_tuple=target_region_tuple,
+        force_assignment=force_assignment,
+        verbose=verbose
+    )
 
     # extract main anndata
-    adata1 = data.cells["main"].matrix.copy()
+    adata1 = data.cells.matrix.copy()
 
     if region_tuple is not None:
         # select only one region
@@ -2120,7 +2150,7 @@ def differential_gene_expression(
             _check_assignment(data=ref_data, key=ref_annotation_key, force_assignment=force_assignment, modality="annotations")
 
             # extract reference anndata
-        adata2 = ref_data.cells["main"].matrix.copy()
+        adata2 = ref_data.cells.matrix.copy()
         # repeat the same as for adata1 for adata2
         if ref_annotation_tuple is not None:
             col_with_id_ref = adata2.obsm["annotations"].apply(
@@ -2198,21 +2228,41 @@ def differential_gene_expression(
                                 method=method,
                                 )
 
-        # create dataframe from results
-        res_dict = create_deg_dataframe(
-            adata=adata_combined, groups=rgg_groups)
-        df = res_dict[rgg_groups[0]]
+    # create dataframe from results
+    res_dict = create_deg_dataframe(
+        adata=adata_combined, groups="DATA")
+    df = res_dict["DATA"]
 
     if plot_volcano:
+        cell_counts = adata_combined.obs[dge_comparison_column].value_counts()
+        data_counts = cell_counts["DATA"]
+        ref_counts = cell_counts["REFERENCE"]
+
+        n_upreg = np.sum((df["pvals"] <= significance_threshold) & (df["logfoldchanges"] > fold_change_threshold))
+        n_downreg = np.sum((df["pvals"] <= significance_threshold) & (df["logfoldchanges"] < -fold_change_threshold))
+
+        config_table = pd.DataFrame({
+            "": ["Annotation", "Cell type", "Region", "Cell number", "DEG number"],
+            "Target": [elem[1] if isinstance(elem, tuple) else elem for elem in [target_annotation_tuple, target_cell_type_tuple, target_region_tuple]] + [data_counts, n_upreg],
+            "Reference": [elem[1] if isinstance(elem, tuple) else elem for elem in [orig_ref_annotation_tuple, orig_ref_cell_type_tuple, ref_region_tuple]] + [ref_counts, n_downreg]
+        })
+
+        # remove empty rows
+        config_table = config_table.set_index("").dropna(how="all").reset_index()
+
         volcano_plot(
             data=df,
-            title=plot_title,
+            significance_threshold=significance_threshold,
+            fold_change_threshold=fold_change_threshold,
+            title=title,
             savepath = savepath,
             save_only = save_only,
             dpi_save = dpi_save,
-            **kwargs
+            config_table = config_table,
+            adjust_labels=True,
+            **volcano_kwargs
             )
-    else:
+    if return_results:
         return {
             "results": df,
             "params": adata_combined.uns["rank_genes_groups"]["params"]

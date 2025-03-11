@@ -103,6 +103,11 @@ class textformat:
     # spacer
     SPACER = "    "
 
+def create_ansi_color_code_from_rgb(rgb_color):
+    # Create the ANSI escape code
+    ansi_escape_code = f'\033[38;2;{rgb_color[0]};{rgb_color[1]};{rgb_color[2]}m'
+    return ansi_escape_code
+
 def remove_last_line_from_csv(filename):
     with open(filename) as myFile:
         lines = myFile.readlines()

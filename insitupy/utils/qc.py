@@ -54,8 +54,18 @@ def plot_qc(
     save_only: bool = False,
     dpi_save: int = 300
     ):
+    # set plotting parameters
+    plt.rcParams.update({
+    'font.size': fontsize,          # Base font size
+    'axes.titlesize': fontsize,     # Title font size
+    'axes.labelsize': fontsize,     # Axis label font size
+    'xtick.labelsize': fontsize,    # X-tick label font size
+    'ytick.labelsize': fontsize,    # Y-tick label font size
+    'legend.fontsize': fontsize,    # Legend font size
+    'figure.titlesize': fontsize    # Figure title font size
+})
+
     # plot
-    plt.rcParams.update({'font.size': fontsize})
     n_plots, nrows, ncols = get_nrows_maxcols(len(cats), max_cols=max_cols)
     fig, axs = plt.subplots(nrows, ncols, figsize=(9*ncols, 8*nrows))
 
@@ -65,15 +75,18 @@ def plot_qc(
         axs = [axs]
 
     for i, cat in enumerate(cats):
-        sns.boxplot(data=data, x=x, y=cat, color="w",
-                    boxprops={"facecolor": 'w'}, fliersize=0,
-                    ax=axs[i], )
-        sns.stripplot(data=data,
-                      x=x, y=cat,
-                      hue="panel_tissue_type",
-                      size=size,
-                      ax=axs[i]
-                      )
+        sns.boxplot(data=data, x=x, y=cat,
+                    #color="w",
+                    hue="panel_tissue_type",
+                    #boxprops={"facecolor": 'w'}, fliersize=0,
+                    ax=axs[i],
+                    )
+        # sns.stripplot(data=data,
+        #               x=x, y=cat,
+        #               hue="panel_tissue_type",
+        #               size=size,
+        #               ax=axs[i]
+        #               )
         axs[i].set_title(cat)
         axs[i].set_ylabel(None)
 
@@ -83,5 +96,7 @@ def plot_qc(
         else:
             # remove legend
             axs[i].get_legend().remove()
+
+    plt.show()
 
     save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=True)

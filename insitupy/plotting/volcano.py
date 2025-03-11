@@ -6,6 +6,7 @@ from typing import Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.font_manager import FontProperties
 
 from insitupy.io.plots import save_and_show_figure
 
@@ -15,13 +16,14 @@ def volcano_plot(data,
                  pval_column: str = 'neg_log10_pvals',
                  significance_threshold: Number = 0.05,
                  fold_change_threshold: Number = 1,
-                 title: str = "Volcano Plot",
+                 title: str = None,
                  adjust_labels: bool = True,
                  savepath: Union[str, os.PathLike, Path] = None,
                  save_only: bool = False,
                  dpi_save: int = 300,
                  label_top_n: int = 20,
                  figsize: Tuple[int, int] = (8, 6),
+                 config_table=None
                  ):
     """
     Create a volcano plot from the DataFrame and label the top 20 most significant up and down-regulated genes.
@@ -70,7 +72,8 @@ def volcano_plot(data,
                 alpha=0.5, color=colors)
 
     # Add labels and title
-    plt.title(title, fontsize=16)
+    if title is not None:
+        plt.title(title, fontsize=16)
     plt.xlabel('$\mathregular{Log_2}$ fold change', fontsize=14)
     plt.ylabel('$\mathregular{-Log_10}$ p-value', fontsize=14)
 
@@ -91,7 +94,7 @@ def volcano_plot(data,
     top_genes = pd.concat([top_up_genes, top_down_genes])
 
     # Adjust y-axis limits to provide space for text
-    plt.ylim(0, plt.ylim()[1] * 1.2)  # Increase the upper limit of the y-axis to make space for the annotations
+    plt.ylim(0, plt.ylim()[1] * 1.1)  # Increase the upper limit of the y-axis to make space for the annotations
 
     # Annotate top genes
     texts = []
@@ -103,7 +106,43 @@ def volcano_plot(data,
 
     if adjust_labels:
         # Adjust text to avoid overlap
-        adjust_text(texts, arrowprops=dict(arrowstyle='->', color='gray', lw=0.5))
+        adjust_text(texts,
+                    arrowprops=dict(arrowstyle='->', color='gray', lw=0.5),
+                    max_move=None # this helped with some annotations remaining overlapping
+                    )
+
+    # Add labels to the top of the plot, outside the plot area
+    plt.annotate('Target', xy=(1, 1.04), xycoords='axes fraction',
+                xytext=(-65, 0), textcoords='offset points',
+                ha='left', va='center', fontsize=14, color='black',
+                arrowprops=dict(arrowstyle='->', color='black'))
+
+    plt.annotate('Reference', xy=(0, 1.04), xycoords='axes fraction',
+                xytext=(93, 0), textcoords='offset points',
+                ha='right', va='center', fontsize=14, color='black',
+                arrowprops=dict(arrowstyle='->', color='black'))
+
+    if config_table is not None:
+        # Create table data
+        # Add table at the bottom of the plot
+        table = plt.table(cellText=config_table.values,
+                        colLabels=config_table.columns,
+                        cellLoc='center',
+                        colWidths=[.2,.4,.4],
+                        loc='bottom',
+                        bbox=[-0.12, -0.2-(0.1*(len(config_table)+1)), 1.12, 0.1*(len(config_table)+1)])
+
+        # make first row and first column bold
+        for (row, col), cell in table.get_celld().items():
+            if (row == 0) | (col == 0):
+                cell.set_text_props(fontproperties=FontProperties(weight='bold'))
+
+        table.scale(xscale=2, yscale=1)
+        # table.auto_set_font_size(True)
+        # table.set_fontsize(12)
+
+        # Adjust layout to make room for the table
+        plt.subplots_adjust(left=0.2, bottom=0.1*(1+len(config_table)))
 
     # save and show figure
     save_and_show_figure(savepath=savepath, fig=plt.gcf(), save_only=save_only, dpi_save=dpi_save)

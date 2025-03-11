@@ -71,13 +71,12 @@ def plot_colorlegend(
     plt.show()
 
 
-
-
 def plot_cellular_composition(
     data,
     cell_type_col: str,
     key: str,
     modality: Literal["regions", "annotations"] = "regions",
+    plot_type: Literal["pie", "bar", "barh"] = "barh",
     force_assignment: bool = False,
     max_cols: int = 4,
     savepath: Union[str, os.PathLike, Path] = None,
@@ -93,7 +92,7 @@ def plot_cellular_composition(
     """
     Plots the composition of cell types for specified regions or annotations.
 
-    This function generates pie charts to visualize the proportions of different cell types
+    This function generates pie charts or a single stacked bar plot to visualize the proportions of different cell types
     within specified regions or annotations. It can optionally save the plot to a file and
     return the composition data.
 
@@ -102,6 +101,7 @@ def plot_cellular_composition(
         cell_type_col (str): The column name in `adata.obs` that contains cell type information.
         key (str): The key to access the specific annotation or region in `adata.obsm`.
         modality (Literal["regions", "annotations"], optional): The modality to use, either "regions" or "annotations". Default is "regions".
+        plot_type (Literal["pie", "bar"], optional): The type of plot to generate, either "pie" or "bar". Default is "pie".
         force_assignment (bool, optional): If True, forces reassignment of cells to the requested annotation. Default is False.
         max_cols (int, optional): Maximum number of columns for subplots. Defaults to 4.
         savepath (Union[str, os.PathLike, Path], optional): The path to save the plot. If None, the plot is not saved. Default is None.
@@ -119,7 +119,7 @@ def plot_cellular_composition(
         ValueError: If the specified key or modality is not found in the data.
 
     Example:
-        >>> compositions = plot_cell_composition(data, cell_type_col="cell_type", key="region_1", return_data=True)
+        >>> compositions = plot_cell_composition(data, cell_type_col="cell_type", key="region_1", plot_type="bar", return_data=True)
         >>> print(compositions)
     """
     if adjust_labels:
@@ -142,49 +142,70 @@ def plot_cellular_composition(
     # calculate compositions
     compositions = {}
     for cat in cats:
-        idx = assignment_series[assignment_series.str.contains(cat)].index
-        compositions[cat] = adata.obs[cell_type_col].loc[idx].value_counts()
+        idx = assignment_series[assignment_series == cat].index
+        compositions[cat] = adata.obs[cell_type_col].loc[idx].value_counts(normalize=True) * 100 # calculate percentage
     compositions = pd.DataFrame(compositions)
 
     # Define a function to display percentages above the threshold
     def autopct_func(pct):
         return ('%1.1f%%' % pct) if pct > label_threshold else ''
 
-    # Plot pie charts for each area
-    n_plots, nrows, ncols = get_nrows_maxcols(len(cats), max_cols)
-    fig, axs = plt.subplots(nrows, ncols, figsize=(6*ncols,6*nrows))
+    if plot_type == "pie":
+        # Plot pie charts for each area
+        n_plots, nrows, ncols = get_nrows_maxcols(len(cats), max_cols)
+        fig, axs = plt.subplots(nrows, ncols, figsize=(6*ncols,6*nrows))
 
-    if n_plots > 1:
-        axs = axs.ravel()
-    else:
-        axs = [axs]
-
-    for i, area in enumerate(compositions.columns):
-        if show_labels:
-            wedges, texts, autotexts = axs[i].pie(compositions[area],
-                                                autopct=autopct_func, pctdistance=1.15,
-                                                colors=DEFAULT_CATEGORICAL_CMAP.colors
-                                                )
+        if n_plots > 1:
+            axs = axs.ravel()
         else:
-            wedges, texts = axs[i].pie(compositions[area],
-                                                colors=DEFAULT_CATEGORICAL_CMAP.colors
-                                                )
+            axs = [axs]
 
-        title_str = textwrap.fill(f'Proportions of Cell Types in {area}', width=20)
-        axs[i].set_title(title_str)
+        for i, area in enumerate(compositions.columns):
+            if show_labels:
+                wedges, texts, autotexts = axs[i].pie(compositions[area],
+                                                    autopct=autopct_func, pctdistance=1.15,
+                                                    colors=DEFAULT_CATEGORICAL_CMAP.colors
+                                                    )
+            else:
+                wedges, texts = axs[i].pie(compositions[area],
+                                                    colors=DEFAULT_CATEGORICAL_CMAP.colors
+                                                    )
 
-        if adjust_labels:
-            # Adjust text to avoid overlap
-            adjust_text(texts + autotexts, ax=axs[i], arrowprops=dict(arrowstyle="->", color='k', lw=0.5))
+            title_str = textwrap.fill(f'Proportions of Cell Types in {area}', width=20)
+            axs[i].set_title(title_str)
 
-    # Add a legend
-    fig.legend(wedges, compositions.index, loc='center left', bbox_to_anchor=(0.92, 0.5))
+            if adjust_labels:
+                # Adjust text to avoid overlap
+                adjust_text(texts + autotexts, ax=axs[i], arrowprops=dict(arrowstyle="->", color='k', lw=0.5))
 
-    save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=False)
+        # Add a legend
+        fig.legend(wedges, compositions.index, loc='center left', bbox_to_anchor=(0.92, 0.5))
+
+    elif plot_type in ["bar", "barh"]:
+        # Plot a single stacked bar plot
+        if plot_type == "bar":
+            fig_width = 1*len(cats)
+            fig_height = 6
+            ylabel = "%"
+            xlabel = modality
+        else:
+            fig_width = 6
+            fig_height = 1*len(cats)
+            ylabel = modality
+            xlabel = "%"
+        compositions.T.plot(kind=plot_type, stacked=True, figsize=(fig_width, fig_height),
+                            width=0.7,
+                            color=DEFAULT_CATEGORICAL_CMAP.colors)
+        plt.gca().invert_yaxis()
+        plt.title('Cell type composition')
+        plt.ylabel(ylabel)
+        plt.xlabel(xlabel)
+        plt.legend(title='Cell Types', bbox_to_anchor=(1.05, 1), loc='upper left')
+
+    save_and_show_figure(savepath=savepath, fig=plt.gcf(), save_only=save_only, dpi_save=dpi_save, tight=False)
 
     plt.tight_layout()
     plt.show()
 
     if return_data:
         return compositions
-
