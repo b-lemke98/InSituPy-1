@@ -1,11 +1,11 @@
 import os
 import warnings
 from copy import deepcopy
+from math import ceil
 from numbers import Number
 from os.path import relpath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
-from math import ceil
 
 import cv2
 import dask.array as da
@@ -16,7 +16,6 @@ import zarr
 from anndata import AnnData
 from parse import *
 from shapely import MultiPoint, MultiPolygon, Point, Polygon, affinity, wkt
-from rasterio.features import rasterize
 
 from insitupy import __version__
 from insitupy._constants import FORBIDDEN_ANNOTATION_NAMES
@@ -26,9 +25,9 @@ from insitupy.utils.utils import convert_int_to_xenium_hex
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
 from ..images.io import read_image, write_ome_tiff, write_zarr
 from ..images.utils import create_img_pyramid, crop_dask_array_or_pyramid
+from ..io.baysor import read_baysor_polygons
 from ..io.files import check_overwrite_and_remove_if_true, write_dict_to_json
 from ..io.geo import parse_geopandas, write_qupath_geojson
-from ..io.baysor import read_baysor_polygons
 from ..utils.utils import convert_to_list, decode_robust_series
 from ..utils.utils import textformat as tf
 from ._mixins import DeepCopyMixin
@@ -961,7 +960,7 @@ class MultiCellData(DeepCopyMixin):
 
     def get_all_keys(self):
         return self._data.keys()
-    
+
     def crop(self,
             xlim: Optional[Tuple[int, int]] = None,
             ylim: Optional[Tuple[int, int]] = None,
@@ -979,10 +978,15 @@ class MultiCellData(DeepCopyMixin):
                    key: str = "proseg",
                    is_main: bool = False
                    ):
-        
+
+        try:
+            from rasterio.features import rasterize
+        except ImportError:
+            raise ImportError("This function requires the rasterio package, please install with `pip install rasterio`.")
+
         path_counts = str(path_counts)
         path_metadata = str(path_metadata)
-        
+
         if path_counts.endswith(".parquet"):
             counts = pd.read_parquet(path_counts)
         elif path_counts.endswith("csv.gz"):
