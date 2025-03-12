@@ -268,7 +268,7 @@ def read_multicelldata(
     elif os.path.exists(path / ".celldata"):
         old = True
     else:
-        raise FileNotFoundError(r"Metadata file for cells dimension in {path} was not found.")
+        raise FileNotFoundError(f"Metadata file for cells dimension in {path} was not found.")
     path = Path(path)
     mcd = MultiCellData()
     if not old:
