@@ -260,10 +260,15 @@ def read_shapesdata(
 
 def read_multicelldata(
         path: Union[str, os.PathLike, Path],
-        old: Optional[bool] = False,
         path_upper: Optional[Union[str, os.PathLike, Path]] = None,
         alt_path_dict: Optional[dict] = None,
     ) -> MultiCellData:
+    if os.path.exists(path / ".multicelldata"):
+        old = False
+    elif os.path.exists(path / ".celldata"):
+        old = True
+    else:
+        raise FileNotFoundError(r"Metadata file for cells dimension in {path} was not found.")
     path = Path(path)
     mcd = MultiCellData()
     if not old:

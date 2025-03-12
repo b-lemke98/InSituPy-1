@@ -888,21 +888,6 @@ class InSituData:
                     raise ModalityNotFoundError(modality="cells")
             else:
                 self._cells = read_multicelldata(path=self._path / cells_path)
-
-            # check if alt data is there and read if yes
-#            try:
-#                alt_path_dict = self._metadata["data"]["alt"]
-#            except KeyError:
-#                if verbose:
-#                    print("\tNo alternative cells found...")
-#            else:
-#                print("\tFound alternative cells...")
-#                alt_dict = {}
-#                for k, p in alt_path_dict.items():
-#                    alt_dict[k] = read_celldata(path=self._path / p)
-
-                # add attribute
-#                self._alt = alt_dict
         else:
             NoProjectLoadWarning()
 
