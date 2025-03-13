@@ -8,7 +8,7 @@ import shapely
 from insitupy.io.files import read_json
 
 
-def read_baysor_polygons(
+def _read_baysor_polygons(
     file: Union[str, os.PathLike, Path]
     ) -> gpd.GeoDataFrame:
 

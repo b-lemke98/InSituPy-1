@@ -1,3 +1,4 @@
+import gzip
 import json
 import os
 import shutil
@@ -7,17 +8,19 @@ from typing import Union
 from insitupy.utils.utils import nested_dict_numpy_to_list
 
 
-def read_json(
-    file: Union[str, os.PathLike, Path],
-    ) -> dict:
+def read_json(path: Union[str, os.PathLike, Path]) -> dict:
     '''
-    Function to load json files as dictionary.
+    Function to load json or json.gz files as dictionary.
     '''
-    # load metadata file
-    with open(file, "r") as metafile:
-        metadata = json.load(metafile)
+    # Determine if the file is gzipped
+    if str(path).endswith('.gz'):
+        with gzip.open(path, 'rt') as f:
+            data = json.load(f)
+    else:
+        with open(path, 'r') as f:
+            data = json.load(f)
 
-    return metadata
+    return data
 
 
 def write_dict_to_json(

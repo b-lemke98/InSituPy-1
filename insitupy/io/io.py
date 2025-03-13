@@ -14,8 +14,9 @@ import zarr
 from zarr.errors import ArrayNotFoundError
 
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
-                                        CellData, RegionsData, ShapesData, MultiCellData)
-from insitupy.io.baysor import read_baysor_polygons
+                                        CellData, MultiCellData, RegionsData,
+                                        ShapesData)
+from insitupy.io.baysor import _read_baysor_polygons
 from insitupy.io.files import read_json
 from insitupy.utils.utils import convert_int_to_xenium_hex, convert_to_list
 
@@ -60,7 +61,7 @@ def read_baysor_cells(
     print("Reading segmentation masks", flush=True)
     print("\tRead polygons", flush=True)
     jsonfile = baysor_output / "segmentation_polygons.json"
-    df = read_baysor_polygons(jsonfile)
+    df = _read_baysor_polygons(jsonfile)
 
     # remove polygons of cells that have been removed in the matrix
     df = df[df.cell.astype(int).isin(matrix.obs["CellID"])]
