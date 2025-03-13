@@ -7,7 +7,6 @@ from os.path import relpath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 
-import cv2
 import dask.array as da
 import geopandas as gpd
 import numpy as np
@@ -15,22 +14,22 @@ import pandas as pd
 import zarr
 from anndata import AnnData
 from parse import *
-from shapely import MultiPoint, MultiPolygon, Point, Polygon, affinity, wkt
+from shapely import MultiPoint, MultiPolygon, Point, Polygon, affinity
 
 from insitupy import __version__
 from insitupy._constants import FORBIDDEN_ANNOTATION_NAMES
-from insitupy.images.utils import resize_image
-from insitupy.utils.utils import convert_int_to_xenium_hex
-
-from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
-from ..images.io import read_image, write_ome_tiff, write_zarr
-from ..images.utils import create_img_pyramid, crop_dask_array_or_pyramid
-from ..io.baysor import read_baysor_polygons
-from ..io.files import check_overwrite_and_remove_if_true, write_dict_to_json
-from ..io.geo import parse_geopandas, write_qupath_geojson
-from ..utils.utils import convert_to_list, decode_robust_series
-from ..utils.utils import textformat as tf
-from ._mixins import DeepCopyMixin
+from insitupy._core._mixins import DeepCopyMixin
+from insitupy._exceptions import InvalidDataTypeError, InvalidFileTypeError
+from insitupy.images.io import read_image, write_ome_tiff, write_zarr
+from insitupy.images.utils import (create_img_pyramid,
+                                   crop_dask_array_or_pyramid, resize_image)
+from insitupy.io.baysor import _read_baysor_polygons
+from insitupy.io.files import (check_overwrite_and_remove_if_true,
+                               write_dict_to_json)
+from insitupy.io.geo import parse_geopandas, write_qupath_geojson
+from insitupy.utils._shapely import scale_wkt_polygon
+from insitupy.utils.utils import convert_to_list, decode_robust_series
+from insitupy.utils.utils import textformat as tf
 
 
 class ShapesData(DeepCopyMixin):
@@ -1029,25 +1028,10 @@ class MultiCellData(DeepCopyMixin):
         adata = AnnData(X=counts, obs=meta, obsm=obsm)
 
         # Read Baysor polygons
-        baysor_polygons = read_baysor_polygons(path_baysor_polygons)
-
-        def divide_polygon(polygon_wkt, constant):
-            """
-                Scales the polygon by a given constant.
-
-                Args:
-                    polygon_wkt (str): Polygon in WKT format.
-                    constant (float): Scaling constant.
-
-                Returns:
-                    Polygon: Scaled polygon.
-            """
-            polygon = wkt.loads(polygon_wkt)
-            divided_polygon = affinity.scale(polygon, xfact=1/constant, yfact=1/constant, origin=(0, 0))
-            return divided_polygon
+        baysor_polygons = _read_baysor_polygons(path_baysor_polygons)
 
         # Scale Baysor polygons
-        baysor_polygons['geometry'] = baysor_polygons['geometry'].apply(lambda x: divide_polygon(x.wkt, pixel_size))
+        baysor_polygons['geometry'] = baysor_polygons['geometry'].apply(lambda x: scale_wkt_polygon(x.wkt, pixel_size))
         baysor_polygons["maxx"] = baysor_polygons["maxx"] / pixel_size
         baysor_polygons["maxy"] = baysor_polygons["maxy"] / pixel_size
         polygon_bounds = baysor_polygons.geometry.bounds
