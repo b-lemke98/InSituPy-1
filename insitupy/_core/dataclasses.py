@@ -664,6 +664,8 @@ class CellData(DeepCopyMixin):
 
     @matrix.setter
     def matrix(self, value: AnnData):
+        if not isinstance(value, AnnData):
+            raise ValueError(f"Matrix must be an AnnData object. Instead: {type(value)}.")
         self._matrix = value
 
     @property
@@ -770,10 +772,6 @@ class CellData(DeepCopyMixin):
 
         # create directory
         path.mkdir(parents=True, exist_ok=True)
-
-        # # create path for matrix
-        # mtx_path = path / "matrix"
-        # mtx_path.mkdir(parents=True, exist_ok=True) # create directory
 
         # write matrix to file
         mtx_file = path / "matrix.h5ad"
@@ -917,6 +915,14 @@ class MultiCellData(DeepCopyMixin):
 
     def __setitem__(self, key: str, item):
         self._data[key] = item
+
+    @property
+    def matrix(self):
+        return self._data["main"].matrix
+
+    @property
+    def boundaries(self):
+        return self._data["main"].boundaries
 
     @property
     def key_main(self):
