@@ -1031,7 +1031,7 @@ class MultiCellData(DeepCopyMixin):
         baysor_polygons = _read_baysor_polygons(path_baysor_polygons)
 
         # Scale Baysor polygons
-        baysor_polygons['geometry'] = baysor_polygons['geometry'].apply(lambda x: scale_wkt_polygon(x.wkt, pixel_size))
+        baysor_polygons['geometry'] = baysor_polygons['geometry'].apply(lambda x: scale_wkt_polygon(x, pixel_size))
         baysor_polygons["maxx"] = baysor_polygons["maxx"] / pixel_size
         baysor_polygons["maxy"] = baysor_polygons["maxy"] / pixel_size
         polygon_bounds = baysor_polygons.geometry.bounds
