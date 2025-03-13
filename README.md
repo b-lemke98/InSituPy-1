@@ -9,7 +9,7 @@ Currently the analysis is focused on data from the [_Xenium In Situ_](https://ww
 
 ## Latest changes
 
-*!!!Warning: This repository is under very active development and it cannot be guaranteed that releases contain changes that might impair backwards compatibility. If you observe any such thing, please feel free to contact us to solve the problem. Thanks!*
+*!!!Warning: This repository is under very active development and it cannot be ruled out that changes might impair backwards compatibility. If you observe any such thing, please feel free to contact us to solve the problem. Thanks!*
 
 For the latest developments check out the [releases](https://github.com/SpatialPathology/InSituPy/releases).
 
