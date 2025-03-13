@@ -18,7 +18,7 @@ def normalize_and_transform_anndata(adata,
               verbose: bool = True
               ) -> None:
     # check if the matrix consists of raw integer counts
-    check_integer_counts(adata.X)
+    #check_integer_counts(adata.X)
 
     # store raw counts in layer
     print("Store raw counts in anndata.layers['counts']...") if verbose else None

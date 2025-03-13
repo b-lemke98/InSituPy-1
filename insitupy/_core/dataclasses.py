@@ -25,7 +25,7 @@ from insitupy.utils.utils import convert_int_to_xenium_hex
 from .._exceptions import InvalidDataTypeError, InvalidFileTypeError
 from ..images.io import read_image, write_ome_tiff, write_zarr
 from ..images.utils import create_img_pyramid, crop_dask_array_or_pyramid
-from ..io.baysor import read_baysor_polygons
+from ..io.baysor import read_baysor_polygons,read_proseg_polygons
 from ..io.files import check_overwrite_and_remove_if_true, write_dict_to_json
 from ..io.geo import parse_geopandas, write_qupath_geojson
 from ..utils.utils import convert_to_list, decode_robust_series
@@ -970,6 +970,7 @@ class MultiCellData(DeepCopyMixin):
         for key in self._data.keys():
             self._data[key].crop(xlim=xlim, ylim=ylim, shape=shape, inplace=inplace, verbose=verbose)
 
+
     def add_proseg(self,
                    path_counts: Union[str, os.PathLike, Path],
                    path_metadata:  Union[str, os.PathLike, Path],
@@ -997,6 +998,7 @@ class MultiCellData(DeepCopyMixin):
         # Convert paths to string format
         path_counts = str(path_counts)
         path_metadata = str(path_metadata)
+        #print(path_counts,path_metadata)
 
         # Read counts data based on file extension
         if path_counts.endswith(".parquet"):
@@ -1013,23 +1015,31 @@ class MultiCellData(DeepCopyMixin):
             meta = pd.read_csv(path_metadata, compression='gzip')
         else:
             meta = pd.read_csv(path_metadata)
+        
+        #print(meta)
 
         # Ensure indices are strings
         counts.index = counts.index.astype(str)
         meta.index = meta.index.astype(str)
+        #print(counts.index,meta.index)
+        #print(counts)
 
         # Filter out unwanted columns
         counts = counts.loc[:, ~counts.columns.str.startswith('Neg')]
         counts = counts.loc[:, ~counts.columns.str.startswith('Unas')]
+        #print(counts)
 
         #Add spatial coordinates
         obsm = {"spatial": np.stack([meta["centroid_x"].to_numpy(), meta["centroid_y"].to_numpy()], axis=1)}
 
         # Create AnnData object
         adata = AnnData(X=counts, obs=meta, obsm=obsm)
+        #print(adata)
 
         # Read Baysor polygons
-        baysor_polygons = read_baysor_polygons(path_baysor_polygons)
+        #baysor_polygons = read_baysor_polygons(path_baysor_polygons)
+        baysor_polygons = read_proseg_polygons(path_baysor_polygons)
+        print(baysor_polygons)
 
         def divide_polygon(polygon_wkt, constant):
             """
