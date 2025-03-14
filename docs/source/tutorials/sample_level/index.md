@@ -41,6 +41,14 @@ These tutorials focus on the preprocessing, analysis and handling of individual 
 
 ```
 
+.. card:: Perform segmentation with Proseg and add the results to `InSituData`
+    :link: 11_InSituPy_add_proseg_data
+    :link-type: doc
+
+    Tutorial on how to improve cell segmentation with Proseg and add the data to `InSituData` for downstream analysis.
+
+```
+
 ```{toctree}
 :hidden: true
 :maxdepth: 1
