@@ -575,7 +575,7 @@ class InSituData:
             )
 
         if self._images is not None:
-            _self.images.crop(xlim=xlim, ylim=ylim)
+            _self.images.crop(xlim=xlim, ylim=ylim, inplace=True)
 
         if self._annotations is not None:
 
@@ -583,7 +583,7 @@ class InSituData:
                 shape=shape,
                 xlim=tuple([elem for elem in xlim]),
                 ylim=tuple([elem for elem in ylim]),
-                verbose=verbose
+                verbose=verbose, inplace=True
                 )
 
         if self._regions is not None:
@@ -591,7 +591,7 @@ class InSituData:
                 shape=shape,
                 xlim=tuple([elem for elem in xlim]),
                 ylim=tuple([elem for elem in ylim]),
-                verbose=verbose
+                verbose=verbose, inplace=True
             )
 
         if _self.metadata is not None:

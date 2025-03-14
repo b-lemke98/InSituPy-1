@@ -77,8 +77,9 @@ if WITH_NAPARI:
         masks = []
         for n in boundaries.metadata.keys():
             b = boundaries[n]
-            if isinstance(b, dask.array.core.Array) or np.all([isinstance(elem, dask.array.core.Array) for elem in b]):
-                masks.append(n)
+            if b is not None:
+                if isinstance(b, dask.array.core.Array) or np.all([isinstance(elem, dask.array.core.Array) for elem in b]):
+                    masks.append(n)
 
         if xdata.images is not None:
             # get image metadata

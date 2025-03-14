@@ -5,7 +5,7 @@ from math import ceil
 from numbers import Number
 from os.path import relpath
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import dask.array as da
 import geopandas as gpd
@@ -305,8 +305,15 @@ class ShapesData(DeepCopyMixin):
              shape,
              xlim,
              ylim,
-             verbose=True
+             verbose: bool = True,
+             inplace: bool = False
              ):
+        # check if the changes are supposed to be made in place or not
+        if inplace:
+            _self = self
+        else:
+            _self = self.copy()
+
         if shape is None:
             if (xlim is None) or (ylim is None):
                 raise ValueError("If shape is None, both xlim and ylim must not be None.")
@@ -318,8 +325,8 @@ class ShapesData(DeepCopyMixin):
                     warnings.warn("Both xlim/ylim and shape are provided. Shape will be used for cropping.")
 
         new_metadata = {}
-        for i, n in enumerate(self._metadata.keys()):
-            shapesdf = self[n]
+        for i, n in enumerate(_self._metadata.keys()):
+            shapesdf = _self[n]
 
             # select annotations that intersect with the selected area
             mask = [shape.intersects(elem) for elem in shapesdf["geometry"]]
@@ -331,21 +338,24 @@ class ShapesData(DeepCopyMixin):
             # check if there are annotations left or if it has to be deleted
             if len(shapesdf) > 0:
                 # add new dataframe back to annotations object
-                self._data[n] = shapesdf
+                _self._data[n] = shapesdf
 
                 # update metadata
                 new_metadata[n] = {}
-                new_metadata[n][f"n_{self._shape_name}"] = len(shapesdf)
+                new_metadata[n][f"n_{_self._shape_name}"] = len(shapesdf)
                 new_metadata[n]["classes"] = shapesdf.name.unique().tolist()
-                new_metadata[n]["analyzed"] = self._metadata[n]["analyzed"]  # analyzed information is just copied
+                new_metadata[n]["analyzed"] = _self._metadata[n]["analyzed"]  # analyzed information is just copied
 
             else:
                 # delete annotations
-                del self._data[n]
+                del _self._data[n]
 
-        self._metadata = new_metadata
+        _self._metadata = new_metadata
 
-        self._update_metadata()
+        _self._update_metadata()
+
+        if not inplace:
+            return _self
 
     def remove_data(self,
                    key_to_remove: str,
@@ -426,20 +436,23 @@ class BoundariesData(DeepCopyMixin):
     Object to read and load boundaries of cells and nuclei.
     '''
     def __init__(self,
-                 cell_names: Union[da.core.Array, np.ndarray, List],
-                 seg_mask_value: Optional[Union[da.core.Array, np.ndarray, List]],
+                 cell_names: Union[np.ndarray, List],
+                 seg_mask_value: Optional[Union[np.ndarray, List]],
                  ):
         """
         Initialize the BoundariesData object.
 
         Args:
-            cell_names (Union[da.core.Array, np.ndarray, List]): Cell names which need to correspond to `.obs_names` in the `.matrix` of `CellData`.
-            seg_mask_value (Optional[Union[da.core.Array, np.ndarray, List]]): Segmentation mask values. Required to have the same length as `cell_names`.
+            cell_names (Union[np.ndarray, List]): Cell names which need to correspond to `.obs_names` in the `.matrix` of `CellData`.
+            seg_mask_value (Optional[Union[np.ndarray, List]]): Segmentation mask values. Required to have the same length as `cell_names`.
                 Specifies which values in the "cells" segmentation mask correspond to which cell name.
 
         For more details on how these values are saved in case of Xenium In Situ, see:
         https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/tutorials/outputs/xoa-output-zarr
         """
+        if len(cell_names) != len(seg_mask_value):
+            raise ValueError(f"cell_names ({len(cell_names)}) and seg_mask_value ({len(seg_mask_value)}) must have the same length.")
+
         self._metadata = {}
 
         # store cell ids
@@ -462,11 +475,12 @@ class BoundariesData(DeepCopyMixin):
             ll = len(labels)
             repr = f"BoundariesData object with {ll} {'entry' if ll == 1 else 'entries'}:"
             for l in labels:
-                repr += f"\n{tf.SPACER+tf.Bold+l+tf.ResetAll}"
+                if self._data[l] is not None:
+                    repr += f"\n{tf.SPACER+tf.Bold+l+tf.ResetAll}"
         return repr
 
     def __getitem__(self, key):
-        return self._data.get(key)
+        return self._data[key]
 
     def __setitem__(self, key: str, item):
         self._data[key] = item
@@ -488,54 +502,89 @@ class BoundariesData(DeepCopyMixin):
         return self._seg_mask_value
 
     def add_boundaries(self,
-                       data: Optional[Union[dict, List[str]]],
+                       cell_boundaries: Union[da.core.Array, np.ndarray],
                        pixel_size: Number, # required for boundaries that are saved as masks
-                       labels: Optional[List[str]] = [],
+                       nuclei_boundaries: Optional[Union[da.core.Array, np.ndarray]] = None,
+                       #data: Optional[Union[Dict[str, da.core.Array]]],
+                    #    labels: Optional[List[str]] = [],
                        overwrite: bool = False
                        ):
-        if isinstance(data, dict):
-            # extract keys from dictionary
-            labels = data.keys()
-            data = data.values()
-        elif isinstance(data, list):
-            if labels is None:
-                raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
-            else:
-                # make sure labels is a list
-                labels = convert_to_list(labels)
-        else:
-            data = convert_to_list(data)
-            labels = convert_to_list(labels)
-            #raise ValueError(f"Argument 'dataframes' has unknown file type ({type(data)}). Expected to be a list or dictionary.")
+        if cell_boundaries is None:
+            raise ValueError("cell_boundaries cannot be None.")
 
-        for l, df in zip(labels, data):
-            if isinstance(df, pd.DataFrame) or isinstance(df, da.core.Array) or np.all([isinstance(elem, da.core.Array) for elem in df]):
-                if l not in self._metadata or overwrite:
-                    # add to object
-                    self._data[l] = df
-                    self._metadata[l] = {}
-                    self._metadata[l]["pixel_size"] = pixel_size
-                else:
-                    raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
+        # make sure the boundaries are a dask array
+        #if not isinstance(cell_boundaries, da.core.Array) and cell_boundaries is not None:
+        if isinstance(cell_boundaries, np.ndarray):
+            cell_boundaries = da.from_array(cell_boundaries)
+
+        #if not isinstance(nuclei_boundaries, da.core.Array) and nuclei_boundaries is not None:
+        if isinstance(nuclei_boundaries, np.ndarray):
+            nuclei_boundaries = da.from_array(nuclei_boundaries)
+
+        if not (isinstance(cell_boundaries, da.core.Array) or isinstance(cell_boundaries, list) or cell_boundaries is None):
+            raise ValueError("cell_boundaries must be a dask/numpy array or a list")
+
+        if not (isinstance(nuclei_boundaries, da.core.Array) or isinstance(nuclei_boundaries, list) or nuclei_boundaries is None):
+            raise ValueError("nuclei_boundaries must be a dask/numpy array, a list, or None")
+
+        data = {
+            "cells": cell_boundaries,
+            "nuclei": nuclei_boundaries
+        }
+
+        # if isinstance(data, dict):
+        # extract keys from dictionary
+        # labels = data.keys()
+        # data = data.values()
+        # elif isinstance(data, list):
+        #     if labels is None:
+        #         raise ValueError("Argument 'labels' is None. If 'dataframes' is a list, 'labels' is required to be a list, too.")
+        #     else:
+        #         # make sure labels is a list
+        #         labels = convert_to_list(labels)
+        # else:
+        #     data = convert_to_list(data)
+        #     labels = convert_to_list(labels)
+        #     #raise ValueError(f"Argument 'dataframes' has unknown file type ({type(data)}). Expected to be a list or dictionary.")
+
+        #for l, df in zip(labels, data):
+        for l, img in data.items():
+            #if isinstance(img, pd.DataFrame) or isinstance(img, da.core.Array) or np.all([isinstance(elem, da.core.Array) for elem in img]):
+            if l not in self._metadata or overwrite:
+                # add to object
+                self._data[l] = img
+                self._metadata[l] = {}
+                self._metadata[l]["pixel_size"] = pixel_size
             else:
-                print(f"Boundaries element `{l}` is neither a pandas DataFrame nor a Dask Array. Was not added.")
+                raise KeyError(f"Label '{l}' exists already in BoundariesData object. To overwrite, set 'overwrite' argument to True.")
+            # else:
+            #     print(f"Boundaries element `{l}` is neither a pandas DataFrame nor a Dask Array. Was not added.")
 
     def crop(self,
              cell_ids: List[str],
              xlim: Tuple[int, int],
-             ylim: Tuple[int, int]
+             ylim: Tuple[int, int],
+             inplace: bool = False
              ):
         '''
         Crop the BoundariesData object.
         '''
+
+        # check if the changes are supposed to be made in place or not
+        if inplace:
+            _self = self
+        else:
+            _self = self.copy()
+
         # make sure cell ids are a list
         cell_ids = convert_to_list(cell_ids)
 
-        for n, meta in self._metadata.items():
+        for n, meta in _self._metadata.items():
             # get dataframe
-            data = self[n]
+            data = _self[n]
 
-            try:
+            if data is not None:
+                # try:
                 # get pixel size
                 pixel_size = meta["pixel_size"]
 
@@ -545,16 +594,19 @@ class BoundariesData(DeepCopyMixin):
                     ylim=ylim,
                     pixel_size=pixel_size
                 )
-            except InvalidDataTypeError:
-                # filter dataframe
-                data = data.loc[data["cell_id"].isin(cell_ids), :]
+                # except InvalidDataTypeError:
+                #     # filter dataframe
+                #     data = data.loc[data["cell_id"].isin(cell_ids), :]
 
-                # re-center to 0
-                data["vertex_x"] -= xlim[0]
-                data["vertex_y"] -= ylim[0]
+                #     # re-center to 0
+                #     data["vertex_x"] -= xlim[0]
+                #     data["vertex_y"] -= ylim[0]
 
             # add to object
-            self._data[n] = data
+            _self._data[n] = data
+
+        if not inplace:
+            return _self
 
     def convert_to_shapely_objects(self):
         for n in self._metadata.keys():
@@ -591,27 +643,28 @@ class BoundariesData(DeepCopyMixin):
             for n in self._metadata.keys():
                 bound_data = self[n]
 
-                # check data
-                if isinstance(bound_data, list):
-                    if not save_as_pyramid:
-                        bound_data = bound_data[0]
-                else:
-                    if save_as_pyramid:
-                        # create pyramid
-                        bound_data = create_img_pyramid(img=bound_data, nsubres=6)
+                if bound_data is not None:
+                    # check data
+                    if isinstance(bound_data, list):
+                        if not save_as_pyramid:
+                            bound_data = bound_data[0]
+                    else:
+                        if save_as_pyramid:
+                            # create pyramid
+                            bound_data = create_img_pyramid(img=bound_data, nsubres=6)
 
 
-                #if isinstance(bound_data, dask.array.core.Array):
-                if isinstance(bound_data, list):
-                    for i, b in enumerate(bound_data):
-                        comp = f"masks/{n}/{i}"
-                        b.to_zarr(dirstore, component=comp)
-                else:
-                    bound_data.to_zarr(dirstore, component=f"masks/{n}")
+                    #if isinstance(bound_data, dask.array.core.Array):
+                    if isinstance(bound_data, list):
+                        for i, b in enumerate(bound_data):
+                            comp = f"masks/{n}/{i}"
+                            b.to_zarr(dirstore, component=comp)
+                    else:
+                        bound_data.to_zarr(dirstore, component=f"masks/{n}")
 
-                # add boundaries metadata to zarr.zip
-                store = zarr.open(dirstore, mode="a")
-                store[f"masks/{n}"].attrs.put(self._metadata[n])
+                    # add boundaries metadata to zarr.zip
+                    store = zarr.open(dirstore, mode="a")
+                    store[f"masks/{n}"].attrs.put(self._metadata[n])
 
                 # save keys in insitupy metadata
                 #metadata["boundaries"]["keys"].append(n)
@@ -749,7 +802,9 @@ class CellData(DeepCopyMixin):
 
         # crop boundaries
         _self.boundaries.crop(
-            cell_ids=_self.matrix.obs_names, xlim=xlim, ylim=ylim
+            cell_ids=_self.matrix.obs_names,
+            xlim=xlim, ylim=ylim,
+            inplace=True
             )
 
         # shift coordinates to correct for change of coordinates during cropping
@@ -760,7 +815,11 @@ class CellData(DeepCopyMixin):
             _self.shift(x=-xlim[0], y=-ylim[0])
 
         # sync the ids and names
-        _self.sync_cell_ids()
+        _self.sync()
+
+        if not inplace:
+            return _self
+
 
     def save(self,
              path: Union[str, os.PathLike, Path],
@@ -809,7 +868,7 @@ class CellData(DeepCopyMixin):
         write_dict_to_json(dictionary=celldata_metadata, file=path / ".celldata")
 
 
-    def sync_cell_ids(self):
+    def sync(self):
         '''
         Function to synchronize matrix and boundaries of CellData.
 
@@ -842,21 +901,27 @@ class CellData(DeepCopyMixin):
             # find the seg_mask_values which are not anymore present
             seg_mask_values_not_in_matrix = ds[~filter_mask_in].values
 
+            # extract boundaries
             cell_bounds = boundaries["cells"]
             nuc_bounds = boundaries["nuclei"]
 
             if isinstance(cell_bounds, list):
-                assert isinstance (nuc_bounds, list), "Cellular boundaries are a image pyramid but nuclear boundaries are not. Both need to be of the same type for the synchronization to work."
-                for cell_bound, nuc_bound in zip(cell_bounds, nuc_bounds):
+                if nuc_bounds is not None:
+                    assert isinstance (nuc_bounds, list), "Cellular boundaries are a image pyramid but nuclear boundaries are not. Both need to be of the same type for the synchronization to work."
+                for i, cell_bound in enumerate(cell_bounds):
                     removed_cells_mask = da.isin(cell_bound, seg_mask_values_not_in_matrix)
                     cell_bound[removed_cells_mask] = 0 # set all removed cells 0
-                    nuc_bound[removed_cells_mask] = 0 # set all nuclei belong to the removed cells 0
+                    if nuc_bounds is not None:
+                        nuc_bounds[i][removed_cells_mask] = 0 # set all nuclei belong to the removed cells 0
             elif isinstance(cell_bounds, da.core.Array):
-                assert isinstance (nuc_bounds, da.core.Array), "Cellular boundaries are a dask array but nuclear boundaries are not. Both need to be of the same type for the synchronization to work."
+                if nuc_bounds is not None:
+                    assert isinstance (nuc_bounds, da.core.Array), "Cellular boundaries are a dask array but nuclear boundaries are not. Both need to be of the same type for the synchronization to work."
                 # set all non existent cell ids to zero
                 removed_cells_mask = da.isin(cell_bounds, seg_mask_values_not_in_matrix)
                 cell_bounds[removed_cells_mask] = 0 # set all removed cells 0
-                nuc_bounds[removed_cells_mask] = 0 # set all nuclei belong to the removed cells 0
+
+                if nuc_bounds is not None:
+                    nuc_bounds[removed_cells_mask] = 0 # set all nuclei belong to the removed cells 0
             else:
                 warnings.warn(f"Unknown data type for cellular boundaries: {type(cell_bounds)}. Need to be either a dask array or a list of dask arrays. Skipped synchronization of cell ids.")
 
@@ -980,9 +1045,23 @@ class MultiCellData(DeepCopyMixin):
             shape: Optional[Union[Polygon, MultiPolygon]] = None,
             inplace: bool = False,
             verbose: bool = True):
-        for key in self._layers.keys():
-            self._layers[key].crop(xlim=xlim, ylim=ylim, shape=shape, inplace=inplace, verbose=verbose)
 
+        # check if the changes are supposed to be made in place or not
+        if inplace:
+            _self = self
+        else:
+            _self = self.copy()
+
+        for key in _self._layers.keys():
+            _self._layers[key].crop(
+                xlim=xlim,
+                ylim=ylim,
+                shape=shape,
+                inplace=True,
+                verbose=verbose)
+
+        if not inplace:
+            return _self
 
     def add_proseg(self,
                    path: Union[str, os.PathLike, Path],
@@ -1013,17 +1092,17 @@ class MultiCellData(DeepCopyMixin):
         path = Path(path)
 
         if counts_file is None:
-            path_counts = list(path.glob("expected-counts*"))[0]
+            path_counts = list(path.glob("expected-counts.*"))[0]
         else:
             path_counts = path / counts_file
 
         if cell_metadata_file is None:
-            path_cell_metadata = list(path.glob("cell-metadata*"))[0]
+            path_cell_metadata = list(path.glob("cell-metadata.*"))[0]
         else:
             path_cell_metadata = path / cell_metadata_file
 
         if polygons_file is None:
-            path_polygons = list(path.glob("cell-polygons*"))[0]
+            path_polygons = list(path.glob("cell-polygons.*"))[0]
         else:
             path_polygons = path / polygons_file
 
@@ -1045,18 +1124,25 @@ class MultiCellData(DeepCopyMixin):
         xmax = ceil(polygon_bounds.loc[:, "maxx"].max())
         ymax = ceil(polygon_bounds.loc[:, "maxy"].max())
 
+        # get cell names and generate segmentation mask values
+        cell_names = polygons['cell'].values
+        seg_mask_value = range(1, len(polygons['cell'])+1)
+
         # rasterize polygons
-        img = rasterize(list(zip(polygons["geometry"], polygons["cell"])), out_shape=(ymax,xmax))
+        img = rasterize(list(zip(polygons["geometry"], seg_mask_value)), out_shape=(ymax,xmax))
         img = da.from_array(img)
 
-        # Create boundaries data
-        #cell_ids = da.from_array(adata.obs_names.values)
-        cell_ids = adata.obs_names.values
-        #seg_mask_value = da.from_array(sorted(baysor_polygons["cell"]))
-        seg_mask_value = polygons["cell"].values
-
-        boundaries = BoundariesData(cell_names=cell_ids, seg_mask_value=seg_mask_value)
-        boundaries.add_boundaries(data={f"cells": img}, pixel_size=pixel_size)
+        # generate boundaries data object
+        boundaries = BoundariesData(
+            cell_names=cell_names,
+            seg_mask_value=seg_mask_value
+            )
+        # add cellular boundaries
+        boundaries.add_boundaries(
+            #data={f"cells": img},
+            cell_boundaries=img,
+            pixel_size=pixel_size
+            )
 
         # Create cell data and add to object
         celldata = CellData(matrix=adata, boundaries=boundaries)
@@ -1223,16 +1309,22 @@ class ImageData(DeepCopyMixin):
 
     def crop(self,
              xlim: Optional[Tuple[int, int]],
-             ylim: Optional[Tuple[int, int]]
+             ylim: Optional[Tuple[int, int]],
+             inplace: bool = False
              ):
+        # check if the changes are supposed to be made in place or not
+        if inplace:
+            _self = self
+        else:
+            _self = self.copy()
         # extract names from metadata
-        names = list(self._metadata.keys())
+        names = list(_self._metadata.keys())
         for n in names:
             # extract the image pyramid
-            img_data = self[n]
+            img_data = _self[n]
 
             # extract pixel size
-            pixel_size = self._metadata[n]['pixel_size']
+            pixel_size = _self._metadata[n]['pixel_size']
 
             cropped_img_data = crop_dask_array_or_pyramid(
                 data=img_data,
@@ -1242,16 +1334,19 @@ class ImageData(DeepCopyMixin):
             )
 
             # save cropping properties in metadata
-            self._metadata[n]["cropping_xlim"] = xlim
-            self._metadata[n]["cropping_ylim"] = ylim
+            _self._metadata[n]["cropping_xlim"] = xlim
+            _self._metadata[n]["cropping_ylim"] = ylim
 
             try:
-                self._metadata[n]["shape"] = cropped_img_data.shape
+                _self._metadata[n]["shape"] = cropped_img_data.shape
             except AttributeError:
-                self._metadata[n]["shape"] = cropped_img_data[0].shape
+                _self._metadata[n]["shape"] = cropped_img_data[0].shape
 
             # add cropped pyramid to object
-            self._data[n] = cropped_img_data
+            _self._data[n] = cropped_img_data
+
+        if not inplace:
+            return _self
 
     def save(self,
              output_folder: Union[str, os.PathLike, Path],
