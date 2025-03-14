@@ -38,7 +38,7 @@ if WITH_NAPARI:
         if xdata.cells is None:
             add_cells_widget = None
             move_to_cell_widget = None
-            add_boundaries_widget = None,
+            show_boundaries_widget = None,
             filter_cells_widget = None
         else:
             # initialize data_name of viewer
@@ -66,7 +66,7 @@ if WITH_NAPARI:
                 config.current_data_name = select_data.data_name.value
                 insitupy._core._callbacks._refresh_widgets_after_data_change(xdata,
                                                     add_cells_widget,
-                                                    add_boundaries_widget,
+                                                    show_boundaries_widget,
                                                     filter_cells_widget
                                                     )
 
@@ -75,7 +75,7 @@ if WITH_NAPARI:
                     call_button='Show',
                     key={'choices': config.masks, 'label': 'Masks:'}
                 )
-                def add_boundaries_widget(
+                def show_boundaries_widget(
                     key
                 ):
                     layer_name = f"{config.current_data_name}-boundaries-{key}"
@@ -99,7 +99,7 @@ if WITH_NAPARI:
                     else:
                         print(f"Layer '{layer_name}' already in layer list.", flush=True)
             else:
-                add_boundaries_widget = None
+                show_boundaries_widget = None
 
             def _update_values_on_key_change(widget):
                 current_key = widget.key.value
@@ -292,7 +292,7 @@ if WITH_NAPARI:
                 # after the points widget is run, the widgets have to be refreshed to current data layer
                 _refresh_widgets_after_data_change(xdata,
                                                         points_widget=add_cells_widget,
-                                                        boundaries_widget=add_boundaries_widget,
+                                                        boundaries_widget=show_boundaries_widget,
                                                         filter_widget=filter_cells_widget
                                                         )
 
@@ -302,9 +302,9 @@ if WITH_NAPARI:
             if add_cells_widget is not None:
                 add_cells_widget.call_button.clicked.connect(callback_refresh)
                 add_cells_widget.call_button.clicked.connect(callback_update_legend)
-            if add_boundaries_widget is not None:
-                add_boundaries_widget.call_button.clicked.connect(callback_refresh)
-                add_boundaries_widget.call_button.clicked.connect(callback_update_legend)
+            if show_boundaries_widget is not None:
+                show_boundaries_widget.call_button.clicked.connect(callback_refresh)
+                show_boundaries_widget.call_button.clicked.connect(callback_update_legend)
 
             viewer.layers.selection.events.active.connect(callback_update_legend)
 
@@ -421,7 +421,7 @@ if WITH_NAPARI:
                         _set_show_names_based_on_geom_type(show_geometries_widget)
                         _update_values_on_key_change(add_cells_widget)
 
-        return add_cells_widget, move_to_cell_widget, show_geometries_widget, add_boundaries_widget, select_data, filter_cells_widget #add_genes, add_observations
+        return add_cells_widget, move_to_cell_widget, show_geometries_widget, show_boundaries_widget, select_data, filter_cells_widget #add_genes, add_observations
 
 
     @magic_factory(

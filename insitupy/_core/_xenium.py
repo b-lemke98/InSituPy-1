@@ -116,7 +116,6 @@ def _read_boundaries_from_xenium(
 
         # create boundariesdata object
         boundaries = BoundariesData(
-            #cell_ids=cell_ids,
             cell_names=cell_names,
             seg_mask_value=seg_mask_value
             )

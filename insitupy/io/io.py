@@ -16,7 +16,7 @@ from zarr.errors import ArrayNotFoundError
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
                                         CellData, MultiCellData, RegionsData,
                                         ShapesData)
-from insitupy.io.baysor import _read_baysor_polygons
+from insitupy.io._segmentation import _read_baysor_polygons
 from insitupy.io.files import read_json
 from insitupy.utils.utils import convert_int_to_xenium_hex, convert_to_list
 
