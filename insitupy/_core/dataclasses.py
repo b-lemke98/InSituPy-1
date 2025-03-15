@@ -1054,6 +1054,10 @@ class MultiCellData(DeepCopyMixin):
         # save metadata
         write_dict_to_json(dictionary=multicelldata_metadata, file=path / ".multicelldata")
 
+    def sync(self):
+        for key in self._layers.keys():
+            self._layers[key].sync()
+
     def get_all_keys(self):
         return self._layers.keys()
 

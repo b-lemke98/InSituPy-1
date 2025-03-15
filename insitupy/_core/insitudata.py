@@ -669,7 +669,7 @@ class InSituData:
     def normalize_and_transform(self,
                 transformation_method: Literal["log1p", "sqrt"] = "log1p",
                 target_sum: int = 250,
-                normalize_alt: bool = True,
+                scale: bool = False,
                 verbose: bool = True
                 ) -> None:
         """
@@ -679,8 +679,6 @@ class InSituData:
             transformation_method (Literal["log1p", "sqrt"], optional):
                 The method used for data transformation. Choose between "log1p" for logarithmic transformation
                 and "sqrt" for square root transformation. Default is "log1p".
-            normalize_alt (bool, optional):
-                If True, `.alt` modalities are also normalized, if available.
             verbose (bool, optional):
                 If True, print progress messages during normalization. Default is True.
 
@@ -693,8 +691,14 @@ class InSituData:
         """
         if self._cells is not None:
             for key in self._cells.get_all_keys():
-                print(f"\tNormalizing {key}...")
-                normalize_and_transform_anndata(adata=self._cells[key].matrix, transformation_method=transformation_method, target_sum=target_sum, verbose=verbose)
+                print(f"Normalizing {key}...")
+                normalize_and_transform_anndata(
+                    adata=self._cells[key].matrix,
+                    transformation_method=transformation_method,
+                    target_sum=target_sum,
+                    scale=scale,
+                    verbose=verbose
+                    )
         else:
             raise ModalityNotFoundError(modality="cells")
 
@@ -998,6 +1002,10 @@ class InSituData:
                         verbose: bool = True,
                         tsne_lr: int = 1000,
                         tsne_jobs: int = 8,
+                        n_neighbors: int = 16,
+                        n_pcs: int = 0,
+                        leiden: bool = True,
+                        louvain: bool = True,
                         **kwargs
                         ):
         """
@@ -1034,14 +1042,18 @@ class InSituData:
             cells = self._cells
 
         for key in cells.get_all_keys():
-            print(f"\tReducing dimensions in `.cells['{key}']...")
+            print(f"Reducing dimensions in `.cells['{key}']...")
 
             reduce_dimensions_anndata(adata=cells[key].matrix,
                                     umap=umap, tsne=tsne, layer=layer,
                                     batch_correction_key=batch_correction_key,
                                     perform_clustering=perform_clustering,
                                     verbose=verbose,
-                                    tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
+                                    tsne_lr=tsne_lr, tsne_jobs=tsne_jobs,
+                                    n_neighbors=n_neighbors,
+                                    n_pcs=n_pcs,
+                                    leiden=leiden,
+                                    louvain=louvain
                                     )
 
 
