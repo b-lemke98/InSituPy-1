@@ -21,7 +21,9 @@ from insitupy._constants import FORBIDDEN_ANNOTATION_NAMES
 from insitupy._core._mixins import DeepCopyMixin
 from insitupy._exceptions import InvalidDataTypeError, InvalidFileTypeError
 from insitupy.images.io import read_image, write_ome_tiff, write_zarr
-from insitupy.images.utils import (create_img_pyramid,
+from insitupy.images.utils import (_efficiently_resize_array,
+                                   _get_scale_factor_from_max_res,
+                                   create_img_pyramid,
                                    crop_dask_array_or_pyramid, resize_image)
 from insitupy.io._segmentation import (_read_baysor_polygons,
                                        _read_proseg_counts,
@@ -630,7 +632,9 @@ class BoundariesData(DeepCopyMixin):
 
     def save(self,
              bound_file : Union[str, os.PathLike, Path] = "boundaries.zarr.zip",
-             save_as_pyramid: bool = True
+             save_as_pyramid: bool = True,
+             max_resolution: Optional[Number] = None,
+             verbose: bool = False
              ):
         bound_file = Path(bound_file)
         suffix = bound_file.name.split(".", maxsplit=1)[-1]
@@ -640,10 +644,20 @@ class BoundariesData(DeepCopyMixin):
 
         with zarr.ZipStore(bound_file, mode='w') if suffix == "zarr.zip" else zarr.DirectoryStore(bound_file) as dirstore:
             # for conditional 'with' see also: https://stackoverflow.com/questions/27803059/conditional-with-statement-in-python
-            for n in self._metadata.keys():
+            for n, meta in self._metadata.items():
                 bound_data = self[n]
 
+                # determine scale factor
+                scale_factor = _get_scale_factor_from_max_res(pixel_size=meta['pixel_size'], max_resolution=max_resolution)
+
                 if bound_data is not None:
+                    if scale_factor is not None:
+                        if isinstance(bound_data, list):
+                            bound_data = bound_data[0]
+                        bound_data = _efficiently_resize_array(array=bound_data, scale_factor=scale_factor)
+                        bound_data = da.from_array(bound_data) # convert to dask array
+                        meta['pixel_size'] = max_resolution # update metadata
+
                     # check data
                     if isinstance(bound_data, list):
                         if not save_as_pyramid:
@@ -664,7 +678,7 @@ class BoundariesData(DeepCopyMixin):
 
                     # add boundaries metadata to zarr.zip
                     store = zarr.open(dirstore, mode="a")
-                    store[f"masks/{n}"].attrs.put(self._metadata[n])
+                    store[f"masks/{n}"].attrs.put(meta)
 
                 # save keys in insitupy metadata
                 #metadata["boundaries"]["keys"].append(n)
@@ -824,8 +838,9 @@ class CellData(DeepCopyMixin):
     def save(self,
              path: Union[str, os.PathLike, Path],
              boundaries_zipped: bool = False,
-             boundaries_as_pyramid: bool = True,
-             overwrite: bool = False,
+             #boundaries_as_pyramid: bool = True,
+             max_resolution_boundaries: Optional[Number] = None,
+             overwrite: bool = False
              ):
 
         path = Path(path)
@@ -851,7 +866,7 @@ class CellData(DeepCopyMixin):
                 bound_file = path / "boundaries.zarr"
 
             # save boundaries
-            boundaries.save(bound_file, save_as_pyramid=True)
+            boundaries.save(bound_file, save_as_pyramid=True, max_resolution=max_resolution_boundaries)
 
             # add entry for boundaries to metadata
             celldata_metadata["boundaries"] = Path(relpath(bound_file, path)).as_posix()
@@ -1014,8 +1029,8 @@ class MultiCellData(DeepCopyMixin):
     def save(self,
              path: Union[str, os.PathLike, Path],
              boundaries_zipped: bool = False,
-             boundaries_as_pyramid: bool = True,
              overwrite: bool = False,
+             max_resolution_boundaries: Optional[Number] = None
              ):
 
         path = Path(path)
@@ -1027,8 +1042,11 @@ class MultiCellData(DeepCopyMixin):
         path.mkdir(parents=True, exist_ok=True)
         for key in self._layers.keys():
             save_path = path / key
-            self._layers[key].save(save_path, boundaries_zipped, boundaries_as_pyramid, overwrite)
-
+            self._layers[key].save(
+                path=save_path,
+                boundaries_zipped=boundaries_zipped,
+                max_resolution_boundaries=max_resolution_boundaries,
+                overwrite=overwrite)
 
         # add version to metadata
         multicelldata_metadata["version"] = __version__

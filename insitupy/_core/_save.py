@@ -7,7 +7,7 @@ from typing import Optional, Union
 from parse import *
 
 from insitupy import __version__
-from insitupy._core.dataclasses import ImageData
+from insitupy._core.dataclasses import ImageData, MultiCellData
 from insitupy.utils.utils import _generate_time_based_uid
 
 
@@ -37,10 +37,11 @@ def _save_images(imagedata: ImageData,
             # collect metadata
             metadata["data"]["images"][n] = Path(relpath(s, path)).as_posix()
 
-def _save_cells(cells,
+def _save_cells(cells: MultiCellData,
                 path,
                 metadata,
                 boundaries_zipped=False,
+                max_resolution_boundaries: Optional[Number] = None, # in µm per pixel
                 overwrite=False
                 ):
     # create path for cells
@@ -51,6 +52,7 @@ def _save_cells(cells,
     cells.save(
         path=cells_path,
         boundaries_zipped=boundaries_zipped,
+        max_resolution_boundaries=max_resolution_boundaries,
         overwrite=overwrite
         )
 

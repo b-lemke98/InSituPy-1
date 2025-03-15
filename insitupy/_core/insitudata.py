@@ -1102,7 +1102,8 @@ class InSituData:
                 cells=cells,
                 path=path,
                 metadata=self._metadata,
-                boundaries_zipped=zarr_zipped
+                boundaries_zipped=zarr_zipped,
+                max_resolution_boundaries=images_max_resolution
             )
 
         # save transcripts
@@ -1148,11 +1149,11 @@ class InSituData:
             shutil.make_archive(path, 'zip', path, verbose=False)
             shutil.rmtree(path) # delete directory
 
-        # change path to the new one
-        self._path = path.resolve()
+        # # change path to the new one
+        # self._path = path.resolve()
 
-        # reload the modalities
-        self.reload(verbose=False)
+        # # reload the modalities
+        # self.reload(verbose=False)
 
         print("Saved.") if verbose else None
 

@@ -1,15 +1,47 @@
-import warnings
+import math
 from numbers import Number
 from typing import List, Literal, Tuple, Union
+from warnings import warn
 
 import cv2
 import dask.array as da
 import numpy as np
 from numpy.typing import NDArray
+from scipy.ndimage import zoom
 from skimage.color import hed2rgb, rgb2hed
 
 from .._exceptions import InvalidDataTypeError
 from .axes import ImageAxes, get_height_and_width
+
+
+def _efficiently_resize_array(array, scale_factor):
+    downscale_factor =  1/scale_factor
+
+    # calculate factor for first part of the downscaling
+    first_downscale_factor = math.floor(downscale_factor)
+
+    # perform first downscaling
+    im_ds = array[::first_downscale_factor, ::first_downscale_factor]
+
+    # calculate scale factor for remaining downscaling
+    second_sf = 1 / (downscale_factor / first_downscale_factor)
+
+    # perform final downscaling
+    resized_array = zoom(im_ds, zoom=second_sf, order=0)
+    return resized_array
+
+def _get_scale_factor_from_max_res(pixel_size, max_resolution):
+    if max_resolution is not None:
+        if (max_resolution == pixel_size) or (max_resolution < pixel_size):
+            warn(f"`max_resolution` ({max_resolution}) equal as or smaller than `pixel_size` ({pixel_size}). Skipped resizing.")
+            scale_factor = None
+            pass
+        else:
+            scale_factor = 1 / (max_resolution / pixel_size)
+    else:
+        scale_factor = None
+
+    return scale_factor
 
 
 def resize_image(img: NDArray,
