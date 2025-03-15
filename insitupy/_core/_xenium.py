@@ -93,10 +93,8 @@ def _read_boundaries_from_xenium(
         cells_zarr_file = path / "cells.zarr.zip"
 
         # open zarr directory using dask
-        data_dict = {
-            "cells": da.from_zarr(cells_zarr_file, component="masks/1"),
-            "nuclei": da.from_zarr(cells_zarr_file, component="masks/0")
-        }
+        cell_boundaries = da.from_zarr(cells_zarr_file, component="masks/1")
+        nuclei_boundaries = da.from_zarr(cells_zarr_file, component="masks/0")
 
         # read cell ids and seg mask value
         # for info see: https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest/analysis/xoa-output-zarr#cells
@@ -120,8 +118,11 @@ def _read_boundaries_from_xenium(
             seg_mask_value=seg_mask_value
             )
 
-    boundaries.add_boundaries(data=data_dict,
-                              pixel_size=pixel_size)
+    boundaries.add_boundaries(
+        cell_boundaries=cell_boundaries,
+        nuclei_boundaries=nuclei_boundaries,
+        pixel_size=pixel_size
+        )
 
     return boundaries
 
