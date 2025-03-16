@@ -1844,24 +1844,28 @@ class InSituData:
         verbose: bool = True
         ):
         data_meta = self._metadata["data"]
-        current_modalities = [m for m in MODALITIES if getattr(self, m) is not None and m in data_meta]
+        loaded_modalities = [elem for elem in self.get_loaded_modalities() if elem in data_meta]
 
         if skip is not None:
             # remove the modalities which are supposed to be skipped during reload
             skip = convert_to_list(skip)
             for s in skip:
                 try:
-                    current_modalities.remove(s)
+                    loaded_modalities.remove(s)
                 except ValueError:
                     pass
 
-        if len(current_modalities) > 0:
-            print(f"Reloading following modalities: {', '.join(current_modalities)}") if verbose else None
-            for cm in current_modalities:
+        if len(loaded_modalities) > 0:
+            print(f"Reloading following modalities: {', '.join(loaded_modalities)}") if verbose else None
+            for cm in loaded_modalities:
                 func = getattr(self, f"load_{cm}")
                 func(verbose=verbose)
         else:
             print("No modalities with existing save path found. Consider saving the data with `saveas()` first.")
+
+    def get_loaded_modalities(self):
+        loaded_modalities = [m for m in MODALITIES if getattr(self, m) is not None]
+        return loaded_modalities
 
     def remove_history(self,
                        verbose: bool = True

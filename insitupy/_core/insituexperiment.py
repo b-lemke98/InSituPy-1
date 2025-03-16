@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 import insitupy
 from insitupy import InSituData, differential_gene_expression
-from insitupy._constants import LOAD_FUNCS
+from insitupy._constants import LOAD_FUNCS, MODALITIES, MODALITIES_ABBR
 from insitupy._core._checks import is_integer_counts
 from insitupy._core.insitudata import InSituData
 from insitupy._core.reader import read_xenium
@@ -43,8 +43,20 @@ class InSituExperiment:
         Returns:
             str: A string summarizing the InSituExperiment object.
         """
-        num_samples = len(self._metadata)
-        sample_summary = self._metadata.to_string(index=True, col_space=4, max_colwidth=15, max_cols=10)
+        # extract metadata
+        mdf = self.metadata.copy()
+        num_samples = len(mdf)
+
+        # check which modalities are loaded and add information as string to the copied metadata dataframe
+        loaded_list = []
+        for _, data in self.iterdata():
+            loaded_modalities = data.get_loaded_modalities()
+            loaded_string = "".join(["+" if m in loaded_modalities else "-" for m in MODALITIES])
+            loaded_list.append(loaded_string)
+        mdf.insert(1, MODALITIES_ABBR, loaded_list)
+
+        # generate string summary
+        sample_summary = mdf.to_string(index=True, col_space=4, max_colwidth=15, max_cols=10)
         return (f"{tf.Bold}InSituExperiment{tf.ResetAll} with {num_samples} samples:\n"
                 f"{sample_summary}")
 
