@@ -36,13 +36,13 @@ if WITH_NAPARI:
         viewer = xdata.viewer
 
         if xdata.cells is None:
-            add_cells_widget = None
+            show_cells_widget = None
             move_to_cell_widget = None
-            add_boundaries_widget = None,
+            show_boundaries_widget = None,
             filter_cells_widget = None
         else:
             # initialize data_name of viewer
-            config.init_data_name()
+            #config.init_data_name()
             # initialize viewer configuration
             config.init_viewer_config(xdata=xdata,
                                         #data_name=config.current_data_name
@@ -56,7 +56,7 @@ if WITH_NAPARI:
                 data_name= {'choices': data_names, 'label': 'Dataset:'}
             )
             def select_data(
-                data_name="main"
+                data_name=config.current_data_name
             ):
                 pass
 
@@ -65,8 +65,8 @@ if WITH_NAPARI:
             def update_widgets_on_data_change(event=None):
                 config.current_data_name = select_data.data_name.value
                 insitupy._core._callbacks._refresh_widgets_after_data_change(xdata,
-                                                    add_cells_widget,
-                                                    add_boundaries_widget,
+                                                    show_cells_widget,
+                                                    show_boundaries_widget,
                                                     filter_cells_widget
                                                     )
 
@@ -75,7 +75,7 @@ if WITH_NAPARI:
                     call_button='Show',
                     key={'choices': config.masks, 'label': 'Masks:'}
                 )
-                def add_boundaries_widget(
+                def show_boundaries_widget(
                     key
                 ):
                     layer_name = f"{config.current_data_name}-boundaries-{key}"
@@ -96,24 +96,26 @@ if WITH_NAPARI:
 
                         # add masks as labels to napari viewer
                         viewer.add_labels(mask_pyramid, name=layer_name, scale=(pixel_size,pixel_size))
+                        if key == "cells":
+                            viewer.layers[layer_name].contour = 1
                     else:
                         print(f"Layer '{layer_name}' already in layer list.", flush=True)
             else:
-                add_boundaries_widget = None
+                show_boundaries_widget = None
 
             def _update_values_on_key_change(widget):
                 current_key = widget.key.value
                 widget.value.choices = config.value_dict[current_key]
 
             @magicgui(
-                call_button='Add',
+                call_button='Show',
                 key={'choices': ["genes", "obs", "obsm"], 'label': 'Key:'},
                 value={'choices': config.genes, 'label': "Value:"},
                 size={'label': 'Size [µm]'},
                 recent={'choices': [""], 'label': "Recent:"},
                 add_new_layer={'label': 'Add new layer'}
                 )
-            def add_cells_widget(
+            def show_cells_widget(
                 key="genes",
                 value=None,
                 size=8,
@@ -248,10 +250,10 @@ if WITH_NAPARI:
                         fc[:, -1] = 1.
                         current_layer.face_color = fc
 
-            @add_cells_widget.key.changed.connect
-            @add_cells_widget.call_button.changed.connect
+            @show_cells_widget.key.changed.connect
+            @show_cells_widget.call_button.changed.connect
             def update_values_on_key_change(event=None):
-                _update_values_on_key_change(add_cells_widget)
+                _update_values_on_key_change(show_cells_widget)
 
             @magicgui(
                 call_button='Show',
@@ -291,20 +293,20 @@ if WITH_NAPARI:
             def callback_refresh(event=None):
                 # after the points widget is run, the widgets have to be refreshed to current data layer
                 _refresh_widgets_after_data_change(xdata,
-                                                        points_widget=add_cells_widget,
-                                                        boundaries_widget=add_boundaries_widget,
+                                                        points_widget=show_cells_widget,
+                                                        boundaries_widget=show_boundaries_widget,
                                                         filter_widget=filter_cells_widget
                                                         )
 
             def callback_update_legend(event=None):
                 _update_colorlegend()
 
-            if add_cells_widget is not None:
-                add_cells_widget.call_button.clicked.connect(callback_refresh)
-                add_cells_widget.call_button.clicked.connect(callback_update_legend)
-            if add_boundaries_widget is not None:
-                add_boundaries_widget.call_button.clicked.connect(callback_refresh)
-                add_boundaries_widget.call_button.clicked.connect(callback_update_legend)
+            if show_cells_widget is not None:
+                show_cells_widget.call_button.clicked.connect(callback_refresh)
+                show_cells_widget.call_button.clicked.connect(callback_update_legend)
+            if show_boundaries_widget is not None:
+                show_boundaries_widget.call_button.clicked.connect(callback_refresh)
+                show_boundaries_widget.call_button.clicked.connect(callback_update_legend)
 
             viewer.layers.selection.events.active.connect(callback_update_legend)
 
@@ -419,9 +421,9 @@ if WITH_NAPARI:
                         _update_keys_based_on_geom_type(show_geometries_widget, xdata=xdata)
                         _update_classes_on_key_change(show_geometries_widget, xdata=xdata)
                         _set_show_names_based_on_geom_type(show_geometries_widget)
-                        _update_values_on_key_change(add_cells_widget)
+                        _update_values_on_key_change(show_cells_widget)
 
-        return add_cells_widget, move_to_cell_widget, show_geometries_widget, add_boundaries_widget, select_data, filter_cells_widget #add_genes, add_observations
+        return show_cells_widget, move_to_cell_widget, show_geometries_widget, show_boundaries_widget, select_data, filter_cells_widget #add_genes, add_observations
 
 
     @magic_factory(

@@ -8,9 +8,9 @@ from scipy.sparse import issparse
 from insitupy import WITH_NAPARI
 
 if WITH_NAPARI:
-    def init_data_name():
-        global current_data_name
-        current_data_name = "main"
+    # def init_data_name():
+    #     global current_data_name
+    #     current_data_name = "main"
 
     def init_recent_selections():
         global recent_selections
@@ -26,17 +26,19 @@ if WITH_NAPARI:
         xdata,
         pixel_size_param = None
         ):
-        if current_data_name == "main":
-            # access adata, viewer and metadata from InSituData
-            global adata
-            adata = xdata.cells["main"].matrix
-            global boundaries
-            boundaries = xdata.cells["main"].boundaries
-            global viewer
-            viewer = xdata.viewer
-        else:
-            adata = xdata.cells[current_data_name].matrix
-            boundaries = xdata.cells[current_data_name].boundaries
+        global current_data_name
+        current_data_name = xdata.cells.main_key
+
+        # access adata, viewer and metadata from InSituData
+        global adata
+        adata = xdata.cells[current_data_name].matrix
+        global boundaries
+        boundaries = xdata.cells[current_data_name].boundaries
+        global viewer
+        viewer = xdata.viewer
+        # else:
+        #     adata = xdata.cells[current_data_name].matrix
+        #     boundaries = xdata.cells[current_data_name].boundaries
 
         # get keys from var_names, obs and obsm
         global genes, observations, value_dict
@@ -77,8 +79,9 @@ if WITH_NAPARI:
         masks = []
         for n in boundaries.metadata.keys():
             b = boundaries[n]
-            if isinstance(b, dask.array.core.Array) or np.all([isinstance(elem, dask.array.core.Array) for elem in b]):
-                masks.append(n)
+            if b is not None:
+                if isinstance(b, dask.array.core.Array) or np.all([isinstance(elem, dask.array.core.Array) for elem in b]):
+                    masks.append(n)
 
         if xdata.images is not None:
             # get image metadata

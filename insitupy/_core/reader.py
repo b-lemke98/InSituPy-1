@@ -20,12 +20,12 @@ from insitupy._exceptions import InvalidXeniumDirectory
 from insitupy.io.files import read_json
 from insitupy.utils.utils import convert_to_list
 
-from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData, MultiCellData
+from .dataclasses import (AnnotationsData, CellData, ImageData, MultiCellData,
+                          RegionsData)
 
 
 def read_xenium(
     path: Union[str, os.PathLike, Path],
-    # names: Union[Literal["all", "nuclei"], str] = "all", # here a specific image can be chosen
     nuclei_type: Literal["focus", "mip", ""] = "mip",
     load_cell_segmentation_images: bool = True,
     verbose: bool = True,

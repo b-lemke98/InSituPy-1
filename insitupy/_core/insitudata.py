@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 from warnings import catch_warnings, filterwarnings, warn
+from pyarrow import ArrowInvalid
 
 import anndata
 import dask.dataframe as dd
@@ -478,22 +479,25 @@ class InSituData:
                 layer=key
             )
 
-    def copy(self):
+    def copy(self, keep_path: bool = False):
         '''
         Function to generate a deep copy of the InSituData object.
         '''
         from copy import deepcopy
         had_viewer = False
         if self._viewer is not None:
-            had_viewer = True
-
             # make copy of viewer to add it later again
+            had_viewer = True
             viewer_copy = self._viewer.copy()
+
             # remove viewer because there is otherwise a error during deepcopy
             self.viewer = None
 
         # make copy
         self_copy = deepcopy(self)
+
+        if not keep_path:
+            self_copy._path = None
 
         # add viewer again to original object if necessary
         if had_viewer:
@@ -575,7 +579,7 @@ class InSituData:
             )
 
         if self._images is not None:
-            _self.images.crop(xlim=xlim, ylim=ylim)
+            _self.images.crop(xlim=xlim, ylim=ylim, inplace=True)
 
         if self._annotations is not None:
 
@@ -583,7 +587,7 @@ class InSituData:
                 shape=shape,
                 xlim=tuple([elem for elem in xlim]),
                 ylim=tuple([elem for elem in ylim]),
-                verbose=verbose
+                verbose=verbose, inplace=True
                 )
 
         if self._regions is not None:
@@ -591,7 +595,7 @@ class InSituData:
                 shape=shape,
                 xlim=tuple([elem for elem in xlim]),
                 ylim=tuple([elem for elem in ylim]),
-                verbose=verbose
+                verbose=verbose, inplace=True
             )
 
         if _self.metadata is not None:
@@ -669,7 +673,7 @@ class InSituData:
     def normalize_and_transform(self,
                 transformation_method: Literal["log1p", "sqrt"] = "log1p",
                 target_sum: int = 250,
-                normalize_alt: bool = True,
+                scale: bool = False,
                 verbose: bool = True
                 ) -> None:
         """
@@ -679,8 +683,6 @@ class InSituData:
             transformation_method (Literal["log1p", "sqrt"], optional):
                 The method used for data transformation. Choose between "log1p" for logarithmic transformation
                 and "sqrt" for square root transformation. Default is "log1p".
-            normalize_alt (bool, optional):
-                If True, `.alt` modalities are also normalized, if available.
             verbose (bool, optional):
                 If True, print progress messages during normalization. Default is True.
 
@@ -693,8 +695,14 @@ class InSituData:
         """
         if self._cells is not None:
             for key in self._cells.get_all_keys():
-                print(f"\tNormalizing {key}...")
-                normalize_and_transform_anndata(adata=self._cells[key].matrix, transformation_method=transformation_method, target_sum=target_sum, verbose=verbose)
+                print(f"Normalizing {key}...")
+                normalize_and_transform_anndata(
+                    adata=self._cells[key].matrix,
+                    transformation_method=transformation_method,
+                    target_sum=target_sum,
+                    scale=scale,
+                    verbose=verbose
+                    )
         else:
             raise ModalityNotFoundError(modality="cells")
 
@@ -949,7 +957,12 @@ class InSituData:
                     self._transcripts = pd.read_parquet(self._path / transcripts_path)
                 elif mode == "dask":
                     # Load the transcript data using Dask
-                    self._transcripts = dd.read_parquet(self._path / transcripts_path)
+                    try:
+                        self._transcripts = dd.read_parquet(self._path / transcripts_path)
+                    except ArrowInvalid:
+                        parquet_files = list(Path(self._path / transcripts_path).glob("part*.parquet"))
+                        self._transcripts = dd.read_parquet(parquet_files)
+                    
                 else:
                     raise ValueError(f"Invalid value for `mode`: {mode}")
 
@@ -998,6 +1011,10 @@ class InSituData:
                         verbose: bool = True,
                         tsne_lr: int = 1000,
                         tsne_jobs: int = 8,
+                        n_neighbors: int = 16,
+                        n_pcs: int = 0,
+                        leiden: bool = True,
+                        louvain: bool = True,
                         **kwargs
                         ):
         """
@@ -1034,14 +1051,18 @@ class InSituData:
             cells = self._cells
 
         for key in cells.get_all_keys():
-            print(f"\tReducing dimensions in `.cells['{key}']...")
+            print(f"Reducing dimensions in `.cells['{key}']...")
 
             reduce_dimensions_anndata(adata=cells[key].matrix,
                                     umap=umap, tsne=tsne, layer=layer,
                                     batch_correction_key=batch_correction_key,
                                     perform_clustering=perform_clustering,
                                     verbose=verbose,
-                                    tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
+                                    tsne_lr=tsne_lr, tsne_jobs=tsne_jobs,
+                                    n_neighbors=n_neighbors,
+                                    n_pcs=n_pcs,
+                                    leiden=leiden,
+                                    louvain=louvain
                                     )
 
 
@@ -1102,7 +1123,8 @@ class InSituData:
                 cells=cells,
                 path=path,
                 metadata=self._metadata,
-                boundaries_zipped=zarr_zipped
+                boundaries_zipped=zarr_zipped,
+                max_resolution_boundaries=images_max_resolution
             )
 
         # save transcripts
@@ -1148,11 +1170,11 @@ class InSituData:
             shutil.make_archive(path, 'zip', path, verbose=False)
             shutil.rmtree(path) # delete directory
 
-        # change path to the new one
-        self._path = path.resolve()
+        # # change path to the new one
+        # self._path = path.resolve()
 
-        # reload the modalities
-        self.reload(verbose=False)
+        # # reload the modalities
+        # self.reload(verbose=False)
 
         print("Saved.") if verbose else None
 
@@ -1831,24 +1853,28 @@ class InSituData:
         verbose: bool = True
         ):
         data_meta = self._metadata["data"]
-        current_modalities = [m for m in MODALITIES if getattr(self, m) is not None and m in data_meta]
+        loaded_modalities = [elem for elem in self.get_loaded_modalities() if elem in data_meta]
 
         if skip is not None:
             # remove the modalities which are supposed to be skipped during reload
             skip = convert_to_list(skip)
             for s in skip:
                 try:
-                    current_modalities.remove(s)
+                    loaded_modalities.remove(s)
                 except ValueError:
                     pass
 
-        if len(current_modalities) > 0:
-            print(f"Reloading following modalities: {', '.join(current_modalities)}") if verbose else None
-            for cm in current_modalities:
+        if len(loaded_modalities) > 0:
+            print(f"Reloading following modalities: {', '.join(loaded_modalities)}") if verbose else None
+            for cm in loaded_modalities:
                 func = getattr(self, f"load_{cm}")
                 func(verbose=verbose)
         else:
             print("No modalities with existing save path found. Consider saving the data with `saveas()` first.")
+
+    def get_loaded_modalities(self):
+        loaded_modalities = [m for m in MODALITIES if getattr(self, m) is not None]
+        return loaded_modalities
 
     def remove_history(self,
                        verbose: bool = True

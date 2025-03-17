@@ -16,7 +16,7 @@ from zarr.errors import ArrayNotFoundError
 from insitupy._core.dataclasses import (AnnotationsData, BoundariesData,
                                         CellData, MultiCellData, RegionsData,
                                         ShapesData)
-from insitupy.io.baysor import _read_baysor_polygons
+from insitupy.io._segmentation import _read_baysor_polygons
 from insitupy.io.files import read_json
 from insitupy.utils.utils import convert_int_to_xenium_hex, convert_to_list
 
@@ -127,8 +127,6 @@ def read_celldata(
     # check whether it is zipped or not
     suffix = bound_path.name.split(".", maxsplit=1)[-1]
 
-
-
     try:
         # read cell ids and seg_mask_values
         cell_names = da.from_zarr(bound_path, component="cell_names")
@@ -157,8 +155,10 @@ def read_celldata(
     meta = {}
     zipped = True if suffix == "zarr.zip" else False
     with zarr.ZipStore(bound_path, mode='r') if zipped else zarr.DirectoryStore(bound_path) as dirstore:
-        for k in dirstore.listdir("masks"):
-            if not k.startswith("."):
+        # for k in dirstore.listdir("masks"):
+        #     if not k.startswith("."):
+        for k in ["cells", "nuclei"]:
+            if (bound_path / "masks" / k).exists():
                 # iterate through subresolutions
                 subresolutions = dirstore.listdir(f"masks/{k}")
 
@@ -186,10 +186,19 @@ def read_celldata(
                 store = zarr.open(dirstore)
                 meta[k] = store[f"masks/{k}"].attrs.asdict()
 
+    cell_boundaries = bound_data["cells"]
+    if "nuclei" in bound_data:
+        nuclei_boundaries = bound_data["nuclei"]
+    else:
+        nuclei_boundaries = None
+
     # add boundaries
-    boundaries.add_boundaries(data=bound_data,
-                              pixel_size=meta[list(meta.keys())[0]]["pixel_size"]
-                              )
+    boundaries.add_boundaries(
+        #data=bound_data,
+        cell_boundaries=cell_boundaries,
+        nuclei_boundaries=nuclei_boundaries,
+        pixel_size=meta[list(meta.keys())[0]]["pixel_size"]
+        )
 
     # try to extract configuration
     try:

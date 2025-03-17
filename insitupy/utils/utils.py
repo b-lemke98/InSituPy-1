@@ -99,6 +99,7 @@ class textformat:
     CIRCLE_HALF = "\u25D0"
     CIRCLE_THREEQUARTER = "\u25D5"
     CIRCLE_ONEQUARTER = "\u25D4"
+    CROSS = "\u2716"
 
     # spacer
     SPACER = "    "

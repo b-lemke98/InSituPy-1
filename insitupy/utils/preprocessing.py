@@ -1,9 +1,11 @@
+from numbers import Number
 from typing import Literal, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scanpy as sc
 import seaborn as sns
+from anndata import AnnData
 from parse import *
 from scipy.sparse import csr_matrix
 
@@ -15,10 +17,11 @@ from insitupy.utils.utils import textformat as tf
 def normalize_and_transform_anndata(adata,
               transformation_method: Literal["log1p", "sqrt"] = "log1p",
               target_sum: int = None, # defaults to median of total counts of cells
+              scale: bool = True,
               verbose: bool = True
               ) -> None:
     # check if the matrix consists of raw integer counts
-    check_integer_counts(adata.X)
+    #check_integer_counts(adata.X)
 
     # store raw counts in layer
     print("Store raw counts in anndata.layers['counts']...") if verbose else None
@@ -42,8 +45,16 @@ def normalize_and_transform_anndata(adata,
     else:
         raise ValueError(f'`transformation_method` is not one of ["log1p", "sqrt"]')
 
+    if scale:
+        sc.pp.scale(adata)
 
-def test_transformation(adata, target_sum=1e4, layer=None):
+
+def test_transformation(
+    adata: AnnData,
+    target_sum: Number = 250,
+    layer: Optional[str] = None,
+    scale: bool = False
+        ):
     """
     Test normalization and transformation methods by plotting histograms of raw,
     log1p-transformed, and sqrt-transformed counts.
@@ -81,6 +92,10 @@ def test_transformation(adata, target_sum=1e4, layer=None):
     except AttributeError:
         X = adata_sqrt.X
     adata_sqrt.X = np.sqrt(X) + np.sqrt(X + 1)
+
+    if scale:
+        sc.pp.scale(adata_log1p)
+        sc.pp.scale(adata_sqrt)
 
     # Plot histograms
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
@@ -169,9 +184,13 @@ def reduce_dimensions_anndata(adata,
                               umap: bool = True,
                               tsne: bool = False,
                               perform_clustering: bool = True,
-                              verbose: bool = True,
                               tsne_lr: int = 1000,
                               tsne_jobs: int = 8,
+                              n_neighbors: int = 16,
+                              n_pcs: int = 0,
+                              leiden: bool = True,
+                              louvain: bool = True,
+                              verbose: bool = True,
                               **kwargs
                               ) -> None:
     """
@@ -202,12 +221,16 @@ def reduce_dimensions_anndata(adata,
     print("Dimensionality reduction...") if verbose else None
     sc.pp.pca(adata)
     if umap:
-        sc.pp.neighbors(adata)
+        sc.pp.neighbors(adata, n_neighbors=n_neighbors, n_pcs=n_pcs)
         sc.tl.umap(adata)
     if tsne:
         sc.tl.tsne(adata, n_jobs=tsne_jobs, learning_rate=tsne_lr)
 
     if perform_clustering:
         # clustering
-        print("Leiden clustering...") if verbose else None
-        sc.tl.leiden(adata)
+        if leiden:
+            print("Leiden clustering...") if verbose else None
+            sc.tl.leiden(adata)
+        if louvain:
+            print("Louvain clustering...") if verbose else None
+            sc.tl.louvain(adata)
