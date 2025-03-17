@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 from warnings import catch_warnings, filterwarnings, warn
+from pyarrow import ArrowInvalid
 
 import anndata
 import dask.dataframe as dd
@@ -956,7 +957,12 @@ class InSituData:
                     self._transcripts = pd.read_parquet(self._path / transcripts_path)
                 elif mode == "dask":
                     # Load the transcript data using Dask
-                    self._transcripts = dd.read_parquet(self._path / transcripts_path)
+                    try:
+                        self._transcripts = dd.read_parquet(self._path / transcripts_path)
+                    except ArrowInvalid:
+                        parquet_files = list(Path(self._path / transcripts_path).glob("part*.parquet"))
+                        self._transcripts = dd.read_parquet(parquet_files)
+                    
                 else:
                     raise ValueError(f"Invalid value for `mode`: {mode}")
 
