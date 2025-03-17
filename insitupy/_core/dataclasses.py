@@ -1005,7 +1005,7 @@ class MultiCellData(DeepCopyMixin):
 
     @property
     def boundaries(self):
-        return self._layers["main"].boundaries
+        return self._layers[self._main_key].boundaries
 
     @property
     def main_key(self):
