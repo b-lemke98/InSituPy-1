@@ -42,7 +42,7 @@ if WITH_NAPARI:
             filter_cells_widget = None
         else:
             # initialize data_name of viewer
-            config.init_data_name()
+            #config.init_data_name()
             # initialize viewer configuration
             config.init_viewer_config(xdata=xdata,
                                         #data_name=config.current_data_name
@@ -56,7 +56,7 @@ if WITH_NAPARI:
                 data_name= {'choices': data_names, 'label': 'Dataset:'}
             )
             def select_data(
-                data_name="main"
+                data_name=config.current_data_name
             ):
                 pass
 

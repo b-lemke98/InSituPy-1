@@ -1,14 +1,20 @@
 import os
+from math import ceil
+from numbers import Number
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
+import dask.array as da
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import shapely
 from anndata import AnnData
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
 
 from insitupy.io.files import read_json
+from insitupy.utils._shapely import scale_polygon
 
 
 def _read_baysor_polygons(
@@ -55,8 +61,7 @@ def _read_baysor_polygons(
 
     return df
 
-from shapely.geometry import MultiPolygon, Polygon
-from shapely.ops import unary_union
+
 
 
 def _read_proseg_polygons(
@@ -151,3 +156,59 @@ def _read_proseg_counts(path_counts, path_cell_metadata):
     adata.obs_names.name = None # remove the name of the index
 
     return adata
+
+
+def _read_proseg(
+    path,
+    counts_file: Optional[str] = None,
+    cell_metadata_file: Optional[str] = None,
+    polygons_file: Optional[str] = None,
+    pixel_size: Number = 1
+    ):
+    try:
+        from rasterio.features import rasterize
+    except ImportError:
+        raise ImportError("This function requires the rasterio package, please install with `pip install rasterio`.")
+
+    if counts_file is None:
+        path_counts = list(path.glob("expected-counts.*"))[0]
+    else:
+        path_counts = path / counts_file
+
+    if cell_metadata_file is None:
+        path_cell_metadata = list(path.glob("cell-metadata.*"))[0]
+    else:
+        path_cell_metadata = path / cell_metadata_file
+
+    if polygons_file is None:
+        path_polygons = list(path.glob("cell-polygons.*"))[0]
+    else:
+        path_polygons = path / polygons_file
+
+    # read proseg counts
+    adata = _read_proseg_counts(path_counts, path_cell_metadata)
+
+    # Read Proseg polygons
+    polygons = _read_proseg_polygons(path_polygons)
+
+    # Scale Baysor polygons
+    if pixel_size != 1:
+        polygons['geometry'] = polygons['geometry'].apply(lambda x: scale_polygon(x, pixel_size))
+        polygons["maxx"] = polygons["maxx"] / pixel_size
+        polygons["maxy"] = polygons["maxy"] / pixel_size
+
+
+    # Calculate bounds for rasterization
+    polygon_bounds = polygons.geometry.bounds
+    xmax = ceil(polygon_bounds.loc[:, "maxx"].max())
+    ymax = ceil(polygon_bounds.loc[:, "maxy"].max())
+
+    # get cell names and generate segmentation mask values
+    cell_names = polygons['cell'].values
+    seg_mask_value = range(1, len(polygons['cell'])+1)
+
+    # rasterize polygons
+    img = rasterize(list(zip(polygons["geometry"], seg_mask_value)), out_shape=(ymax,xmax))
+    img = da.from_array(img)
+
+    return adata, img, cell_names, seg_mask_value

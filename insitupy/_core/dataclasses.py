@@ -1,11 +1,10 @@
 import os
 import warnings
 from copy import deepcopy
-from math import ceil
 from numbers import Number
 from os.path import relpath
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 import dask.array as da
 import geopandas as gpd
@@ -19,21 +18,17 @@ from shapely import MultiPoint, MultiPolygon, Point, Polygon, affinity
 from insitupy import __version__
 from insitupy._constants import FORBIDDEN_ANNOTATION_NAMES
 from insitupy._core._mixins import DeepCopyMixin
-from insitupy._exceptions import InvalidDataTypeError, InvalidFileTypeError
+from insitupy._exceptions import InvalidFileTypeError
 from insitupy.images.io import read_image, write_ome_tiff, write_zarr
 from insitupy.images.utils import (_efficiently_resize_array,
                                    _get_scale_factor_from_max_res,
                                    create_img_pyramid,
                                    crop_dask_array_or_pyramid, resize_image)
-from insitupy.io._segmentation import (_read_baysor_polygons,
-                                       _read_proseg_counts,
-                                       _read_proseg_polygons)
+from insitupy.io._segmentation import _read_proseg
 from insitupy.io.files import (check_overwrite_and_remove_if_true,
                                write_dict_to_json)
 from insitupy.io.geo import parse_geopandas, write_qupath_geojson
-from insitupy.utils._shapely import scale_wkt_polygon
-from insitupy.utils.utils import (convert_int_to_xenium_hex, convert_to_list,
-                                  decode_robust_series)
+from insitupy.utils.utils import convert_to_list, decode_robust_series
 from insitupy.utils.utils import textformat as tf
 
 
@@ -976,17 +971,17 @@ class MultiCellData(DeepCopyMixin):
     '''
     def __init__(self):
         self._layers = dict()
-        self._key_main = None
+        self._main_key = None
 
     def __repr__(self):
-        if self._key_main is not None:
-            indented_repr = self._layers[self._key_main].__repr__().replace('\n', f'\n{tf.SPACER}')
+        if self._main_key is not None:
+            indented_repr = self._layers[self._main_key].__repr__().replace('\n', f'\n{tf.SPACER}')
             repr = (
-                f"{tf.Bold}MultiCellData with main layer{tf.ResetAll} '{self._key_main}'\n"
+                f"{tf.Bold}MultiCellData with main layer{tf.ResetAll} '{self._main_key}'\n"
                 f"{tf.SPACER}{indented_repr}"
             )
 
-        non_main_keys = [f"'{k}'" for k in self._layers.keys() if k != self._key_main]
+        non_main_keys = [f"'{k}'" for k in self._layers.keys() if k != self._main_key]
         if len(non_main_keys) > 0:
             repr += f"\n\nAdditional layers with keys: {', '.join(non_main_keys)}"
         return repr
@@ -1006,15 +1001,15 @@ class MultiCellData(DeepCopyMixin):
 
     @property
     def matrix(self):
-        return self._layers[self._key_main].matrix
+        return self._layers[self._main_key].matrix
 
     @property
     def boundaries(self):
         return self._layers["main"].boundaries
 
     @property
-    def key_main(self):
-        return self._key_main
+    def main_key(self):
+        return self._main_key
 
     def add_celldata(self,
                      cd: CellData,
@@ -1024,42 +1019,54 @@ class MultiCellData(DeepCopyMixin):
             print(f"Overwriting {key}.")
         self._layers[key] = cd
         if is_main:
-            self._key_main = key
+            self._main_key = key
 
-    def save(self,
-             path: Union[str, os.PathLike, Path],
-             boundaries_zipped: bool = False,
-             overwrite: bool = False,
-             max_resolution_boundaries: Optional[Number] = None
-             ):
+    def add_proseg(self,
+                   path: Union[str, os.PathLike, Path],
+                   counts_file: Optional[str] = None,
+                   cell_metadata_file: Optional[str] = None,
+                   polygons_file: Optional[str] = None,
+                   pixel_size: Number = 1,
+                   key: str = "proseg",
+                   is_main: bool = False
+                   ):
+        """
+            Adds output of Proseg https://github.com/dcjones/proseg segmentation to the object.
 
+            Args:
+                path_counts (Union[str, os.PathLike, Path]): Path to the counts file (.parquet, .csv or csv.gz).
+                path_metadata (Union[str, os.PathLike, Path]): Path to the metadata file (.parquet, .csv or csv.gz).
+                path_baysor_polygons (Union[str, os.PathLike, Path]): Path to the Baysor-like polygons file.
+                pixel_size (float): Size of the pixel for scaling.
+                key (str, optional): Key to store the data. Defaults to "proseg".
+                is_main (bool, optional): Flag to indicate if this is the main data. Defaults to False.
+        """
+
+        # generate data paths
         path = Path(path)
-        multicelldata_metadata = {"key_main": self._key_main, "all_keys": list(self._layers.keys())}
-        # check if the output file should be overwritten
-        check_overwrite_and_remove_if_true(path, overwrite=overwrite)
 
-        # create directory
-        path.mkdir(parents=True, exist_ok=True)
-        for key in self._layers.keys():
-            save_path = path / key
-            self._layers[key].save(
-                path=save_path,
-                boundaries_zipped=boundaries_zipped,
-                max_resolution_boundaries=max_resolution_boundaries,
-                overwrite=overwrite)
+        adata, img, cell_names, seg_mask_value = _read_proseg(
+            path, counts_file=counts_file, cell_metadata_file=cell_metadata_file, polygons_file=polygons_file, pixel_size=pixel_size
+            )
 
-        # add version to metadata
-        multicelldata_metadata["version"] = __version__
+        # generate boundaries data object
+        boundaries = BoundariesData(
+            cell_names=cell_names,
+            seg_mask_value=seg_mask_value
+            )
 
-        # save metadata
-        write_dict_to_json(dictionary=multicelldata_metadata, file=path / ".multicelldata")
+        # add cellular boundaries
+        boundaries.add_boundaries(
+            #data={f"cells": img},
+            cell_boundaries=img,
+            pixel_size=pixel_size
+            )
 
-    def sync(self):
-        for key in self._layers.keys():
-            self._layers[key].sync()
+        # Create cell data and add to object
+        celldata = CellData(matrix=adata, boundaries=boundaries)
 
-    def get_all_keys(self):
-        return self._layers.keys()
+        self.add_celldata(cd=celldata, key=key, is_main=is_main)
+
 
     def crop(self,
             xlim: Optional[Tuple[int, int]] = None,
@@ -1085,90 +1092,48 @@ class MultiCellData(DeepCopyMixin):
         if not inplace:
             return _self
 
-    def add_proseg(self,
-                   path: Union[str, os.PathLike, Path],
-                   counts_file: Optional[str] = None,
-                   cell_metadata_file: Optional[str] = None,
-                   polygons_file: Optional[str] = None,
-                   pixel_size: Number = 1,
-                   key: str = "proseg",
-                   is_main: bool = False
-                   ):
-        """
-            Adds output of Proseg https://github.com/dcjones/proseg segmentation to the object.
+    def get_all_keys(self):
+        return self._layers.keys()
 
-            Args:
-                path_counts (Union[str, os.PathLike, Path]): Path to the counts file (.parquet, .csv or csv.gz).
-                path_metadata (Union[str, os.PathLike, Path]): Path to the metadata file (.parquet, .csv or csv.gz).
-                path_baysor_polygons (Union[str, os.PathLike, Path]): Path to the Baysor-like polygons file.
-                pixel_size (float): Size of the pixel for scaling.
-                key (str, optional): Key to store the data. Defaults to "proseg".
-                is_main (bool, optional): Flag to indicate if this is the main data. Defaults to False.
-        """
-        try:
-            from rasterio.features import rasterize
-        except ImportError:
-            raise ImportError("This function requires the rasterio package, please install with `pip install rasterio`.")
+    def save(self,
+             path: Union[str, os.PathLike, Path],
+             boundaries_zipped: bool = False,
+             overwrite: bool = False,
+             max_resolution_boundaries: Optional[Number] = None
+             ):
 
-        # generate data paths
         path = Path(path)
+        multicelldata_metadata = {"key_main": self._main_key, "all_keys": list(self._layers.keys())}
+        # check if the output file should be overwritten
+        check_overwrite_and_remove_if_true(path, overwrite=overwrite)
 
-        if counts_file is None:
-            path_counts = list(path.glob("expected-counts.*"))[0]
+        # create directory
+        path.mkdir(parents=True, exist_ok=True)
+        for key in self._layers.keys():
+            save_path = path / key
+            self._layers[key].save(
+                path=save_path,
+                boundaries_zipped=boundaries_zipped,
+                max_resolution_boundaries=max_resolution_boundaries,
+                overwrite=overwrite)
+
+        # add version to metadata
+        multicelldata_metadata["version"] = __version__
+
+        # save metadata
+        write_dict_to_json(dictionary=multicelldata_metadata, file=path / ".multicelldata")
+
+    def set_main(self, key):
+        if key in self.get_all_keys():
+            self._main_key = key
+
+    def sync(self):
+        current_keys = self._layers.keys()
+        for key in current_keys:
+            self._layers[key].sync()
         else:
-            path_counts = path / counts_file
+            raise ValueError(f"Key {key} not in list of keys: {current_keys}")
 
-        if cell_metadata_file is None:
-            path_cell_metadata = list(path.glob("cell-metadata.*"))[0]
-        else:
-            path_cell_metadata = path / cell_metadata_file
-
-        if polygons_file is None:
-            path_polygons = list(path.glob("cell-polygons.*"))[0]
-        else:
-            path_polygons = path / polygons_file
-
-        # read proseg counts
-        adata = _read_proseg_counts(path_counts, path_cell_metadata)
-
-        # Read Proseg polygons
-        polygons = _read_proseg_polygons(path_polygons)
-
-        # Scale Baysor polygons
-        if pixel_size != 1:
-            polygons['geometry'] = polygons['geometry'].apply(lambda x: scale_wkt_polygon(x, pixel_size))
-            polygons["maxx"] = polygons["maxx"] / pixel_size
-            polygons["maxy"] = polygons["maxy"] / pixel_size
-
-
-        # Calculate bounds for rasterization
-        polygon_bounds = polygons.geometry.bounds
-        xmax = ceil(polygon_bounds.loc[:, "maxx"].max())
-        ymax = ceil(polygon_bounds.loc[:, "maxy"].max())
-
-        # get cell names and generate segmentation mask values
-        cell_names = polygons['cell'].values
-        seg_mask_value = range(1, len(polygons['cell'])+1)
-
-        # rasterize polygons
-        img = rasterize(list(zip(polygons["geometry"], seg_mask_value)), out_shape=(ymax,xmax))
-        img = da.from_array(img)
-
-        # generate boundaries data object
-        boundaries = BoundariesData(
-            cell_names=cell_names,
-            seg_mask_value=seg_mask_value
-            )
-        # add cellular boundaries
-        boundaries.add_boundaries(
-            #data={f"cells": img},
-            cell_boundaries=img,
-            pixel_size=pixel_size
-            )
-
-        # Create cell data and add to object
-        celldata = CellData(matrix=adata, boundaries=boundaries)
-        self.add_celldata(cd=celldata, key=key, is_main=is_main)
 
 
 class ImageData(DeepCopyMixin):

@@ -1,7 +1,7 @@
 from shapely import affinity, wkt
 
 
-def scale_wkt_polygon(polygon, constant):
+def scale_polygon(polygon, constant):
     """
         Scales the polygon by a given constant.
 
