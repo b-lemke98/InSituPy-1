@@ -478,22 +478,25 @@ class InSituData:
                 layer=key
             )
 
-    def copy(self):
+    def copy(self, keep_path: bool = False):
         '''
         Function to generate a deep copy of the InSituData object.
         '''
         from copy import deepcopy
         had_viewer = False
         if self._viewer is not None:
-            had_viewer = True
-
             # make copy of viewer to add it later again
+            had_viewer = True
             viewer_copy = self._viewer.copy()
+
             # remove viewer because there is otherwise a error during deepcopy
             self.viewer = None
 
         # make copy
         self_copy = deepcopy(self)
+
+        if not keep_path:
+            self_copy._path = None
 
         # add viewer again to original object if necessary
         if had_viewer:
