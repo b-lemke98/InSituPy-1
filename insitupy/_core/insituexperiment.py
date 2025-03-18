@@ -903,21 +903,17 @@ class InSituExperiment:
             else:
                 column_definition.append(ColumnDefinition(name=column_name, group="metadata", textprops={"ha": "center"}, width=width_dict[column_name]))
 
-        #Calculate predefined QC metrics
+        # Calculate predefined QC metrics
         list_gene_count = []
         list_transcript_count = []
         for _, data in self.iterdata():
             if data.cells is None:
-                warnings.warn("Counts were not loaded. Loading.")
+                warnings.warn("Cells were not loaded. Loading cells.")
                 data.load_cells()
-            if data.cells is None or data.cells.key_main is None or data.cells[data.cells.key_main].matrix is None or data.cells["main"].matrix is None:
-                warnings.warn("Counts are not defined or loaded.")
-                list_gene_count.append(0)
-                list_transcript_count.append(0)
-            else:
-                m_gene_counts, m_transcript_counts = calculate_metrics(data.cells["main"].matrix, layer=layer, force_layer=force_layer)
-                list_gene_count.append(m_gene_counts)
-                list_transcript_count.append(m_transcript_counts)
+
+            m_gene_counts, m_transcript_counts = calculate_metrics(data.cells["main"].matrix, layer=layer, force_layer=force_layer)
+            list_gene_count.append(m_gene_counts)
+            list_transcript_count.append(m_transcript_counts)
 
         df["mean_transcript_counts"] = list_transcript_count
         df["mean_gene_counts"] = list_gene_count
