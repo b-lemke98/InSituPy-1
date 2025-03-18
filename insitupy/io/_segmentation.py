@@ -2,7 +2,7 @@ import os
 from math import ceil
 from numbers import Number
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import dask.array as da
 import geopandas as gpd
@@ -111,7 +111,11 @@ def _read_proseg_polygons(
 
     return df
 
-def _read_proseg_counts(path_counts, path_cell_metadata):
+def _read_proseg_counts(
+    path_counts,
+    path_cell_metadata,
+    exclude_patterns_genes: List[str] = ["NegControl", "Unassigned", "BLANK_", "antisense_"]
+    ):
     path_counts = Path(path_counts)
     path_cell_metadata = Path(path_cell_metadata)
     # Read counts data based on file extension
@@ -141,8 +145,7 @@ def _read_proseg_counts(path_counts, path_cell_metadata):
     meta.index = meta.index.astype(str)
 
     # Filter out unwanted columns
-    counts = counts.loc[:, ~counts.columns.str.startswith('Neg')]
-    counts = counts.loc[:, ~counts.columns.str.startswith('Unas')]
+    counts = counts.loc[:, ~counts.columns.str.contains("|".join(exclude_patterns_genes))]
 
     # Add spatial coordinates
     obsm = {"spatial": np.stack([meta["centroid_x"].to_numpy(), meta["centroid_y"].to_numpy()], axis=1)}
