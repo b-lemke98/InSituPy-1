@@ -179,3 +179,12 @@ def _is_experiment(obj):
     else:
         raise ValueError(f"Object is neither InSituData or InSituExperiment. Instead: {type(obj)}")
 
+def _is_list_unique(lst):
+    return len(lst) == len(set(lst))
+
+def _all_obs_names_unique(exp):
+    all_obs_names = []
+    for meta, data in exp.iterdata():
+        all_obs_names += data.cells.matrix.obs_names.tolist()
+
+    return _is_list_unique(all_obs_names)

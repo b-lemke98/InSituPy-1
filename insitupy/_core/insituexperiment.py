@@ -16,7 +16,8 @@ from tqdm import tqdm
 import insitupy
 from insitupy import InSituData, differential_gene_expression
 from insitupy._constants import LOAD_FUNCS, MODALITIES, MODALITIES_ABBR
-from insitupy._core._checks import is_integer_counts
+from insitupy._core._checks import _all_obs_names_unique, is_integer_counts
+from insitupy._core._utils import _get_cell_layer
 from insitupy._core.insitudata import InSituData
 from insitupy._core.reader import read_xenium
 from insitupy._exceptions import ModalityNotFoundError
@@ -36,6 +37,7 @@ class InSituExperiment:
         self._metadata = pd.DataFrame(columns=['uid', 'slide_id', 'sample_id'])
         self._data = []
         self._path = None
+        self._collection = None
 
     def __repr__(self):
         """Provide a string representation of the InSituExperiment object.
@@ -95,6 +97,15 @@ class InSituExperiment:
             int: The number of datasets.
         """
         return len(self._data)
+
+    @property
+    def collection(self):
+        """Get the collection of anndatas.
+
+        Returns:
+            anndata.experimental.AnnCollection: Object that lazily concatenates AnnData objects.
+        """
+        return self._collection
 
     @property
     def data(self):
@@ -388,6 +399,23 @@ class InSituExperiment:
         for idx, row in self._metadata.iterrows():
             yield row, self._data[idx]
 
+    def generate_collection(
+        self,
+        cells_layer: Optional[str],
+        label_col: str = "uid"
+        ):
+        from anndata.experimental import AnnCollection
+
+        adatas = {}
+        for meta, xd in self.iterdata():
+            celldata = _get_cell_layer(cells=xd.cells, cells_layer=cells_layer)
+            adatas[meta[label_col]] = celldata.matrix
+
+        adatas = {k[label_col]: d.cells.matrix for k, d in self.iterdata()}
+        self._collection = AnnCollection(adatas,
+                                         join_vars='inner', join_obs='inner',
+                                         label=label_col)
+
     def load_all(self,
                  skip: Optional[str] = None,
                  ):
@@ -428,6 +456,15 @@ class InSituExperiment:
                         ):
         for xd in tqdm(self._data):
             xd.load_transcripts()
+
+    def make_obs_names_unique(self,
+                              force: bool = False):
+        if not _all_obs_names_unique(exp=self) or force:
+            print(f"Make `obs_names` unique.")
+            for meta, data in self.iterdata():
+                data.cells.matrix.obs_names = f'{meta["uid"]}-' + data.cells.matrix.obs_names
+        else:
+            print(f"The `obs_names` in samples within the InSituExperiment are already unique. Skipped execution. To force the execution set `force=True`.")
 
     def plot_umaps(self,
                    color: Optional[str] = None,
