@@ -1,7 +1,7 @@
 from warnings import warn
 
 
-### DEPRECATED FUNCTIONS
+### DEPRECATED INSITUDATA FUNCTIONS
 def read_all(self, *args, **kwargs):
     warn("`read_all` is deprecated. Use `load_all` instead.", DeprecationWarning, stacklevel=2)
 
@@ -22,3 +22,9 @@ def read_transcripts(self, *args, **kwargs):
 
 def read_xenium(self, *args, **kwargs):
     warn("`read_xenium` is deprecated. Use `read(mode='xenium')` instead.", DeprecationWarning, stacklevel=2)
+
+def normalize_and_transform(self, *args, **kwargs):
+    warn("`normalize_and_transform()` is deprecated. Use `insitupy.preprocessing.normalize_and_transform()` instead.", DeprecationWarning, stacklevel=2)
+
+def reduce_dimensions(self, *args, **kwargs):
+    warn("`reduce_dimensions()` is deprecated. Instead, use `insitupy.preprocessing.reduce_dimensions()` for dimensionality reduction and `insitupy.preprocessing.clustering()` for clustering.", DeprecationWarning, stacklevel=2)

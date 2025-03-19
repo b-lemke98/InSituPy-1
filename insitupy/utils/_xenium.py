@@ -7,9 +7,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
+from insitupy.io.plots import save_and_show_figure
+from insitupy.utils.utils import get_nrows_maxcols
+
 from ..io.files import read_json
-from ..io.plots import save_and_show_figure
-from .utils import get_nrows_maxcols
 
 
 def find_xenium_outputs(
@@ -42,6 +43,7 @@ def collect_qc_data(
 
     data = pd.DataFrame(results, columns=cats)
     return data
+
 
 def plot_qc(
     data: pd.DataFrame,
@@ -100,3 +102,4 @@ def plot_qc(
     plt.show()
 
     save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=True)
+

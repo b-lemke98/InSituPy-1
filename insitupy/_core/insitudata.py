@@ -1,7 +1,5 @@
 
 import functools as ft
-import gc
-import json
 import os
 import shutil
 from datetime import datetime
@@ -11,38 +9,26 @@ from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 from warnings import catch_warnings, filterwarnings, warn
-from pyarrow import ArrowInvalid
 
 import anndata
 import dask.dataframe as dd
 import geopandas as gpd
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
-from anndata._core.anndata import AnnData
-from dask_image.imread import imread
 from geopandas import GeoDataFrame
 from parse import *
+from pyarrow import ArrowInvalid
 from scipy.sparse import issparse
-from shapely import Point, Polygon
-from shapely.affinity import scale as scale_func
-from tqdm import tqdm
+from shapely import Point
 
 import insitupy._core.config as config
 from insitupy import WITH_NAPARI, __version__
 from insitupy._constants import ISPY_METADATA_FILE, LOAD_FUNCS, REGIONS_SYMBOL
-from insitupy._core._checks import _check_assignment
 from insitupy._core._save import _save_images
-from insitupy._core._xenium import (_read_binned_expression,
-                                    _read_boundaries_from_xenium,
-                                    _read_matrix_from_xenium,
-                                    _restructure_transcripts_dataframe)
-from insitupy._exceptions import UnknownOptionError
 from insitupy._warnings import NoProjectLoadWarning
-from insitupy.images import ImageRegistration, deconvolve_he, resize_image
 from insitupy.images.utils import _get_contrast_limits
 from insitupy.io.files import read_json, write_dict_to_json
 from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
@@ -50,15 +36,12 @@ from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting import volcano_plot
 from insitupy.utils.dge import create_deg_dataframe
-from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
-                                          reduce_dimensions_anndata)
 from insitupy.utils.utils import (_crop_transcripts, convert_to_list,
                                   get_nrows_maxcols)
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
 from .._exceptions import (InSituDataMissingObject,
-                           InSituDataRepeatedCropError, ModalityNotFoundError,
-                           NotOneElementError, WrongNapariLayerTypeError)
+                           InSituDataRepeatedCropError, ModalityNotFoundError)
 from ..images.utils import create_img_pyramid
 from ..io.files import check_overwrite_and_remove_if_true, read_json
 from ..plotting import expr_along_obs_val
@@ -85,8 +68,10 @@ class InSituData:
     #TODO: Docstring of InSituData
 
     # import deprecated functions
-    from ._deprecated import (read_all, read_annotations, read_cells,
-                              read_images, read_regions, read_transcripts)
+    from ._deprecated import (normalize_and_transform, read_all,
+                              read_annotations, read_cells, read_images,
+                              read_regions, read_transcripts,
+                              reduce_dimensions)
 
     def __init__(self,
                  path: Union[str, os.PathLike, Path] = None,
@@ -669,43 +654,6 @@ class InSituData:
 
         sc.pp.highly_variable_genes(self._cells["main"].matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
 
-
-    def normalize_and_transform(self,
-                transformation_method: Literal["log1p", "sqrt"] = "log1p",
-                target_sum: int = 250,
-                scale: bool = False,
-                verbose: bool = True
-                ) -> None:
-        """
-        Normalize the data using either log1p or square root transformation.
-
-        Args:
-            transformation_method (Literal["log1p", "sqrt"], optional):
-                The method used for data transformation. Choose between "log1p" for logarithmic transformation
-                and "sqrt" for square root transformation. Default is "log1p".
-            verbose (bool, optional):
-                If True, print progress messages during normalization. Default is True.
-
-        Raises:
-            ValueError: If `transformation_method` is not one of ["log1p", "sqrt"].
-
-        Returns:
-            None: This method modifies the input matrix in place, normalizing the data based on the specified method.
-                It does not return any value.
-        """
-        if self._cells is not None:
-            for key in self._cells.get_all_keys():
-                print(f"Normalizing {key}...")
-                normalize_and_transform_anndata(
-                    adata=self._cells[key].matrix,
-                    transformation_method=transformation_method,
-                    target_sum=target_sum,
-                    scale=scale,
-                    verbose=verbose
-                    )
-        else:
-            raise ModalityNotFoundError(modality="cells")
-
     def add_alt(self,
                 celldata_to_add: CellData,
                 key_to_add: str
@@ -962,7 +910,7 @@ class InSituData:
                     except ArrowInvalid:
                         parquet_files = list(Path(self._path / transcripts_path).glob("part*.parquet"))
                         self._transcripts = dd.read_parquet(parquet_files)
-                    
+
                 else:
                     raise ValueError(f"Invalid value for `mode`: {mode}")
 
@@ -1001,69 +949,6 @@ class InSituData:
                    from_insitudata=True
                    )
         return data
-
-    def reduce_dimensions(self,
-                        umap: bool = True,
-                        tsne: bool = True,
-                        layer: Optional[str] = None,
-                        batch_correction_key: Optional[str] = None,
-                        perform_clustering: bool = True,
-                        verbose: bool = True,
-                        tsne_lr: int = 1000,
-                        tsne_jobs: int = 8,
-                        n_neighbors: int = 16,
-                        n_pcs: int = 0,
-                        leiden: bool = True,
-                        louvain: bool = True,
-                        **kwargs
-                        ):
-        """
-        Reduce the dimensionality of the data using PCA, UMAP, and t-SNE techniques, optionally performing batch correction.
-
-        Args:
-            umap (bool, optional):
-                If True, perform UMAP dimensionality reduction. Default is True.
-            tsne (bool, optional):
-                If True, perform t-SNE dimensionality reduction. Default is True.
-            layer (str, optional):
-                Specifies the layer of the AnnData object to operate on. Default is None (uses adata.X).
-            batch_correction_key (str, optional):
-                Batch key for performing batch correction using scanorama. Default is None, indicating no batch correction.
-            verbose (bool, optional):
-                If True, print progress messages during dimensionality reduction. Default is True.
-            tsne_lr (int, optional):
-                Learning rate for t-SNE. Default is 1000.
-            tsne_jobs (int, optional):
-                Number of CPU cores to use for t-SNE computation. Default is 8.
-            **kwargs:
-                Additional keyword arguments to be passed to scanorama function if batch correction is performed.
-
-        Raises:
-            ValueError: If an invalid `batch_correction_key` is provided.
-
-        Returns:
-            None: This method modifies the input matrix in place, reducing its dimensionality using specified techniques and
-                batch correction if applicable. It does not return any value.
-        """
-        if self._cells is None:
-            raise ModalityNotFoundError(modality="cells")
-        else:
-            cells = self._cells
-
-        for key in cells.get_all_keys():
-            print(f"Reducing dimensions in `.cells['{key}']...")
-
-            reduce_dimensions_anndata(adata=cells[key].matrix,
-                                    umap=umap, tsne=tsne, layer=layer,
-                                    batch_correction_key=batch_correction_key,
-                                    perform_clustering=perform_clustering,
-                                    verbose=verbose,
-                                    tsne_lr=tsne_lr, tsne_jobs=tsne_jobs,
-                                    n_neighbors=n_neighbors,
-                                    n_pcs=n_pcs,
-                                    leiden=leiden,
-                                    louvain=louvain
-                                    )
 
 
     def saveas(self,
@@ -1840,7 +1725,7 @@ class InSituData:
             method=method,
             stderr=stderr,
             savepath=savepath,
-            return_data=return_data
+            return_data=return_data,
             **kwargs
             )
 
@@ -1995,7 +1880,7 @@ def calc_distance_of_cells_from(
     adata.obsm["distance_from"][key_to_save] = min_dists
     print(f'Saved distances to `.cells["main"].matrix.obsm["distance_from"]["{key_to_save}"]`')
 
-from insitupy.utils._dge import _select_data_for_dge, _substitution_func
+from insitupy.utils._dge import _select_data_for_dge
 
 
 def differential_gene_expression(

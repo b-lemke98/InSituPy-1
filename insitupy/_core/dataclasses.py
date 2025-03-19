@@ -1131,9 +1131,6 @@ class MultiCellData(DeepCopyMixin):
         current_keys = self._layers.keys()
         for key in current_keys:
             self._layers[key].sync()
-        else:
-            raise ValueError(f"Key {key} not in list of keys: {current_keys}")
-
 
 
 class ImageData(DeepCopyMixin):

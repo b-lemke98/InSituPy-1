@@ -167,3 +167,15 @@ def _check_assignment(
     else:
         if verbose:
             print(f"{modality.capitalize()} with key '{key}' have already been assigned to the dataset.")
+
+def _is_experiment(obj):
+    from insitupy._core.insitudata import InSituData
+    from insitupy._core.insituexperiment import InSituExperiment
+
+    if isinstance(obj, InSituData):
+        return False
+    elif isinstance(obj, InSituExperiment):
+        return True
+    else:
+        raise ValueError(f"Object is neither InSituData or InSituExperiment. Instead: {type(obj)}")
+
