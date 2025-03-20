@@ -35,9 +35,12 @@ def normalize_and_transform_anndata(
             # check if the matrix consists of raw integer counts
             check_integer_counts(adata.layers[layer])
 
+        # move layer into .X
+        adata.X = adata.layers[layer].copy()
+
     # preprocessing according to napari tutorial in squidpy
     print(f"Normalization with target sum {target_sum}.") if verbose else None
-    sc.pp.normalize_total(adata, target_sum=target_sum, layer=layer)
+    sc.pp.normalize_total(adata, target_sum=target_sum)
     adata.layers['norm_counts'] = adata.X.copy() # save before log transformation
 
     # transform either using log transformation or square root transformation
