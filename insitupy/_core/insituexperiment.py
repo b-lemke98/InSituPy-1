@@ -739,6 +739,7 @@ class InSituExperiment:
 
     def save(self,
              verbose: bool = False,
+             overwrite_metadata: bool = True,
              **kwargs
              ):
         if self.path is None:
@@ -754,6 +755,11 @@ class InSituExperiment:
                         verbose=verbose,
                         **kwargs
                         )
+
+        if overwrite_metadata:
+            # Optionally, save the metadata as a CSV file
+            metadata_path = os.path.join(self.path, "metadata.csv")
+            self._metadata.to_csv(metadata_path, index=True)
 
 
     def saveas(self, path: Union[str, os.PathLike, Path],
