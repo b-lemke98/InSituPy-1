@@ -38,15 +38,15 @@ def normalize_and_transform_anndata(
     # preprocessing according to napari tutorial in squidpy
     print(f"Normalization with target sum {target_sum}.") if verbose else None
     sc.pp.normalize_total(adata, target_sum=target_sum, layer=layer)
-    norm_counts = adata.X.copy()
-    adata.layers['norm_counts'] = norm_counts
+    adata.layers['norm_counts'] = adata.X.copy() # save before log transformation
 
     # transform either using log transformation or square root transformation
     print(f"Perform {transformation_method}-transformation.") if verbose else None
     if transformation_method == "log1p":
-        sc.pp.log1p(norm_counts)
+        sc.pp.log1p(adata)
     elif transformation_method == "sqrt":
         # Suggested in stlearn tutorial (https://stlearn.readthedocs.io/en/latest/tutorials/Xenium_PSTS.html)
+        norm_counts = adata.layers['norm_counts'].copy()
         try:
             X = norm_counts.toarray()
         except AttributeError:
