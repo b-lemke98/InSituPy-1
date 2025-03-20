@@ -1,5 +1,6 @@
 import os
 import textwrap
+import warnings
 from pathlib import Path
 from typing import Literal, Optional, Union
 
@@ -23,6 +24,7 @@ def plot_colorlegend(
     save_only: bool = False,
     dpi_save: int = 300,
     ):
+    warnings.warn("The function might have issues with colors. Please check the result.", UserWarning)
     # automatically get layer
     if layer_name is None:
         candidate_layers = [l for l in viewer.layers if l.name.startswith(f"{config.current_data_name}")]
