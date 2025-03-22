@@ -1010,7 +1010,13 @@ class MultiCellData(DeepCopyMixin):
     @property
     def main_key(self):
         return self._main_key
-
+    
+    @main_key.setter
+    def main_key(self, value: str):
+        if value not in self._layers.keys():
+            raise ValueError(f"Such layer does not exist.")
+        self._main_key = value
+    
     def add_celldata(self,
                      cd: CellData,
                      key: str,

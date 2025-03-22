@@ -5,7 +5,7 @@ from warnings import warn
 import matplotlib
 import numpy as np
 import pandas as pd
-from matplotlib.colors import rgb2hex
+from matplotlib.colors import rgb2hex, ListedColormap
 from shapely.geometry.multipolygon import MultiPolygon
 
 import insitupy._core._callbacks
@@ -166,6 +166,18 @@ if WITH_NAPARI:
                     # save last addition to add it to recent in the callback
                     config.recent_selections.append(f"{key}:{value}")
 
+                    if f"{value}_colors" in config.adata.uns.keys():
+                        # Convert hex colors to RGB format
+                        def hex_to_rgb(hex_color):
+                            hex_color = hex_color.lstrip('#')
+                            return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+                        rgb_colors = [hex_to_rgb(color) for color in config.adata.uns[f"{value}_colors"]]
+
+                        # Transform to ListedColormap
+                        colormap = ListedColormap(rgb_colors)
+                    else:
+                        colormap = None
+
                     if len(layer_names_for_current_data) == 0:
 
                         # create points layer for genes
@@ -176,7 +188,8 @@ if WITH_NAPARI:
                             name=new_layer_name,
                             point_names=cell_names,
                             point_size=size,
-                            upper_climit_pct=99
+                            upper_climit_pct=99,
+                            categorical_cmap = colormap
                         )
                         return gene_layer
                         #layers_to_add.append(gene_layer)
@@ -189,6 +202,7 @@ if WITH_NAPARI:
                                 layer=layer,
                                 new_color_values=color_value,
                                 new_name=new_layer_name,
+                                categorical_cmap = colormap
                             )
                         else:
                             # create new points layer for genes
@@ -199,7 +213,8 @@ if WITH_NAPARI:
                                 name=new_layer_name,
                                 point_names=cell_names,
                                 point_size=size,
-                                upper_climit_pct=99
+                                upper_climit_pct=99,
+                                categorical_cmap = colormap
                             )
                             return gene_layer
 
