@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import shapely
 from anndata import AnnData
+from scipy.sparse import csr_matrix
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
@@ -129,6 +130,10 @@ def _read_proseg_counts(
     else:
         raise ValueError(f"Unexpected file ending of path_counts: {path_counts_suffix}.")
 
+    # convert counts to float32
+    print("Convert counts to float32.", flush=True)
+    counts = counts.astype(np.float32)
+
     # Read metadata based on file extension
     path_metadata_suffix = path_cell_metadata.name.split(sep=".", maxsplit=1)[1]
     if path_metadata_suffix == "parquet":
@@ -152,6 +157,9 @@ def _read_proseg_counts(
 
     # Create AnnData object
     adata = AnnData(X=counts, obs=meta, obsm=obsm)
+
+    # make sure the counts are sparse
+    adata.X = csr_matrix(adata.X)
 
     # set the cell column as index
     adata.obs.set_index("cell", inplace=True)

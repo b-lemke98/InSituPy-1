@@ -41,12 +41,20 @@ def normalize_and_transform_anndata(
     # preprocessing according to napari tutorial in squidpy
     print(f"Normalization with target sum {target_sum}.") if verbose else None
     sc.pp.normalize_total(adata, target_sum=target_sum)
-    adata.layers['norm_counts'] = adata.X.copy() # save before log transformation
+
+    # make sure the matrix is saved as sparse array
+    adata.X = csr_matrix(adata.X)
+
+    # save before log transformation
+    adata.layers['norm_counts'] = adata.X.copy()
 
     # transform either using log transformation or square root transformation
     print(f"Perform {transformation_method}-transformation.") if verbose else None
     if transformation_method == "log1p":
         sc.pp.log1p(adata)
+
+        # make sure the matrix is saved as sparse array
+        adata.X = csr_matrix(adata.X)
     elif transformation_method == "sqrt":
         # Suggested in stlearn tutorial (https://stlearn.readthedocs.io/en/latest/tutorials/Xenium_PSTS.html)
         norm_counts = adata.layers['norm_counts'].copy()
@@ -65,8 +73,7 @@ def normalize_and_transform_anndata(
         sc.pp.scale(adata)
 
         # make sure the matrix is saved as sparse array
-        if not issparse(adata.X):
-            adata.X = csr_matrix(adata.X)
+        adata.X = csr_matrix(adata.X)
 
 def reduce_dimensions_anndata(
     adata,

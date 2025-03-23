@@ -1,8 +1,10 @@
-from typing import Literal
+from typing import Literal, Optional
 
 import anndata
 import numpy as np
 from scipy.sparse import issparse
+
+from insitupy._core._utils import _get_cell_layer
 
 
 # checker functions for data sanity
@@ -182,9 +184,14 @@ def _is_experiment(obj):
 def _is_list_unique(lst):
     return len(lst) == len(set(lst))
 
-def _all_obs_names_unique(exp):
+def _all_obs_names_unique(
+    exp,
+    cells_layer: Optional[str],
+    ):
+
     all_obs_names = []
     for meta, data in exp.iterdata():
-        all_obs_names += data.cells.matrix.obs_names.tolist()
+        celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
+        all_obs_names += celldata.matrix.obs_names.tolist()
 
     return _is_list_unique(all_obs_names)

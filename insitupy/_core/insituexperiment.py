@@ -458,11 +458,14 @@ class InSituExperiment:
             xd.load_transcripts()
 
     def make_obs_names_unique(self,
+                              cells_layer: Optional[str],
                               force: bool = False):
-        if not _all_obs_names_unique(exp=self) or force:
+
+        if not _all_obs_names_unique(exp=self, cells_layer=cells_layer) or force:
             print(f"Make `obs_names` unique.")
             for meta, data in self.iterdata():
-                data.cells.matrix.obs_names = f'{meta["uid"]}-' + data.cells.matrix.obs_names
+                celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
+                celldata.matrix.obs_names = f'{meta["uid"]}-' + celldata.matrix.obs_names
         else:
             print(f"The `obs_names` in samples within the InSituExperiment are already unique. Skipped execution. To force the execution set `force=True`.")
 

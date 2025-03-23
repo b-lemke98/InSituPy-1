@@ -72,6 +72,7 @@ def filter_cells(
 def normalize_and_transform(
     data: Optional[InSituExperiment, InSituData],
     cells_layer: Optional[str],
+    adata_layer: Optional[str] = None,
     transformation_method: Literal["log1p", "sqrt"] = "log1p",
     target_sum: int = 250,
     scale: bool = False,
@@ -107,6 +108,7 @@ def normalize_and_transform(
             celldata = _get_cell_layer(cells=xd.cells, cells_layer=cells_layer)
             normalize_and_transform_anndata(
                 adata=celldata.matrix,
+                layer=adata_layer,
                 transformation_method=transformation_method,
                 target_sum=target_sum,
                 scale=scale,
