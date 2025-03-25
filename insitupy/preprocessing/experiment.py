@@ -33,9 +33,9 @@ def calculate_qc_metrics(
         iterator = zip([None], [data])
 
     for _, xd in iterator:
-        cells = _get_cell_layer(cells=xd.cells, cells_layer=cells_layer)
+        celldata = _get_cell_layer(cells=xd.cells, cells_layer=cells_layer)
         sc.pp.calculate_qc_metrics(
-            cells.matrix, percent_top=percent_top, log1p=log1p, inplace=True, **kwargs
+            celldata.matrix, percent_top=percent_top, log1p=log1p, inplace=True, **kwargs
             )
 
 def filter_cells(

@@ -4,6 +4,7 @@ import numpy as np
 from anndata import AnnData
 
 from insitupy._core._checks import _check_assignment
+from insitupy._core._utils import _get_cell_layer
 from insitupy._core.insitudata import InSituData
 from insitupy.utils.utils import convert_to_list
 
@@ -19,6 +20,7 @@ def _check_list_in_assignment(entry, list_to_check):
 
 def _select_data_for_dge(
     data: InSituData,
+    cells_layer: str,
     annotation_tuple: Optional[Union[Tuple[str, str], Tuple[str, List[str]]]] = None,
     cell_type_tuple: Optional[Tuple[str, str]] = None,
     region_tuple: Optional[Tuple[str, str]] = None,
@@ -27,12 +29,14 @@ def _select_data_for_dge(
     ) -> AnnData:
 
     # extract anndata object
-    adata = data.cells.matrix.copy()
+    celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
+    adata = celldata.matrix.copy()
 
     ### REGIONS
     if region_tuple is not None:
         # assign region
         _check_assignment(data=data,
+                          cells_layer=cells_layer,
                           key=region_tuple[0],
                           force_assignment=force_assignment,
                           modality="regions",
@@ -53,6 +57,7 @@ def _select_data_for_dge(
     if annotation_tuple is not None:
         # check if the annotations need to be assigned first
         _check_assignment(data=data,
+                          cells_layer=cells_layer,
                           key=annotation_tuple[0],
                           force_assignment=force_assignment,
                           modality="annotations",

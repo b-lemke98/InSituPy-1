@@ -144,13 +144,15 @@ def check_rgb_column(df, column_name):
 
 def _check_assignment(
     data,
+    cells_layer: str,
     key: str,
     modality: Literal["annotations", "regions"],
     force_assignment: bool = False,
     verbose: bool = False
 ):
+    celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
     try:
-        column = data.cells["main"].matrix.obsm[modality].columns
+        column = celldata.matrix.obsm[modality].columns
     except KeyError:
         do_assignment = True
     else:

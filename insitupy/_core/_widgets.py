@@ -5,7 +5,7 @@ from warnings import warn
 import matplotlib
 import numpy as np
 import pandas as pd
-from matplotlib.colors import rgb2hex, ListedColormap
+from matplotlib.colors import ListedColormap, rgb2hex
 from shapely.geometry.multipolygon import MultiPolygon
 
 import insitupy._core._callbacks
@@ -303,7 +303,7 @@ if WITH_NAPARI:
                                 edge_width=0.1
                             )
                 else:
-                    print(f"Cell '{cell}' not found in `.cells.matrix.obs_names()`.")
+                    print(f"Cell '{cell}' not found.")
 
             def callback_refresh(event=None):
                 # after the points widget is run, the widgets have to be refreshed to current data layer

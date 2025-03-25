@@ -8,15 +8,13 @@ from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
-from warnings import catch_warnings, filterwarnings, warn
+from warnings import warn
 
-import anndata
 import dask.dataframe as dd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import scanpy as sc
 import seaborn as sns
 from geopandas import GeoDataFrame
 from parse import *
@@ -28,16 +26,13 @@ import insitupy._core.config as config
 from insitupy import WITH_NAPARI, __version__
 from insitupy._constants import ISPY_METADATA_FILE, LOAD_FUNCS, REGIONS_SYMBOL
 from insitupy._core._save import _save_images
+from insitupy._core._utils import _get_cell_layer
 from insitupy._warnings import NoProjectLoadWarning
 from insitupy.images.utils import _get_contrast_limits
 from insitupy.io.files import read_json, write_dict_to_json
 from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_multicelldata, read_shapesdata)
-from insitupy.io.plots import save_and_show_figure
-from insitupy.plotting import volcano_plot
-from insitupy.utils.dge import create_deg_dataframe
-from insitupy.utils.utils import (_crop_transcripts, convert_to_list,
-                                  get_nrows_maxcols)
+from insitupy.utils.utils import _crop_transcripts, convert_to_list
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
 from .._exceptions import (InSituDataMissingObject,
@@ -312,7 +307,7 @@ class InSituData:
                           add_masks: bool = False,
                           add_to_obs: bool = False,
                           overwrite: bool = True,
-                          layer: str = None
+                          cells_layer: str = None
                           ):
         '''
         Function to assign geometries (annotations or regions) to the anndata object in
@@ -324,19 +319,12 @@ class InSituData:
         except AttributeError:
             raise ModalityNotFoundError(modality=geometry_type)
 
-        if layer is None:
-            if self._cells._key_main is not None:
-                cell_attr = self._cells["main"]
-                name = ".cells['main']"
-            else:
-                raise ModalityNotFoundError("cells['main']")
-        else:
-            #TODO
-            try:
-                cell_attr = self._cells[layer]
-                name = f".cells[{layer}]"
-            except:
-                raise ModalityNotFoundError(f"cells[{layer}]")
+        # get the right cells layer
+        celldata, cells_layer_name = _get_cell_layer(
+            cells=self.cells, cells_layer=cells_layer,
+            verbose=True, retrun_layer_name=True
+            )
+        name = f".cells['{cells_layer_name}']"
 
         if keys == "all":
             keys = geom_attr.metadata.keys()
@@ -345,8 +333,8 @@ class InSituData:
         keys = convert_to_list(keys)
 
         # convert coordinates into shapely Point objects
-        x = cell_attr.matrix.obsm["spatial"][:, 0]
-        y = cell_attr.matrix.obsm["spatial"][:, 1]
+        x = celldata.matrix.obsm["spatial"][:, 0]
+        y = celldata.matrix.obsm["spatial"][:, 1]
         cells = gpd.points_from_xy(x, y)
 
         # iterate through annotation keys
@@ -372,15 +360,6 @@ class InSituData:
             # iterate through names
             for n in geom_names:
                 polygons = geom_df[geom_df["name"] == n]["geometry"].tolist()
-                #scales = geom_df[geom_df["name"] == n]["scale"].tolist()
-
-                # in_poly = []
-                # for poly, scale in zip(polygons, scales):
-                #     # scale the polygon
-                #     poly = scale_func(poly, xfact=scale[0], yfact=scale[1], origin=(0,0))
-
-                #     # check if which of the points are inside the current annotation polygon
-                #     in_poly.append(poly.contains(cells))
 
                 in_poly = [poly.contains(cells) for poly in polygons]
 
@@ -392,7 +371,7 @@ class InSituData:
 
             # convert into pandas dataframe
             data = pd.DataFrame(data)
-            data.index = cell_attr.matrix.obs_names
+            data.index = celldata.matrix.obs_names
 
             # transform data into one column
             column_to_add = [" & ".join(geom_names[row.values]) if np.any(row.values) else "unassigned" for _, row in data.iterrows()]
@@ -402,9 +381,9 @@ class InSituData:
                 col_name = f"{geometry_type}-{key}"
                 data[col_name] = column_to_add
 
-                if col_name in cell_attr.matrix.obs:
+                if col_name in celldata.matrix.obs:
                     if overwrite:
-                        cell_attr.matrix.obs.drop(col_name, axis=1, inplace=True)
+                        celldata.matrix.obs.drop(col_name, axis=1, inplace=True)
                         print(f'Existing column "{col_name}" is overwritten.', flush=True)
                         add = True
                     else:
@@ -413,20 +392,20 @@ class InSituData:
 
                 if add:
                     if add_masks:
-                        cell_attr.matrix.obs = pd.merge(left=cell_attr.matrix.obs, right=data, left_index=True, right_index=True)
+                        celldata.matrix.obs = pd.merge(left=celldata.matrix.obs, right=data, left_index=True, right_index=True)
                     else:
-                        cell_attr.matrix.obs = pd.merge(left=cell_attr.matrix.obs, right=data.iloc[:, -1], left_index=True, right_index=True)
+                        celldata.matrix.obs = pd.merge(left=celldata.matrix.obs, right=data.iloc[:, -1], left_index=True, right_index=True)
 
                     # save that the current key was analyzed
                     geom_attr.metadata[key]["analyzed"] = tf.TICK
             else:
                 # add to obsm
-                obsm_keys = cell_attr.matrix.obsm.keys()
+                obsm_keys = celldata.matrix.obsm.keys()
                 if geometry_type not in obsm_keys:
                     # add empty pandas dataframe with obs_names as index
-                    cell_attr.matrix.obsm[geometry_type] = pd.DataFrame(index=cell_attr.matrix.obs_names)
+                    celldata.matrix.obsm[geometry_type] = pd.DataFrame(index=celldata.matrix.obs_names)
 
-                cell_attr.matrix.obsm[geometry_type][key] = column_to_add
+                celldata.matrix.obsm[geometry_type][key] = column_to_add
 
                 # save that the current key was analyzed
                 geom_attr.metadata[key]["analyzed"] = tf.TICK
@@ -446,7 +425,7 @@ class InSituData:
                 keys=keys,
                 add_masks=add_masks,
                 overwrite=overwrite,
-                layer=key
+                cells_layer=key
             )
 
     def assign_regions(
@@ -461,7 +440,7 @@ class InSituData:
                 keys=keys,
                 add_masks=add_masks,
                 overwrite=overwrite,
-                layer=key
+                cells_layer=key
             )
 
     def copy(self, keep_path: bool = False):
@@ -605,54 +584,6 @@ class InSituData:
                 del _self.viewer # delete viewer
         else:
             return _self
-
-
-    def hvg(self,
-            hvg_batch_key: Optional[str] = None,
-            hvg_flavor: Literal["seurat", "cell_ranger", "seurat_v3"] = 'seurat',
-            hvg_n_top_genes: Optional[int] = None,
-            verbose: bool = True
-            ) -> None:
-        """
-        Calculate highly variable genes (HVGs) using specified flavor and parameters.
-
-        Args:
-            hvg_batch_key (str, optional):
-                Batch key for computing HVGs separately for each batch. Default is None, indicating all samples are considered.
-            hvg_flavor (Literal["seurat", "cell_ranger", "seurat_v3"], optional):
-                Flavor of the HVG computation method. Choose between "seurat", "cell_ranger", or "seurat_v3".
-                Default is 'seurat'.
-            hvg_n_top_genes (int, optional):
-                Number of top highly variable genes to identify. Mandatory if `hvg_flavor` is set to "seurat_v3".
-                Default is None.
-            verbose (bool, optional):
-                If True, print progress messages during HVG computation. Default is True.
-
-        Raises:
-            ValueError: If `hvg_n_top_genes` is not specified for "seurat_v3" flavor or if an invalid `hvg_flavor` is provided.
-
-        Returns:
-            None: This method modifies the input matrix in place, identifying highly variable genes based on the specified
-                flavor and parameters. It does not return any value.
-        """
-
-        if hvg_flavor in ["seurat", "cell_ranger"]:
-            hvg_layer = None
-        elif hvg_flavor == "seurat_v3":
-            hvg_layer = "counts" # seurat v3 method expects counts data
-
-            # n top genes must be specified for this method
-            if hvg_n_top_genes is None:
-                raise ValueError(f"HVG computation: For flavor {hvg_flavor} `hvg_n_top_genes` is mandatory")
-        else:
-            raise ValueError(f'Unknown value for `hvg_flavor`: {hvg_flavor}. Possible values: {["seurat", "cell_ranger", "seurat_v3"]}')
-
-        if hvg_batch_key is None:
-            print("Calculate highly-variable genes across all samples using {} flavor...".format(hvg_flavor)) if verbose else None
-        else:
-            print("Calculate highly-variable genes per batch key {} using {} flavor...".format(hvg_batch_key, hvg_flavor)) if verbose else None
-
-        sc.pp.highly_variable_genes(self._cells["main"].matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
 
     def add_alt(self,
                 celldata_to_add: CellData,
@@ -1289,6 +1220,7 @@ class InSituData:
 
     def show(self,
         keys: Optional[str] = None,
+        cells_layer: Optional[str] = None,
         # annotation_keys: Optional[str] = None,
         point_size: int = 8,
         scalebar: bool = True,
@@ -1356,37 +1288,36 @@ class InSituData:
                     )
 
         # optionally: add cells as points
-        #if show_cells or keys is not None:
         if keys is not None:
-            if self._cells is None or self._cells.key_main is None:
+            if self._cells is None:
                 raise InSituDataMissingObject("cells")
             else:
-                cells = self._cells
+                celldata = _get_cell_layer(cells=self.cells, cells_layer=cells_layer)
                 # convert keys to list
                 keys = convert_to_list(keys)
 
                 # get point coordinates
-                points = np.flip(cells["main"].matrix.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
+                points = np.flip(celldata.matrix.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
                 #points *= pixel_size # convert to length unit (e.g. µm)
 
                 # get expression matrix
-                if issparse(cells["main"].matrix.X):
-                    X = cells["main"].matrix.X.toarray()
+                if issparse(celldata.matrix.X):
+                    X = celldata.matrix.X.toarray()
                 else:
-                    X = cells["main"].matrix.X
+                    X = celldata.matrix.X
 
                 for i, k in enumerate(keys):
                     #pvis = False if i < len(keys) - 1 else True # only last image is set visible
                     # get expression values
-                    if k in cells["main"].matrix.obs.columns:
-                        color_value = cells["main"].matrix.obs[k].values
+                    if k in celldata.matrix.obs.columns:
+                        color_value = celldata.matrix.obs[k].values
 
                     else:
-                        geneid = cells["main"].matrix.var_names.get_loc(k)
+                        geneid = celldata.matrix.var_names.get_loc(k)
                         color_value = X[:, geneid]
 
                     # extract names of cells
-                    cell_names = cells["main"].matrix.obs_names.values
+                    cell_names = celldata.matrix.obs_names.values
 
                     # create points layer
                     layer = _create_points_layer(
@@ -1410,7 +1341,7 @@ class InSituData:
             add_geom_widget.max_width = widgets_max_width
             self._viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
         else:
-            cells = self._cells
+            celldata = self._cells
             # initialize the widgets
             show_points_widget, locate_cells_widget, show_geometries_widget, show_boundaries_widget, select_data, filter_cells_widget = _initialize_widgets(xdata=self)
 
@@ -1646,67 +1577,11 @@ class InSituData:
 
         #self._remove_empty_modalities()
 
-    def plot_binned_expression(
-        self,
-        genes: Union[List[str], str],
-        maxcols: int = 4,
-        figsize: Tuple[int, int] = (8,6),
-        savepath: Union[str, os.PathLike, Path] = None,
-        save_only: bool = False,
-        dpi_save: int = 300,
-        show: bool = True,
-        fontsize: int = 28
-        ):
-        # extract binned expression matrix and gene names
-        binex = self._cells["main"].matrix.varm["binned_expression"]
-        gene_names = self._cells["main"].matrix.var_names
-
-        genes = convert_to_list(genes)
-
-        nplots, nrows, ncols = get_nrows_maxcols(len(genes), max_cols=maxcols)
-
-        # setup figure
-        fig, axs = plt.subplots(nrows, ncols, figsize=(figsize[0]*ncols, figsize[1]*nrows))
-
-        # scale font sizes
-        plt.rcParams.update({'font.size': fontsize})
-
-        if nplots > 1:
-            axs = axs.ravel()
-        else:
-            axs = [axs]
-
-        for i, gene in enumerate(genes):
-            # retrieve binned expression
-            img = binex[gene_names.get_loc(gene)]
-
-            # determine upper limit for color
-            vmax = np.percentile(img[img>0], 95)
-
-            # plot expression
-            axs[i].imshow(img, cmap="viridis", vmax=vmax)
-
-            # set title
-            axs[i].set_title(gene)
-
-        if nplots > 1:
-
-            # check if there are empty plots remaining
-            while i < nrows * maxcols - 1:
-                i+=1
-                # remove empty plots
-                axs[i].set_axis_off()
-
-        if show:
-            fig.tight_layout()
-            save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save)
-        else:
-            return fig, axs
-
     def plot_expr_along_obs_val(
         self,
         keys: str,
         obs_val: str,
+        cells_layer: Optional[str] = None,
         groupby: Optional[str] = None,
         method: Literal["lowess", "loess"] = 'loess',
         stderr: bool = False,
@@ -1715,7 +1590,8 @@ class InSituData:
         **kwargs
         ):
         # retrieve anndata object from InSituData
-        adata = self._cells["main"].matrix
+        celldata = _get_cell_layer(cells=self.cells, cells_layer=cells_layer, verbose=True)
+        adata = celldata.matrix
 
         results = expr_along_obs_val(
             adata=adata,
@@ -1792,356 +1668,3 @@ class InSituData:
         else:
             print(f"No modality '{modality}' found. Nothing removed.")
 
-
-def calc_distance_of_cells_from(
-    data: InSituData,
-    annotation_key: str,
-    annotation_class: str,
-    region_key: Optional[str] = None,
-    region_name: Optional[str] = None,
-    key_to_save: Optional[str] = None
-    ):
-
-    """
-    Calculate the distance of cells from a specified annotation class within a given region and save the results.
-
-    This function calculates the distance of each cell in the spatial data to the closest point
-    of a specified annotation class. The distances are then saved in the cell data matrix.
-
-    Args:
-        data (InSituData): The input data containing cell and annotation information.
-        annotation_key (str): The key to retrieve the annotation information.
-        annotation_class (Optional[str]): The specific annotation class to calculate distances from.
-        region_key: (Optional[str]): If not None, `region_key` is used together with `region_name` to determine the region in which cells are considered
-                                     for the analysis.
-        region_name: (Optional[str]): If not None, `region_name` is used together with `region_key` to determine the region in which cells are considered
-                                     for the analysis.
-        key_to_save (Optional[str]): The key under which to save the calculated distances in the cell data matrix.
-                                     If None, a default key is generated based on the annotation class.
-
-    Returns:
-        None
-    """
-    # extract anndata object
-    adata = data.cells["main"].matrix
-
-    if region_name is None:
-        print(f'Calculate the distance of cells from the annotation "{annotation_class}"')
-        region_mask = [True] * len(adata)
-    else:
-        assert region_key is not None, "`region_key` must not be None if `region_name` is not None."
-        print(f'Calculate the distance of cells from the annotation "{annotation_class}" within region "{region_name}"')
-
-        try:
-            region_df = adata.obsm["regions"]
-        except KeyError:
-            data.assign_regions(keys=region_key)
-            region_df = adata.obsm["regions"]
-        else:
-            if region_key not in region_df.columns:
-                data.assign_regions(keys=region_key)
-
-        # generate mask for selected region
-        region_mask = region_df[region_key] == region_name
-
-    # create geopandas points from cells
-    x = adata.obsm["spatial"][:, 0][region_mask]
-    y = adata.obsm["spatial"][:, 1][region_mask]
-    indices = adata.obs_names[region_mask]
-    cells = gpd.points_from_xy(x, y)
-
-    # retrieve annotation information
-    annot_df = data.annotations[annotation_key]
-    class_df = annot_df[annot_df["name"] == annotation_class]
-
-    # calculate distance of cells to their closest point
-    # scaled_geometries = [
-    #     scale_func(geometry, xfact=scale[0], yfact=scale[1], origin=(0,0))
-    #     for geometry, scale in zip(class_df["geometry"], class_df["scale"])
-    #     ]
-    scaled_geometries = class_df["geometry"].tolist()
-    dists = np.array([cells.distance(geometry) for geometry in scaled_geometries])
-    min_dists = dists.min(axis=0)
-
-    # add indices to minimum distances
-    min_dists = pd.Series(min_dists, index=indices)
-
-    # add results to CellData
-    if key_to_save is None:
-        #key_to_save = f"dist_from_{annotation_class}"
-        key_to_save = annotation_class
-    #adata.obs[key_to_save] = min_dists
-
-    obsm_keys = adata.obsm.keys()
-    if "distance_from" not in obsm_keys:
-        # add empty pandas dataframe with obs_names as index
-        adata.obsm["distance_from"] = pd.DataFrame(index=adata.obs_names)
-
-    adata.obsm["distance_from"][key_to_save] = min_dists
-    print(f'Saved distances to `.cells["main"].matrix.obsm["distance_from"]["{key_to_save}"]`')
-
-from insitupy.utils._dge import _select_data_for_dge
-
-
-def differential_gene_expression(
-    target: InSituData,
-    target_annotation_tuple: Optional[Tuple[str, str]] = None,
-    target_cell_type_tuple: Optional[Tuple[str, str]] = None,
-    target_region_tuple: Optional[Tuple[str, str]] = None,
-    ref: Optional[Union[InSituData, List[InSituData]]] = None,
-    ref_annotation_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
-    ref_cell_type_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
-    ref_region_tuple: Optional[Tuple[str, str]] = "same",
-    significance_threshold: Number = 0.05,
-    fold_change_threshold: Number = 1,
-    plot_volcano: bool = True,
-    return_results: bool = False,
-    method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
-    exclude_ambiguous_assignments: bool = False,
-    force_assignment: bool = False,
-    title: Optional[str] = None,
-    savepath: Union[str, os.PathLike, Path] = None,
-    save_only: bool = False,
-    dpi_save: int = 300,
-    verbose: bool = False,
-    **volcano_kwargs
-):
-    """
-    Perform differential gene expression analysis on in situ sequencing data.
-
-    This function compares gene expression between specified annotations within a single
-    InSituData object or between two InSituData objects. It supports various statistical
-    methods for differential expression analysis and can generate a volcano plot of the results.
-
-    Args:
-        target (InSituData): The primary in situ data object.
-        target_annotation_tuple (Optional[Tuple[str, str]]): Tuple containing the annotation key and name for the target data.
-        target_cell_type_tuple (Optional[Tuple[str, str]]): Tuple specifying an observation key and value to filter the target data by cell type.
-        target_region_tuple (Optional[Tuple[str, str]]): Tuple specifying a region key and name to restrict the analysis to a specific region in the target data.
-        ref (Optional[Union[InSituData, List[InSituData]]]): Reference in situ data object(s) for comparison. Defaults to None.
-        ref_annotation_tuple (Optional[Union[Literal["rest", "same"], Tuple[str, str]]]): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference, or "same" to use the same annotation as the target. Defaults to "same".
-        ref_cell_type_tuple (Optional[Union[Literal["rest", "same"], Tuple[str, str]]]): Tuple specifying an observation key and value to filter the reference data by cell type, or "rest" to use the rest of the data, or "same" to use the same cell type as the target. Defaults to "same".
-        ref_region_tuple (Optional[Tuple[str, str]]): Tuple specifying a region key and name to restrict the analysis to a specific region in the reference data. Defaults to None.
-        significance_threshold (float): P-value threshold for significance (default is 0.05).
-        fold_change_threshold (float): Log2 fold change threshold for up/down regulation (default is 1).
-        plot_volcano (bool): Whether to generate a volcano plot of the results. Defaults to True.
-        return_results (bool): Whether to return the results as dictionary including the dataframe differentially expressed genes and the parameters.
-        method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']]): Statistical method to use for differential expression analysis. Defaults to 't-test'.
-        exclude_ambiguous_assignments (bool): Whether to exclude ambiguous assignments in the data. Defaults to False.
-        force_assignment (bool): Whether to force assignment of annotations and regions even if it has been done before already. Defaults to False.
-        title (Optional[str]): Title for the volcano plot. Defaults to None.
-        savepath (Union[str, os.PathLike, Path]): Path to save the plot. Defaults to None.
-        save_only (bool): If True, only save the plot without displaying it. Defaults to False.
-        dpi_save (int): Dots per inch (DPI) for saving the plot. Defaults to 300.
-        verbose (bool): Whether to print detailed information during the analysis. Defaults to False.
-        **volcano_kwargs: Additional keyword arguments for the volcano plot.
-
-    Returns:
-        Union[None, Dict[str, Any]]: If `plot_volcano` is True, returns None. Otherwise, returns a dictionary with the results DataFrame and parameters used for the analysis.
-
-    Raises:
-        ValueError: If `ref_annotation_tuple` is neither 'rest' nor a 2-tuple.
-        AssertionError: If `ref` is provided when `ref_annotation_tuple` is 'rest'.
-        AssertionError: If `target_region_tuple` is provided when `ref` is not None.
-        AssertionError: If the specified region or annotation is not found in the data.
-
-    Example:
-        >>> result = differential_gene_expression(
-                target=my_data,
-                target_annotation_tuple=("pathologist", "tumor"),
-                ref=my_ref_data,
-                ref_annotation_tuple=("cell_type", "astrocyte"),
-                plot_volcano=True,
-                method='wilcoxon'
-            )
-    """
-    if not (plot_volcano | return_results):
-        raise ValueError("Both `plot_volcano` and `return_results` are False. At least one of them must be True.")
-
-    dge_comparison_column = "DGE_COMPARISON_COLUMN"
-
-    # pre-flight checks
-    if ref_annotation_tuple is not None:
-        if ref_annotation_tuple == "rest":
-            if ref is not None:
-                raise ValueError("Value 'rest' for `ref_annotation_tuple` is only allowed if no reference data is given (`ref=None`).")
-        elif ref_annotation_tuple == "same":
-            ref_annotation_tuple = target_annotation_tuple
-        elif not isinstance(ref_annotation_tuple, tuple):
-            raise ValueError(f"Unknown type of `ref_annotation_tuple`: {type(ref_annotation_tuple)}. Must be either tuple, 'rest', 'same' or None.")
-        else:
-            pass
-
-    if ref_region_tuple is not None:
-        if ref_region_tuple == "rest":
-            if ref is not None:
-                raise ValueError("Value 'rest' for `ref_region_tuple` is only allowed if no reference data is given (`ref=None`).")
-        elif ref_region_tuple == "same":
-            ref_region_tuple = target_region_tuple
-        elif not isinstance(ref_region_tuple, tuple):
-            raise ValueError(f"Unknown type of `ref_region_tuple`: {type(ref_region_tuple)}. Must be either tuple, 'rest', 'same' or None.")
-        else:
-            pass
-
-    if ref_cell_type_tuple is not None:
-        if ref_cell_type_tuple == "rest":
-            if ref is not None:
-                raise ValueError("Value 'rest' for `ref_cell_type_tuple` is only allowed if no reference data is given (`ref=None`).")
-        elif ref_cell_type_tuple == "same":
-            ref_cell_type_tuple = target_cell_type_tuple
-        elif not isinstance(ref_cell_type_tuple, tuple):
-            raise ValueError(f"Unknown type of `ref_cell_type_tuple`: {type(ref_cell_type_tuple)}. Must be either tuple, 'rest', 'same' or None.")
-        else:
-            pass
-
-    # select data for analysis
-    adata_data = _select_data_for_dge(
-        data=target,
-        annotation_tuple=target_annotation_tuple,
-        cell_type_tuple=target_cell_type_tuple,
-        region_tuple=target_region_tuple,
-        force_assignment=force_assignment,
-        verbose=verbose
-    )
-
-    # original tuples for plotting the configuration table
-    orig_ref_annotation_tuple = ref_annotation_tuple
-    orig_ref_cell_type_tuple = ref_cell_type_tuple
-
-    if ref is None:
-        ref = target.copy()
-
-        # TODO: Implement behavior for "rest"
-        # The "rest" argument is only implemented if ref_data is None in the beginning
-        if ref_annotation_tuple == "rest":
-            rest_annotations = [
-                elem
-                for elem in ref.cells["main"].matrix.obsm["annotations"][target_annotation_tuple[0]].unique()
-                if elem != target_annotation_tuple[1]
-                ]
-            ref_annotation_tuple = (target_annotation_tuple[0], rest_annotations)
-
-        if ref_region_tuple == "rest":
-            rest_regions = [
-                elem
-                for elem in ref.cells["main"].matrix.obsm["regions"][target_region_tuple[0]].unique()
-                if elem != target_region_tuple[1]
-                ]
-            ref_region_tuple = (target_region_tuple[0], rest_regions)
-
-        if ref_cell_type_tuple == "rest":
-            rest_cell_types = [
-                elem
-                for elem in ref.cells["main"].matrix.obs[target_cell_type_tuple[0]].unique()
-                if elem != target_cell_type_tuple[1]
-                ]
-            ref_cell_type_tuple = (target_cell_type_tuple[0], rest_cell_types)
-
-    if isinstance(ref, InSituData):
-        # generate a list from ref_dta
-        ref = [ref]
-    elif isinstance(ref, list):
-        assert np.all([isinstance(elem, InSituData) for elem in ref]), "Not all elements of list given in `ref` are InSituData objects."
-    else:
-        raise ValueError("`ref` must be an InSituData object or a list of InSituData objects.")
-
-    adata_ref_list = []
-    for rd in ref:
-        # select reference data for analysis
-        ad_ref = _select_data_for_dge(
-            data=rd,
-            annotation_tuple=ref_annotation_tuple,
-            cell_type_tuple=ref_cell_type_tuple,
-            region_tuple=ref_region_tuple,
-            force_assignment=force_assignment,
-            verbose=verbose
-        )
-        adata_ref_list.append(ad_ref)
-
-    if len(adata_ref_list) > 1:
-        adata_ref = anndata.concat(adata_ref_list)
-    else:
-        adata_ref = adata_ref_list[0]
-
-    # check before concatenation whether cells with identical names are found in both data and reference
-    if not set(adata_data.obs_names).isdisjoint(set(adata_ref.obs_names)):
-        n_duplicated_cells = len(set(adata_data.obs_names).intersection(set(adata_ref.obs_names)))
-        pct_duplicated_cells = round((n_duplicated_cells / 2) / (len(adata_data) + len(adata_data)) * 100, 1)
-
-        warn(
-            f"{n_duplicated_cells} ({pct_duplicated_cells}%) cells were found to belong to both data and reference. "
-            "This can happen due to overlapping annotations or non-unique cell names in the individual datasets. "
-            "If you are sure that the same cell cannot be found in both data and reference, you can ignore this warning. "
-            "To exclude ambiguously assigned cells from the analysis, use `exclude_ambiguous_assignments=True`."
-        )
-
-    # concatenate and ignore user warning about observations being not unique since we take care of this later by filtering out duplicate values if wanted.
-    with catch_warnings():
-        filterwarnings("ignore", message="Observation names are not unique. To make them unique, call `.obs_names_make_unique`.")
-        adata_combined = anndata.concat(
-            {
-                "DATA": adata_data,
-                "REFERENCE": adata_ref
-            },
-            label=dge_comparison_column
-        )
-
-    if exclude_ambiguous_assignments:
-        # check whether some cells are in both data and reference
-        duplicated_mask = adata_combined.obs_names.duplicated(keep=False)
-
-        if np.any(duplicated_mask):
-            print("Exclude ambiguously assigned cells...")
-            # remove duplicated values
-            adata_combined = adata_combined[~duplicated_mask].copy()
-
-    # add column to .obs for its use in rank_genes_groups()
-    #adata_combined.obs = adata_combined.obs.filter([dge_comparison_column]) # empty obs
-
-    print(f"Calculate differentially expressed genes with Scanpy's `rank_genes_groups` using '{method}'.")
-    sc.tl.rank_genes_groups(adata=adata_combined,
-                            groupby=dge_comparison_column,
-                            groups=["DATA"],
-                            reference="REFERENCE",
-                            method=method,
-                            )
-
-    # create dataframe from results
-    res_dict = create_deg_dataframe(
-        adata=adata_combined, groups="DATA")
-    df = res_dict["DATA"]
-
-    if plot_volcano:
-        cell_counts = adata_combined.obs[dge_comparison_column].value_counts()
-        data_counts = cell_counts["DATA"]
-        ref_counts = cell_counts["REFERENCE"]
-
-        n_upreg = np.sum((df["pvals"] <= significance_threshold) & (df["logfoldchanges"] > fold_change_threshold))
-        n_downreg = np.sum((df["pvals"] <= significance_threshold) & (df["logfoldchanges"] < -fold_change_threshold))
-
-        config_table = pd.DataFrame({
-            "": ["Annotation", "Cell type", "Region", "Cell number", "DEG number"],
-            "Target": [elem[1] if isinstance(elem, tuple) else elem for elem in [target_annotation_tuple, target_cell_type_tuple, target_region_tuple]] + [data_counts, n_upreg],
-            "Reference": [elem[1] if isinstance(elem, tuple) else elem for elem in [orig_ref_annotation_tuple, orig_ref_cell_type_tuple, ref_region_tuple]] + [ref_counts, n_downreg]
-        })
-
-        # remove empty rows
-        config_table = config_table.set_index("").dropna(how="all").reset_index()
-
-        volcano_plot(
-            data=df,
-            significance_threshold=significance_threshold,
-            fold_change_threshold=fold_change_threshold,
-            title=title,
-            savepath = savepath,
-            save_only = save_only,
-            dpi_save = dpi_save,
-            config_table = config_table,
-            adjust_labels=True,
-            **volcano_kwargs
-            )
-    if return_results:
-        return {
-            "results": df,
-            "params": adata_combined.uns["rank_genes_groups"]["params"]
-        }
