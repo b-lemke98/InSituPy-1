@@ -9,7 +9,7 @@ from matplotlib.colors import ListedColormap, rgb2hex
 from shapely.geometry.multipolygon import MultiPolygon
 
 import insitupy._core._callbacks
-import insitupy._core.config as config
+import insitupy._core._config as _config
 from insitupy import WITH_NAPARI
 from insitupy._core._layers import _create_points_layer, _update_points_layer
 
@@ -44,10 +44,10 @@ if WITH_NAPARI:
             # initialize data_name of viewer
             #config.init_data_name()
             # initialize viewer configuration
-            config.init_viewer_config(xdata=xdata,
+            _config.init_viewer_config(xdata=xdata,
                                         #data_name=config.current_data_name
                                         )
-            config.init_recent_selections()
+            _config.init_recent_selections()
 
             data_names = xdata.cells.get_all_keys()
 
@@ -56,36 +56,36 @@ if WITH_NAPARI:
                 data_name= {'choices': data_names, 'label': 'Dataset:'}
             )
             def select_data(
-                data_name=config.current_data_name
+                data_name=_config.current_data_name
             ):
                 pass
 
             # connect key change with update function
             @select_data.data_name.changed.connect
             def update_widgets_on_data_change(event=None):
-                config.current_data_name = select_data.data_name.value
+                _config.current_data_name = select_data.data_name.value
                 insitupy._core._callbacks._refresh_widgets_after_data_change(xdata,
                                                     show_cells_widget,
                                                     show_boundaries_widget,
                                                     filter_cells_widget
                                                     )
 
-            if len(config.masks) > 0:
+            if len(_config.masks) > 0:
                 @magicgui(
                     call_button='Show',
-                    key={'choices': config.masks, 'label': 'Masks:'}
+                    key={'choices': _config.masks, 'label': 'Masks:'}
                 )
                 def show_boundaries_widget(
                     key
                 ):
-                    layer_name = f"{config.current_data_name}-boundaries-{key}"
+                    layer_name = f"{_config.current_data_name}-boundaries-{key}"
 
                     if layer_name not in viewer.layers:
                         # get geopandas dataframe with regions
-                        mask = config.boundaries[key]
+                        mask = _config.boundaries[key]
 
                         # get metadata for mask
-                        metadata = config.boundaries.metadata
+                        metadata = _config.boundaries.metadata
                         pixel_size = metadata[key]["pixel_size"]
 
                         if not isinstance(mask, list):
@@ -105,12 +105,12 @@ if WITH_NAPARI:
 
             def _update_values_on_key_change(widget):
                 current_key = widget.key.value
-                widget.value.choices = config.value_dict[current_key]
+                widget.value.choices = _config.value_dict[current_key]
 
             @magicgui(
                 call_button='Show',
                 key={'choices': ["genes", "obs", "obsm"], 'label': 'Key:'},
-                value={'choices': config.genes, 'label': "Value:"},
+                value={'choices': _config.genes, 'label': "Value:"},
                 size={'label': 'Size [µm]'},
                 recent={'choices': [""], 'label': "Recent:"},
                 add_new_layer={'label': 'Add new layer'}
@@ -125,7 +125,7 @@ if WITH_NAPARI:
                 ) -> napari.types.LayerDataTuple:
 
                 # get names of cells
-                cell_names = config.adata.obs_names.values
+                cell_names = _config.adata.obs_names.values
 
                 #layers_to_add = []
                 if value is not None or recent is not None:
@@ -135,15 +135,15 @@ if WITH_NAPARI:
                     #if gene not in viewer.layers:
                     # get expression values
                     if key == "genes":
-                        gene_loc = config.adata.var_names.get_loc(value)
-                        color_value = config.X[:, gene_loc]
+                        gene_loc = _config.adata.var_names.get_loc(value)
+                        color_value = _config.X[:, gene_loc]
                     elif key == "obs":
-                        color_value = config.adata.obs[value]
+                        color_value = _config.adata.obs[value]
                     elif key == "obsm":
                         #TODO: Implement it for obsm
                         obsm_key = value.split("#", maxsplit=1)[0]
                         obsm_col = value.split("#", maxsplit=1)[1]
-                        data = config.adata.obsm[obsm_key]
+                        data = _config.adata.obsm[obsm_key]
 
                         if isinstance(data, pd.DataFrame):
                             color_value = data[obsm_col].values
@@ -155,23 +155,23 @@ if WITH_NAPARI:
                     else:
                         print("Unknown key selected.", flush=True)
 
-                    new_layer_name = f"{config.current_data_name}-{value}"
+                    new_layer_name = f"{_config.current_data_name}-{value}"
 
                     # get layer names from the current data
-                    layer_names_for_current_data = [elem.name for elem in viewer.layers if elem.name.startswith(config.current_data_name)]
+                    layer_names_for_current_data = [elem.name for elem in viewer.layers if elem.name.startswith(_config.current_data_name)]
 
                     # select only point layers
                     layer_names_for_current_data = [elem for elem in layer_names_for_current_data if isinstance(viewer.layers[elem], napari.layers.points.points.Points)]
 
                     # save last addition to add it to recent in the callback
-                    config.recent_selections.append(f"{key}:{value}")
+                    _config.recent_selections.append(f"{key}:{value}")
 
-                    if f"{value}_colors" in config.adata.uns.keys():
+                    if f"{value}_colors" in _config.adata.uns.keys():
                         # Convert hex colors to RGB format
                         def hex_to_rgb(hex_color):
                             hex_color = hex_color.lstrip('#')
                             return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
-                        rgb_colors = [hex_to_rgb(color) for color in config.adata.uns[f"{value}_colors"]]
+                        rgb_colors = [hex_to_rgb(color) for color in _config.adata.uns[f"{value}_colors"]]
 
                         # Transform to ListedColormap
                         colormap = ListedColormap(rgb_colors)
@@ -182,7 +182,7 @@ if WITH_NAPARI:
 
                         # create points layer for genes
                         gene_layer = _create_points_layer(
-                            points=config.points,
+                            points=_config.points,
                             color_values=color_value,
                             #name=f"{config.current_data_name}-{gene}",
                             name=new_layer_name,
@@ -207,7 +207,7 @@ if WITH_NAPARI:
                         else:
                             # create new points layer for genes
                             gene_layer = _create_points_layer(
-                                points=config.points,
+                                points=_config.points,
                                 color_values=color_value,
                                 #name=f"{config.current_data_name}-{gene}",
                                 name=new_layer_name,
@@ -220,7 +220,7 @@ if WITH_NAPARI:
 
             @magicgui(
                 call_button='Filter',
-                obs_key={'choices': config.value_dict["obs"], 'label': "Obs:"},
+                obs_key={'choices': _config.value_dict["obs"], 'label': "Obs:"},
                 operation_type={'choices': ["contains", "is equal to", "is not", "is in"], 'label': 'Operation:'},
                 obs_value={'label': 'Value:'},
                 reset={'label': 'Reset'}
@@ -239,14 +239,14 @@ if WITH_NAPARI:
                 if not reset:
                     # create filtering mask
                     if operation_type == "contains":
-                        mask = config.adata.obs[obs_key].str.contains(obs_value)
+                        mask = _config.adata.obs[obs_key].str.contains(obs_value)
                     elif operation_type == "is equal to":
-                        mask = config.adata.obs[obs_key].astype(str) == str(obs_value)
+                        mask = _config.adata.obs[obs_key].astype(str) == str(obs_value)
                     elif operation_type == "is not":
-                        mask = config.adata.obs[obs_key].astype(str) != str(obs_value)
+                        mask = _config.adata.obs[obs_key].astype(str) != str(obs_value)
                     elif operation_type == "is in":
                         obs_value_list = [elem.strip().strip("'").strip('"') for elem in obs_value.split(",")]
-                        mask = config.adata.obs[obs_key].isin(obs_value_list)
+                        mask = _config.adata.obs[obs_key].isin(obs_value_list)
                     else:
                         raise ValueError(f"Unknown operation type: {operation_type}.")
 
@@ -281,10 +281,10 @@ if WITH_NAPARI:
                 zoom=5,
                 highlight=True,
                 ) -> Optional[napari.types.LayerDataTuple]:
-                if cell in config.adata.obs_names.astype(str):
+                if cell in _config.adata.obs_names.astype(str):
                     # get location of selected cell
-                    cell_loc = config.adata.obs_names.get_loc(cell)
-                    cell_position = config.points[cell_loc]
+                    cell_loc = _config.adata.obs_names.get_loc(cell)
+                    cell_position = _config.points[cell_loc]
 
                     # move center of camera to cell position
                     viewer.camera.center = (0, cell_position[0], cell_position[1])

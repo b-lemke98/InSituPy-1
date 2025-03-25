@@ -19,7 +19,7 @@ from insitupy._constants import LOAD_FUNCS, MODALITIES, MODALITIES_ABBR
 from insitupy._core._checks import _all_obs_names_unique, is_integer_counts
 from insitupy._core._utils import _get_cell_layer
 from insitupy._core.insitudata import InSituData
-from insitupy._core.reader import read_xenium
+from insitupy.io.readers import read_xenium
 from insitupy._exceptions import ModalityNotFoundError
 from insitupy.io.files import check_overwrite_and_remove_if_true
 from insitupy.io.plots import save_and_show_figure

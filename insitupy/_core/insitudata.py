@@ -22,7 +22,7 @@ from pyarrow import ArrowInvalid
 from scipy.sparse import issparse
 from shapely import Point
 
-import insitupy._core.config as config
+import insitupy._core._config as _config
 from insitupy import WITH_NAPARI, __version__
 from insitupy._constants import ISPY_METADATA_FILE, LOAD_FUNCS, REGIONS_SYMBOL
 from insitupy._core._save import _save_images
@@ -1059,14 +1059,14 @@ class InSituData:
     def save_current_colorlegend(self, savepath):
 
         # Check if static_canvas exists
-        if not hasattr(config, 'static_canvas'):
+        if not hasattr(_config, 'static_canvas'):
             print("Warning: 'static_canvas' attribute not found in config. "
                 "Please display data in the napari viewer using '.show()' first.")
             return
 
         try:
             # Save the figure to a PDF file
-            config.static_canvas.figure.savefig(savepath)
+            _config.static_canvas.figure.savefig(savepath)
             print(f"Figure saved as {savepath}")
         except RuntimeError as e:
             if 'FigureCanvasQTAgg has been deleted' in str(e):
@@ -1421,10 +1421,10 @@ class InSituData:
         self._viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
 
         # add color legend widget
-        import insitupy._core.config as config
-        from insitupy._core.config import init_colorlegend_canvas
+        import insitupy._core._config as _config
+        from insitupy._core._config import init_colorlegend_canvas
         init_colorlegend_canvas()
-        self._viewer.window.add_dock_widget(config.static_canvas, area='left', name='Color legend')
+        self._viewer.window.add_dock_widget(_config.static_canvas, area='left', name='Color legend')
 
         # def update_colorlegend(event):
         #     # if event.type == "inserted":
