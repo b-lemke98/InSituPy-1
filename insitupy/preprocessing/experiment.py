@@ -19,7 +19,7 @@ from .._exceptions import ModalityNotFoundError
 
 
 def calculate_qc_metrics(
-    data: Optional[InSituExperiment, InSituData],
+    data: Optional[InSituExperiment, InSituData], # type: ignore
     cells_layer: Optional[str],
     percent_top: Number,
     log1p: bool,
@@ -39,7 +39,7 @@ def calculate_qc_metrics(
             )
 
 def filter_cells(
-    data: Optional[InSituExperiment, InSituData],
+    data: Optional[InSituExperiment, InSituData], # type: ignore
     cells_layer: Optional[str],
     min_counts: Optional[int] = None,
     min_genes: Optional[int] = None,
@@ -70,7 +70,7 @@ def filter_cells(
         celldata.sync()
 
 def normalize_and_transform(
-    data: Optional[InSituExperiment, InSituData],
+    data: Optional[InSituExperiment, InSituData], # type: ignore
     cells_layer: Optional[str],
     adata_layer: Optional[str] = None,
     transformation_method: Literal["log1p", "sqrt"] = "log1p",
@@ -119,7 +119,7 @@ def normalize_and_transform(
             raise ModalityNotFoundError(modality="cells")
 
 def reduce_dimensions(
-    data: Optional[InSituExperiment, InSituData],
+    data: Optional[InSituExperiment, InSituData], # type: ignore
     cells_layer: Optional[str],
     method: Literal["umap", "tsne"] = "umap",
     n_neighbors: int = 16,
@@ -161,7 +161,7 @@ def reduce_dimensions(
             raise ModalityNotFoundError(modality="cells")
 
 def clustering(
-    data: Optional[InSituExperiment, InSituData],
+    data: Optional[InSituExperiment, InSituData], # type: ignore
     cells_layer: Optional[str],
     method: Literal["leiden", "louvain"] = "leiden",
     verbose: bool = True
