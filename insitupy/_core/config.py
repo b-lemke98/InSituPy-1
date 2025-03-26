@@ -8,9 +8,9 @@ from scipy.sparse import issparse
 from insitupy import WITH_NAPARI
 
 if WITH_NAPARI:
-    # def init_data_name():
-    #     global current_data_name
-    #     current_data_name = "main"
+    def init_data_name(xdata):
+        global current_data_name
+        current_data_name = xdata.cells.main_key
 
     def init_recent_selections():
         global recent_selections
@@ -26,8 +26,8 @@ if WITH_NAPARI:
         xdata,
         pixel_size_param = None
         ):
-        global current_data_name
-        current_data_name = xdata.cells.main_key
+        #global current_data_name
+        #current_data_name = xdata.cells.main_key
 
         # access adata, viewer and metadata from InSituData
         global adata
