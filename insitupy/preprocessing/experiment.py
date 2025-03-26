@@ -2,7 +2,7 @@ from __future__ import \
     annotations  # this prevents circular imports of type hints such as InSituExperiment in this case
 
 from numbers import Number
-from typing import Literal, Optional
+from typing import Collection, Literal, Optional, Union
 
 import scanpy as sc
 from parse import *
@@ -19,10 +19,10 @@ from .._exceptions import ModalityNotFoundError
 
 
 def calculate_qc_metrics(
-    data: Optional[InSituExperiment, InSituData], # type: ignore
-    cells_layer: Optional[str],
-    percent_top: Number,
-    log1p: bool,
+    data: Union[InSituExperiment, InSituData], # type: ignore
+    cells_layer: Optional[str] = None,
+    percent_top: Collection[int] = None,
+    log1p: bool = False,
     **kwargs
 ):
     is_experiment = _is_experiment(data)
@@ -32,15 +32,15 @@ def calculate_qc_metrics(
     else:
         iterator = zip([None], [data])
 
-    for _, xd in iterator:
-        celldata = _get_cell_layer(cells=xd.cells, cells_layer=cells_layer)
+    for _, d in iterator:
+        celldata = _get_cell_layer(cells=d.cells, cells_layer=cells_layer)
         sc.pp.calculate_qc_metrics(
             celldata.matrix, percent_top=percent_top, log1p=log1p, inplace=True, **kwargs
             )
 
 def filter_cells(
-    data: Optional[InSituExperiment, InSituData], # type: ignore
-    cells_layer: Optional[str],
+    data: Union[InSituExperiment, InSituData], # type: ignore
+    cells_layer: Optional[str] = None,
     min_counts: Optional[int] = None,
     min_genes: Optional[int] = None,
     max_counts: Optional[int] = None,
@@ -69,9 +69,37 @@ def filter_cells(
         # sync cell names between boundaries and matrix
         celldata.sync()
 
+def filter_genes(
+    data: Union[InSituExperiment, InSituData], # type: ignore
+    cells_layer: Optional[str] = None,
+    min_counts: Optional[int] = None,
+    min_cells: Optional[int] = None,
+    max_counts: Optional[int] = None,
+    max_cells: Optional[int] = None,
+    **kwargs
+):
+    is_experiment = _is_experiment(data)
+
+    if is_experiment:
+        iterator = tqdm(data.iterdata())
+    else:
+        iterator = zip([None], [data])
+
+    for _, xd in iterator:
+        celldata = _get_cell_layer(cells=xd.cells, cells_layer=cells_layer)
+        sc.pp.filter_genes(
+            celldata.matrix,
+            min_counts=min_counts,
+            min_cells=min_cells,
+            max_counts=max_counts,
+            max_cells=max_cells,
+            inplace=True,
+            **kwargs
+            )
+
 def normalize_and_transform(
-    data: Optional[InSituExperiment, InSituData], # type: ignore
-    cells_layer: Optional[str],
+    data: Union[InSituExperiment, InSituData], # type: ignore
+    cells_layer: Optional[str] = None,
     adata_layer: Optional[str] = None,
     transformation_method: Literal["log1p", "sqrt"] = "log1p",
     target_sum: int = 250,
@@ -119,8 +147,8 @@ def normalize_and_transform(
             raise ModalityNotFoundError(modality="cells")
 
 def reduce_dimensions(
-    data: Optional[InSituExperiment, InSituData], # type: ignore
-    cells_layer: Optional[str],
+    data: Union[InSituExperiment, InSituData], # type: ignore
+    cells_layer: Optional[str] = None,
     method: Literal["umap", "tsne"] = "umap",
     n_neighbors: int = 16,
     n_pcs: int = 0,
@@ -129,7 +157,7 @@ def reduce_dimensions(
     Performs dimensionality reduction of the data using either UMAP or TSNE.
 
     Args:
-        data (Optional[InSituExperiment, InSituData]): The experiment or sample-level data object containing cell information.
+        data (Union[InSituExperiment, InSituData]): The experiment or sample-level data object containing cell information.
         method (Literal["umap", "tsne"], optional): The dimensionality reduction method to use. Defaults to "umap".
         cells_layer (Optional[str]): The specific layer of cells to use for reduction.
         n_neighbors (int, optional): The number of neighbors to use in the reduction method. Defaults to 16.
@@ -160,17 +188,16 @@ def reduce_dimensions(
         else:
             raise ModalityNotFoundError(modality="cells")
 
-def clustering(
-    data: Optional[InSituExperiment, InSituData], # type: ignore
-    cells_layer: Optional[str],
-    method: Literal["leiden", "louvain"] = "leiden",
-    verbose: bool = True
+def cluster_cells(
+    data: Union[InSituExperiment, InSituData], # type: ignore
+    cells_layer: Optional[str] = None,
+    method: Literal["leiden", "louvain"] = "leiden"
     ):
     """
     Performs clustering on the data using the specified method.
 
     Args:
-        data (Optional[InSituExperiment, InSituData]): The experiment or sample-level data object containing cell information.
+        data (Union[InSituExperiment, InSituData]): The experiment or sample-level data object containing cell information.
         cells_layer (Optional[str]): The specific layer of cells to use for clustering.
         method (Literal["leiden", "louvain"], optional): The clustering method to use. Defaults to "leiden".
         verbose (bool, optional): If True, enables verbose output. Defaults to True.

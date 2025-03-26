@@ -41,17 +41,16 @@ class ShapesData(DeepCopyMixin):
                  files: Optional[List[Union[str, os.PathLike, Path]]] = None,
                  keys: Optional[List[str]] = None,
                  pixel_size: Optional[float] = None,
-                 assert_uniqueness: Optional[bool] = None,
-                #  skip_multipolygons: Optional[bool] = None,
-                 polygons_only: Optional[bool] = None,
+                 assert_uniqueness: bool = False,
+                 polygons_only: bool = False,
                  forbidden_names: Optional[List[str]] = None,
                  shape_name: Optional[str] = None,
                  repr_color = tf.Cyan
                  ) -> None:
-        self._default_assert_uniqueness = False
-        self._default_polygons_only = False
+        # self._default_assert_uniqueness = False
+        # self._default_polygons_only = False
         self._repr_color = repr_color
-        self._default_forbidden_names = None
+        # self._default_forbidden_names = None
 
         self._shape_name = shape_name if shape_name is not None else "shapes"
 
@@ -61,23 +60,23 @@ class ShapesData(DeepCopyMixin):
         self._data =dict()
 
         # set configuration of ShapesData
-        if assert_uniqueness is None:
-            self._assert_uniqueness = self._default_assert_uniqueness
-        else:
-            self._assert_uniqueness = assert_uniqueness
+        # if assert_uniqueness is None:
+        #     self._assert_uniqueness = self._default_assert_uniqueness
+        # else:
+        self._assert_uniqueness = assert_uniqueness
 
         # if skip_multipolygons is None:
         #     self.skip_multipolygons = self.default_skip_multipolygons
 
-        if polygons_only is None:
-            self._polygons_only = self._default_polygons_only
-        else:
-            self._polygons_only = polygons_only
+        # if polygons_only is None:
+        #     self._polygons_only = self._default_polygons_only
+        # else:
+        self._polygons_only = polygons_only
 
-        if forbidden_names is None:
-            self._forbidden_names = self._default_forbidden_names
-        else:
-            self._forbidden_names = forbidden_names
+        # if forbidden_names is None:
+        #     self._forbidden_names = self._default_forbidden_names
+        # else:
+        self._forbidden_names = forbidden_names
 
         if files is not None:
             # make sure files and keys are a list

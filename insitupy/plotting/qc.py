@@ -1,3 +1,6 @@
+from __future__ import \
+    annotations  # this prevents circular imports of type hints such as InSituExperiment in this case
+
 from numbers import Number
 from typing import Optional
 
@@ -9,10 +12,12 @@ import seaborn as sns
 from anndata import AnnData
 
 from insitupy._core._checks import check_integer_counts
+from insitupy._core._utils import _get_cell_layer
 
 
 def plot_qc_metrics(
-    adata: AnnData
+    data: InSituData, # type: ignore #TODO: Expand this to InSituExperiment
+    cells_layer: Optional[str] = None,
     ):
     """
     Plots the QC metrics calculated by sc.pp.calculate_qc_metrics.
@@ -21,6 +26,10 @@ def plot_qc_metrics(
     adata : AnnData
         Annotated data matrix with QC metrics calculated.
     """
+    # retrieve AnnData from cell layer
+    celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
+    adata = celldata.matrix
+
     # QC metrics in .obs
     obs_metrics = ['total_counts', 'n_genes_by_counts', 'pct_counts_mt']
     # QC metrics in .var
@@ -68,7 +77,8 @@ def plot_qc_metrics(
 
 
 def test_transformations(
-    adata: AnnData,
+    data: InSituData, # type: ignore #TODO: Expand this to InSituExperiment
+    cells_layer: Optional[str] = None,
     target_sum: Number = 250,
     layer: Optional[str] = None,
     scale: bool = False
@@ -82,29 +92,29 @@ def test_transformations(
         target_sum (int, optional): Target sum for normalization. Defaults to 1e4.
         layer (str, optional): Layer to use for transformation. Defaults to None.
     """
-
-    # create a copy of the anndata
-    _adata = adata.copy()
+    # retrieve AnnData from cell layer
+    celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
+    adata = celldata.matrix.copy() # copy it to not affect it during the plotting
 
     # Check if the matrix consists of raw integer counts
     if layer is None:
-        check_integer_counts(_adata.X)
+        check_integer_counts(adata.X)
     else:
-        _adata.X = _adata.layers[layer].copy()
-        check_integer_counts(_adata.X)
+        adata.X = adata.layers[layer].copy()
+        check_integer_counts(adata.X)
 
     # get raw counts
-    raw_counts = _adata.X.copy()
+    raw_counts = adata.X.copy()
 
     # Preprocessing according to napari tutorial in squidpy
-    sc.pp.normalize_total(_adata, target_sum=target_sum)
+    sc.pp.normalize_total(adata, target_sum=target_sum)
 
     # Create a copy of the anndata object for log1p transformation
-    adata_log1p = _adata.copy()
+    adata_log1p = adata.copy()
     sc.pp.log1p(adata_log1p)
 
     # Create a copy of the anndata object for sqrt transformation
-    adata_sqrt = _adata.copy()
+    adata_sqrt = adata.copy()
     try:
         X = adata_sqrt.X.toarray()
     except AttributeError:
