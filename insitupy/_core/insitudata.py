@@ -325,7 +325,7 @@ class InSituData:
         # get the right cells layer
         celldata, cells_layer_name = _get_cell_layer(
             cells=self.cells, cells_layer=cells_layer,
-            verbose=True, retrun_layer_name=True
+            verbose=True, return_layer_name=True
             )
         name = f".cells['{cells_layer_name}']"
 

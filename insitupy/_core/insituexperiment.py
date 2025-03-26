@@ -19,10 +19,10 @@ from insitupy._constants import LOAD_FUNCS, MODALITIES, MODALITIES_ABBR
 from insitupy._core._checks import _all_obs_names_unique, is_integer_counts
 from insitupy._core._utils import _get_cell_layer
 from insitupy._core.insitudata import InSituData
-from insitupy.io.readers import read_xenium
 from insitupy._exceptions import ModalityNotFoundError
 from insitupy.io.files import check_overwrite_and_remove_if_true
 from insitupy.io.plots import save_and_show_figure
+from insitupy.io.readers import read_xenium
 from insitupy.tools.dge import differential_gene_expression
 from insitupy.utils.utils import (convert_to_list, get_nrows_maxcols,
                                   remove_empty_subplots)
@@ -148,8 +148,9 @@ class InSituExperiment:
         # get obs dataframes
         obs_list = []
         for _, d in self.iterdata():
-            celldata = _get_cell_layer(cells=d.cells, cells_layer=cells_layer)
-            obs_list.append(celldata.matrix.obs)
+            if d.cells is not None:
+                celldata = _get_cell_layer(cells=d.cells, cells_layer=cells_layer)
+                obs_list.append(celldata.matrix.obs)
 
         # concatenate the obs dataframes
         all_obs = pd.concat(obs_list, axis=0, ignore_index=False)
