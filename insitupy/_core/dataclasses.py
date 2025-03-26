@@ -192,12 +192,11 @@ class ShapesData(DeepCopyMixin):
                 self._metadata[key]["analyzed"] = tf.Tick if analyzed else ""  # whether this annotation has been used in the annotate() function
 
     def add_data(self,
-                    data: Union[gpd.GeoDataFrame, pd.DataFrame, dict,
+                 data: Union[gpd.GeoDataFrame, pd.DataFrame, dict,
                                 str, os.PathLike, Path],
-                    key: str,
-                    scale_factor: Number,
-                    default_name: str = "name",
-                    verbose: bool = False,
+                 key: str,
+                 scale_factor: Number,
+                 verbose: bool = False,
                    ):
         # parse geopandas data from dataframe or file
         new_df = parse_geopandas(data)
@@ -216,15 +215,6 @@ class ShapesData(DeepCopyMixin):
 
         # convert geometries into unit (e.g. µm) values
         new_df["geometry"] = new_df["geometry"].scale(xfact=scale_factor, yfact=scale_factor, origin=(0,0))
-
-        # if "scale" not in new_df.columns:
-        #     # add scale factor to data
-        #     if scale_factor is None:
-        #         warnings.warn("No `scale_factor` added to data.")
-        #     new_df["scale"] = [scale_factor] * len(new_df)
-        # else:
-        #     if verbose:
-        #         print("Scale inferred from file.", flush=True)
 
         # determine the type of layer that needs to be used in napari later
         layer_types = []
@@ -271,12 +261,12 @@ class ShapesData(DeepCopyMixin):
                     add = False
 
             if self._polygons_only:
-                # check if any of the shapes are shapely MultiPolygons
+                # check if any of the shapes are not shapely Polygons
                 is_not_polygon = [not isinstance(p, Polygon) for p in annot_df.geometry]
                 if np.any(is_not_polygon):
                     annot_df = annot_df.loc[is_not_polygon]
                     warnings.warn(
-                        f"Some {self._shape_name} were not pure Polygon objects and skipped.",
+                        f"Some {self._shape_name} were not shapely.Polygon objects and skipped.",
                         stacklevel=2
                         )
 
@@ -1010,13 +1000,13 @@ class MultiCellData(DeepCopyMixin):
     @property
     def main_key(self):
         return self._main_key
-    
+
     @main_key.setter
     def main_key(self, value: str):
         if value not in self._layers.keys():
             raise ValueError(f"Such layer does not exist.")
         self._main_key = value
-    
+
     def add_celldata(self,
                      cd: CellData,
                      key: str,
