@@ -78,7 +78,10 @@ class InSituData:
         """
         """
         # metadata
-        self._path = Path(path)
+        if path is not None:
+            self._path = Path(path)
+        else:
+            self._path = None
         self._metadata = metadata
         self._slide_id = slide_id
         self._sample_id = sample_id
@@ -511,6 +514,7 @@ class InSituData:
             region_df = self._regions[region_key]
 
             # extract geometry
+            print(region_name)
             shape = region_df[region_df["name"] == region_name]["geometry"].item()
             #use_shape = True
 

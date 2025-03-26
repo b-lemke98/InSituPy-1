@@ -45,12 +45,12 @@ class ShapesData(DeepCopyMixin):
                 #  skip_multipolygons: Optional[bool] = None,
                  polygons_only: Optional[bool] = None,
                  forbidden_names: Optional[List[str]] = None,
-                 shape_name: Optional[str] = None
+                 shape_name: Optional[str] = None,
+                 repr_color = tf.Cyan
                  ) -> None:
-
         self._default_assert_uniqueness = False
         self._default_polygons_only = False
-        self._repr_color = tf.Cyan
+        self._repr_color = repr_color
         self._default_forbidden_names = None
 
         self._shape_name = shape_name if shape_name is not None else "shapes"
@@ -155,6 +155,7 @@ class ShapesData(DeepCopyMixin):
                 (
                     f"The names of the {self._shape_name} for key '{key}' were not unique and thus "
                     f"the key was skipped. In regions only one geometry per class is allowed."
+                    f"To achieve this in the napari viewer select one layer per region and give each layer a unique name."
                     )
                 )
             return False
@@ -395,14 +396,24 @@ class AnnotationsData(ShapesData):
                  keys: Optional[List[str]] = None,
                  pixel_size: Optional[float] = None
                  ) -> None:
-        self._default_assert_uniqueness = False
-        # self.default_skip_multipolygons = False
-        self._default_polygons_only = False
-        self._shape_name = "annotations"
-        self._repr_color = tf.Cyan
-        self._default_forbidden_names = FORBIDDEN_ANNOTATION_NAMES
+        # self._default_assert_uniqueness = False
+        # # self.default_skip_multipolygons = False
+        # self._default_polygons_only = False
+        # self._shape_name = "annotations"
+        # self._repr_color = tf.Cyan
+        # self._default_forbidden_names = FORBIDDEN_ANNOTATION_NAMES
 
-        ShapesData.__init__(self, files, keys, pixel_size, shape_name=self._shape_name)
+        ShapesData.__init__(
+            self,
+            files=files,
+            keys=keys,
+            pixel_size=pixel_size,
+            assert_uniqueness=False,
+            polygons_only=False,
+            forbidden_names=FORBIDDEN_ANNOTATION_NAMES,
+            shape_name="annotations",
+            repr_color=tf.Cyan
+            )
 
 class RegionsData(ShapesData):
     def __init__(self,
@@ -410,13 +421,23 @@ class RegionsData(ShapesData):
                  keys: Optional[List[str]] = None,
                  pixel_size: Optional[float] = None
                  ) -> None:
-        self._default_assert_uniqueness = True
+        #self._default_assert_uniqueness = True
         # self.default_skip_multipolygons = True # MultiPolygons are not allowed in regions
-        self._default_polygons_only = True
-        self._shape_name = "regions"
-        self._repr_color = tf.Yellow
+        #self._default_polygons_only = True
+        #self._shape_name = "regions"
+        # self._repr_color = tf.Yellow
 
-        ShapesData.__init__(self, files, keys, pixel_size, shape_name=self._shape_name)
+        ShapesData.__init__(
+            self,
+            files=files,
+            keys=keys,
+            pixel_size=pixel_size,
+            assert_uniqueness=True,
+            polygons_only=True,
+            forbidden_names=None,
+            shape_name="regions",
+            repr_color=tf.Yellow
+            )
 
 class BoundariesData(DeepCopyMixin):
     '''
