@@ -18,7 +18,7 @@ This set of tutorials focuses on the analysis of multiple samples using the `InS
 ```
 
 ```{toctree}
-:hidden: false
+:hidden: true
 :maxdepth: 1
 :glob:
 
