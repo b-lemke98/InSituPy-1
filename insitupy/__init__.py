@@ -15,14 +15,16 @@ from . import images as im
 from . import io
 from . import plotting as pl
 from . import preprocessing as pp
+from . import tools as tl
 from . import utils
 from ._core.dataclasses import AnnotationsData, BoundariesData, ImageData
-from ._core.insitudata import (InSituData, calc_distance_of_cells_from,
-                               differential_gene_expression)
+from ._core.insitudata import InSituData
 from ._core.insituexperiment import InSituExperiment
-from ._core.reader import read_xenium
-from ._core.registration import register_images
+from .images.registration import register_images
+from .io.readers import read_xenium
 from .palettes import CustomPalettes
+from .tools.dge import differential_gene_expression
+from .tools.distance import calc_distance_of_cells_from
 
 __all__ = [
     "InSituData",

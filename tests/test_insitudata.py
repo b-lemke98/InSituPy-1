@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from insitupy.datasets.datasets import xenium_test_dataset
 
 BAYSOR_PATH = Path("tests/data/baysor_output-slide__region__20241212__134825__j1_b1_s1")

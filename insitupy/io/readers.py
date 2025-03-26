@@ -20,8 +20,8 @@ from insitupy._exceptions import InvalidXeniumDirectory
 from insitupy.io.files import read_json
 from insitupy.utils.utils import convert_to_list
 
-from .dataclasses import (AnnotationsData, CellData, ImageData, MultiCellData,
-                          RegionsData)
+from .._core.dataclasses import (AnnotationsData, CellData, ImageData,
+                                 MultiCellData, RegionsData)
 
 
 def read_xenium(

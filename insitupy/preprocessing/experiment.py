@@ -19,7 +19,7 @@ from .._exceptions import ModalityNotFoundError
 
 
 def calculate_qc_metrics(
-    data: Optional[InSituExperiment, InSituData],
+    data: Optional[InSituExperiment, InSituData], # type: ignore
     cells_layer: Optional[str],
     percent_top: Number,
     log1p: bool,
@@ -33,13 +33,13 @@ def calculate_qc_metrics(
         iterator = zip([None], [data])
 
     for _, xd in iterator:
-        cells = _get_cell_layer(cells=xd.cells, cells_layer=cells_layer)
+        celldata = _get_cell_layer(cells=xd.cells, cells_layer=cells_layer)
         sc.pp.calculate_qc_metrics(
-            cells.matrix, percent_top=percent_top, log1p=log1p, inplace=True, **kwargs
+            celldata.matrix, percent_top=percent_top, log1p=log1p, inplace=True, **kwargs
             )
 
 def filter_cells(
-    data: Optional[InSituExperiment, InSituData],
+    data: Optional[InSituExperiment, InSituData], # type: ignore
     cells_layer: Optional[str],
     min_counts: Optional[int] = None,
     min_genes: Optional[int] = None,
@@ -70,8 +70,9 @@ def filter_cells(
         celldata.sync()
 
 def normalize_and_transform(
-    data: Optional[InSituExperiment, InSituData],
+    data: Optional[InSituExperiment, InSituData], # type: ignore
     cells_layer: Optional[str],
+    adata_layer: Optional[str] = None,
     transformation_method: Literal["log1p", "sqrt"] = "log1p",
     target_sum: int = 250,
     scale: bool = False,
@@ -107,6 +108,7 @@ def normalize_and_transform(
             celldata = _get_cell_layer(cells=xd.cells, cells_layer=cells_layer)
             normalize_and_transform_anndata(
                 adata=celldata.matrix,
+                layer=adata_layer,
                 transformation_method=transformation_method,
                 target_sum=target_sum,
                 scale=scale,
@@ -117,7 +119,7 @@ def normalize_and_transform(
             raise ModalityNotFoundError(modality="cells")
 
 def reduce_dimensions(
-    data: Optional[InSituExperiment, InSituData],
+    data: Optional[InSituExperiment, InSituData], # type: ignore
     cells_layer: Optional[str],
     method: Literal["umap", "tsne"] = "umap",
     n_neighbors: int = 16,
@@ -159,7 +161,7 @@ def reduce_dimensions(
             raise ModalityNotFoundError(modality="cells")
 
 def clustering(
-    data: Optional[InSituExperiment, InSituData],
+    data: Optional[InSituExperiment, InSituData], # type: ignore
     cells_layer: Optional[str],
     method: Literal["leiden", "louvain"] = "leiden",
     verbose: bool = True

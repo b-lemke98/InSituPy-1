@@ -140,7 +140,7 @@ def _read_binned_expression(
     gene_names_to_select = List
 ):
     path = Path(path)
-    # add binned expression data to .varm of self.cells.matrix
+    # add binned expression data to .varm
     trans_file = path / "transcripts.zarr.zip"
 
     # read zarr store

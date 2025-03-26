@@ -9,7 +9,7 @@ import pandas as pd
 from matplotlib.lines import Line2D
 from napari.viewer import Viewer
 
-import insitupy._core.config as config
+import insitupy._core._config as _config
 from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
 from insitupy._core._checks import _check_assignment
 from insitupy.io.plots import save_and_show_figure
@@ -27,7 +27,7 @@ def plot_colorlegend(
     warnings.warn("The function might have issues with colors. Please check the result.", UserWarning)
     # automatically get layer
     if layer_name is None:
-        candidate_layers = [l for l in viewer.layers if l.name.startswith(f"{config.current_data_name}")]
+        candidate_layers = [l for l in viewer.layers if l.name.startswith(f"{_config.current_data_name}")]
         try:
             layer_name = candidate_layers[0].name
         except IndexError:

@@ -28,3 +28,6 @@ def normalize_and_transform(self, *args, **kwargs):
 
 def reduce_dimensions(self, *args, **kwargs):
     warn("`reduce_dimensions()` is deprecated. Instead, use `insitupy.preprocessing.reduce_dimensions()` for dimensionality reduction and `insitupy.preprocessing.clustering()` for clustering.", DeprecationWarning, stacklevel=2)
+
+def plot_overview(self, *args, **kwargs):
+    warn("`plot_overview()` is deprecated. Use `insitupy.plotting.plot_overview()` instead.", DeprecationWarning, stacklevel=2)
