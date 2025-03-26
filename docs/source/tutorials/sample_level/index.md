@@ -39,8 +39,6 @@ These tutorials focus on the preprocessing, analysis and handling of individual 
 
     Tutorial on how to generate an `InSituData` object from scratch.
 
-```
-
 .. card:: Perform segmentation with Proseg and add the results to `InSituData`
     :link: 11_InSituPy_add_proseg_data
     :link-type: doc
