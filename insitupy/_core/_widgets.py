@@ -42,7 +42,8 @@ if WITH_NAPARI:
             filter_cells_widget = None
         else:
             # initialize data_name of viewer
-            config.init_data_name(xdata=xdata)
+            _config.init_data_name(xdata=xdata)
+
             # initialize viewer configuration
             _config.init_viewer_config(xdata=xdata,
                                         #data_name=config.current_data_name
