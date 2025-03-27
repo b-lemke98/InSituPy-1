@@ -1,3 +1,6 @@
+from __future__ import \
+    annotations  # this prevents circular imports of type hints such as InSituExperiment in this case
+
 import os
 import warnings
 from pathlib import Path
@@ -96,7 +99,7 @@ def _calculate_metrics(adata: AnnData, layer: str = None, force_layer: bool = Fa
         return df_cells["n_genes_by_counts"].median(), df_cells["total_counts"].median()
 
 def plot_overview(
-    self,
+    data: InSituExperiment,
     cells_layer: Optional[str] = None,
     colums_to_plot: List[str] = [],
     layer: str = None,
@@ -131,7 +134,7 @@ def plot_overview(
         raise ImportError("This function requires the 'plottable' framework. Please install it with 'pip install plottable'.")
 
     # Copy the metadata, select the columns to plot, and add index if nessiccary
-    df = self.metadata.copy()[colums_to_plot]
+    df = data.metadata.copy()[colums_to_plot]
     colname_tmp = "ind_tmp"
     if not index and df.shape[1] > 0:
         # Set the first column as the index if index is False
@@ -157,7 +160,7 @@ def plot_overview(
     # Calculate predefined QC metrics
     list_gene_count = []
     list_transcript_count = []
-    for _, data in self.iterdata():
+    for _, data in data.iterdata():
         if data.cells is None:
             warnings.warn("Cells were not loaded. Loading cells.")
             data.load_cells()
