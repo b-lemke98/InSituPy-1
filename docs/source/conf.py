@@ -44,6 +44,23 @@ extensions = [
     "myst_nb"
 ]
 
+myst_enable_extensions = [
+    "amsmath",
+    "attrs_inline",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "fieldlist",
+    "html_admonition",
+    "html_image",
+    "linkify",
+    "replacements",
+    "smartquotes",
+    "strikethrough",
+    "substitution",
+    "tasklist",
+]
+
 autosummary_generate = True
 autodoc_process_signature = True
 autodoc_member_order = "groupwise"
