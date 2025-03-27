@@ -10,14 +10,76 @@ import pandas as pd
 import scanpy as sc
 import seaborn as sns
 from anndata import AnnData
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from insitupy._core._checks import check_integer_counts
 from insitupy._core._utils import _get_cell_layer
 
+# def plot_qc_metrics(
+#     data: InSituData, # type: ignore #TODO: Expand this to InSituExperiment
+#     cells_layer: Optional[str] = None,
+#     ):
+#     """
+#     Plots the QC metrics calculated by sc.pp.calculate_qc_metrics.
+
+#     Parameters:
+#     adata : AnnData
+#         Annotated data matrix with QC metrics calculated.
+#     """
+#     # retrieve AnnData from cell layer
+#     celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
+#     adata = celldata.matrix
+
+#     # QC metrics in .obs
+#     obs_metrics = ['total_counts', 'n_genes_by_counts', 'pct_counts_mt']
+#     # QC metrics in .var
+#     var_metrics = ['n_cells_by_counts', 'mean_counts', 'pct_dropout_by_counts', 'total_counts']
+
+#     # Check if all metrics exist in .obs
+#     obs_metrics = [metric for metric in obs_metrics if metric in adata.obs]
+#     if len(obs_metrics) == 0:
+#         print("Warning: No .obs metrics found in adata.obs")
+
+#     # Check if all metrics exist in .var
+#     var_metrics = [metric for metric in var_metrics if metric in adata.var]
+#     if len(var_metrics) == 0:
+#         print("Warning: No .var metrics found in adata.var")
+
+#     ncols = len(obs_metrics+var_metrics)
+#     nrows = 1
+#     fig, axes = plt.subplots(nrows, ncols, figsize=(5*ncols, 5*nrows))
+
+#     # Add titles to each row
+#     if len(obs_metrics) > 0:
+#         axes[0].annotate('.obs Metrics', xy=(0, 0.5), xytext=(-axes[0].yaxis.labelpad - 5, 0),
+#                             xycoords=axes[0].yaxis.label, textcoords='offset points',
+#                             size='large', ha='right', va='center', rotation=90, weight='bold')
+
+#     if len(var_metrics) > 0:
+#         axes[2].annotate('.var Metrics', xy=(0, 0.5), xytext=(-axes[2].yaxis.labelpad - 5, 0),
+#                             xycoords=axes[2].yaxis.label, textcoords='offset points',
+#                             size='large', ha='right', va='center', rotation=90, weight='bold')
+
+#     for i, metric in enumerate(obs_metrics):
+#         sns.histplot(adata.obs[metric], bins=50, color='skyblue', edgecolor='black', kde=False, ax=axes[i])
+#         axes[i].set_title(metric)
+#         axes[i].set_xlabel('Value')
+#         axes[i].set_ylabel('Frequency')
+
+#     for i, metric in enumerate(var_metrics):
+#         sns.histplot(adata.var[metric], bins=50, color='coral', edgecolor='black', kde=False, ax=axes[2+i])
+#         axes[2+i].set_title(metric)
+#         axes[2+i].set_xlabel('Value')
+#         axes[2+i].set_ylabel('Frequency')
+
+#     plt.tight_layout(rect=[0, 0, 1, 1])
+#     plt.show()
 
 def plot_qc_metrics(
     data: InSituData, # type: ignore #TODO: Expand this to InSituExperiment
     cells_layer: Optional[str] = None,
+    show_inset: bool = True,
+    inset_fraction: Number = 0.2
     ):
     """
     Plots the QC metrics calculated by sc.pp.calculate_qc_metrics.
@@ -45,7 +107,7 @@ def plot_qc_metrics(
     if len(var_metrics) == 0:
         print("Warning: No .var metrics found in adata.var")
 
-    ncols = len(obs_metrics+var_metrics)
+    ncols = len(obs_metrics + var_metrics) + 1  # Adding one more column for the scatter plot
     nrows = 1
     fig, axes = plt.subplots(nrows, ncols, figsize=(5*ncols, 5*nrows))
 
@@ -56,8 +118,8 @@ def plot_qc_metrics(
                             size='large', ha='right', va='center', rotation=90, weight='bold')
 
     if len(var_metrics) > 0:
-        axes[2].annotate('.var Metrics', xy=(0, 0.5), xytext=(-axes[2].yaxis.labelpad - 5, 0),
-                            xycoords=axes[2].yaxis.label, textcoords='offset points',
+        axes[3].annotate('.var Metrics', xy=(0, 0.5), xytext=(-axes[3].yaxis.labelpad - 5, 0),
+                            xycoords=axes[3].yaxis.label, textcoords='offset points',
                             size='large', ha='right', va='center', rotation=90, weight='bold')
 
     for i, metric in enumerate(obs_metrics):
@@ -66,22 +128,39 @@ def plot_qc_metrics(
         axes[i].set_xlabel('Value')
         axes[i].set_ylabel('Frequency')
 
+        if show_inset:
+            # Inset histogram
+            ax_inset = inset_axes(axes[i], width="50%", height="50%", loc='upper right')
+            sns.histplot(adata.obs[metric], bins=100, color='skyblue', edgecolor='black', kde=False, ax=ax_inset)
+            ax_inset.set_xlim(adata.obs[metric].min(), adata.obs[metric].max() * inset_fraction)  # Adjust the x-limits as needed
+            ax_inset.set_xlabel('')
+            ax_inset.set_ylabel('')
+            ax_inset.set_yticklabels([])
+
     for i, metric in enumerate(var_metrics):
-        sns.histplot(adata.var[metric], bins=50, color='coral', edgecolor='black', kde=False, ax=axes[2+i])
-        axes[2+i].set_title(metric)
-        axes[2+i].set_xlabel('Value')
-        axes[2+i].set_ylabel('Frequency')
+        sns.histplot(adata.var[metric], bins=50, color='coral', edgecolor='black', kde=False, ax=axes[3+i])
+        axes[3+i].set_title(metric)
+        axes[3+i].set_xlabel('Value')
+        axes[3+i].set_ylabel('Frequency')
 
-    plt.tight_layout(rect=[0, 0, 1, 1])
+    # Add scatter plot for n_genes_by_counts vs total_counts
+    if 'n_genes_by_counts' in obs_metrics and 'total_counts' in obs_metrics:
+        scatter_ax = axes[len(obs_metrics)]
+        scatter_ax.scatter(adata.obs['n_genes_by_counts'], adata.obs['total_counts'], alpha=0.5, color='skyblue', s=8, edgecolor='black', linewidth=0.2)
+        scatter_ax.set_title('n_genes_by_counts vs total_counts')
+        scatter_ax.set_xlabel('n_genes_by_counts')
+        scatter_ax.set_ylabel('total_counts')
+
+    plt.tight_layout()
     plt.show()
-
 
 def test_transformations(
     data: InSituData, # type: ignore #TODO: Expand this to InSituExperiment
     cells_layer: Optional[str] = None,
     target_sum: Number = 250,
     layer: Optional[str] = None,
-    scale: bool = False
+    scale: bool = False,
+    assert_integer_counts: bool = True
         ):
     """
     Test normalization and transformation methods by plotting histograms of raw,
@@ -98,10 +177,12 @@ def test_transformations(
 
     # Check if the matrix consists of raw integer counts
     if layer is None:
-        check_integer_counts(adata.X)
+        if assert_integer_counts:
+            check_integer_counts(adata.X)
     else:
         adata.X = adata.layers[layer].copy()
-        check_integer_counts(adata.X)
+        if assert_integer_counts:
+            check_integer_counts(adata.X)
 
     # get raw counts
     raw_counts = adata.X.copy()
