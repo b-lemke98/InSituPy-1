@@ -74,7 +74,7 @@ def plot_qc_metrics(
 
         if show_inset:
             # Inset histogram
-            ax_inset = inset_axes(axes[i], width="50%", height="50%", loc='upper right')
+            ax_inset = inset_axes(axes[i], width="40%", height="40%", loc='upper right')
             sns.histplot(adata.obs[metric], bins=100, color='skyblue', edgecolor='black', kde=False, ax=ax_inset)
             ax_inset.set_xlim(adata.obs[metric].min(), adata.obs[metric].max() * inset_fraction)  # Adjust the x-limits as needed
             ax_inset.set_xlabel('')
