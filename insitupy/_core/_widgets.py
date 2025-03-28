@@ -149,7 +149,7 @@ if WITH_NAPARI:
                         if isinstance(data, pd.DataFrame):
                             color_value = data[obsm_col].values
                         elif isinstance(data, np.ndarray):
-                            color_value = data[:, int(obsm_col)-1].values
+                            color_value = data[:, int(obsm_col)-1]
                         else:
                             warn("Data in `obsm` needs to be either pandas DataFrame or numpy array to be parsed.")
                         pass
@@ -300,8 +300,8 @@ if WITH_NAPARI:
                                 size=6,
                                 face_color=[0,0,0,0],
                                 opacity=1,
-                                edge_color='red',
-                                edge_width=0.1
+                                border_color='red',
+                                border_width=0.1
                             )
                 else:
                     print(f"Cell '{cell}' not found.")

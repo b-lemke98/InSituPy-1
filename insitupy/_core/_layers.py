@@ -229,8 +229,8 @@ if WITH_NAPARI:
                             point_size: int = 6, # is in scale unit (so mostly µm)
                             opacity: float = 1,
                             visible: bool = True,
-                            edge_width: float = 0,
-                            edge_color: str = 'red',
+                            border_width: float = 0,
+                            border_color: str = 'red',
                             upper_climit_pct: int = 99,
                             categorical_cmap: matplotlib.colors.ListedColormap = DEFAULT_CATEGORICAL_CMAP,
                             continuous_cmap = DEFAULT_CONTINUOUS_CMAP,
@@ -257,8 +257,8 @@ if WITH_NAPARI:
                 'face_color': colors,
                 'opacity': opacity,
                 'visible': visible,
-                'edge_width': edge_width,
-                'edge_color': edge_color,
+                'border_width': border_width,
+                'border_color': border_color,
                 'metadata': {"upper_climit_pct": upper_climit_pct}
                 },
             'points'
@@ -277,7 +277,7 @@ if WITH_NAPARI:
         # get the RGBA colors for the new values
         if categorical_cmap is None:
             categorical_cmap = DEFAULT_CATEGORICAL_CMAP
-        new_colors, mapping, cmap = _data_to_rgba(data=new_color_values, 
+        new_colors, mapping, cmap = _data_to_rgba(data=new_color_values,
                                                 continuous_cmap=continuous_cmap,
                                                 categorical_cmap=categorical_cmap,
                                                 upper_climit_pct=upper_climit_pct)

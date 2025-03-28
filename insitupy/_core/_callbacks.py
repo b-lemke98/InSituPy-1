@@ -9,6 +9,7 @@ from pandas.api.types import is_numeric_dtype
 import insitupy._core._config as _config
 from insitupy import WITH_NAPARI
 from insitupy._constants import POINTS_SYMBOL
+from insitupy.plotting._colors import continuous_data_to_rgba
 
 if WITH_NAPARI:
     import napari
@@ -94,35 +95,37 @@ def _update_colorlegend():
     layer = _config.viewer.layers.selection.active
 
     if isinstance(layer, napari.layers.points.points.Points):
-        # get values
-        values = layer.properties["value"]
-        color_values = layer.face_color
-
-
-        from insitupy.plotting._colors import continuous_data_to_rgba
-        if is_numeric_dtype(values):
-            rgba_list, mapping = continuous_data_to_rgba(data=values,
-                                    cmap=layer.face_colormap.name,
-                                    #upper_climit_pct=upper_climit_pct,
-                                    return_mapping=True
-                                    )
-
-            _update_continuous_legend(static_canvas=_config.static_canvas,
-                                    mapping=mapping,
-                                    label=layer.name)
-
+        try:
+            # get values
+            values = layer.properties["value"]
+            color_values = layer.face_color
+        except KeyError:
+            pass
         else:
-            # substitute pd.NA with np.nan
-            values = pd.Series(values).fillna(np.nan).values
-            # assume the data is categorical
-            #mapping = {category: tuple(rgba) for category, rgba in zip(values, color_values)}
-            unique_values = list(set(values))
-            mapping = {str(v): tuple(color_values[list(values).index(v)]) for v in unique_values}
-            # sort mapping dict
-            mapping = {elem: mapping[elem] for elem in sorted(mapping.keys())}
 
-            _update_categorical_legend(static_canvas=_config.static_canvas,
-                                    mapping=mapping, label=layer.name)
+            if is_numeric_dtype(values):
+                rgba_list, mapping = continuous_data_to_rgba(data=values,
+                                        cmap=layer.face_colormap.name,
+                                        #upper_climit_pct=upper_climit_pct,
+                                        return_mapping=True
+                                        )
+
+                _update_continuous_legend(static_canvas=_config.static_canvas,
+                                        mapping=mapping,
+                                        label=layer.name)
+
+            else:
+                # substitute pd.NA with np.nan
+                values = pd.Series(values).fillna(np.nan).values
+                # assume the data is categorical
+                #mapping = {category: tuple(rgba) for category, rgba in zip(values, color_values)}
+                unique_values = list(set(values))
+                mapping = {str(v): tuple(color_values[list(values).index(v)]) for v in unique_values}
+                # sort mapping dict
+                mapping = {elem: mapping[elem] for elem in sorted(mapping.keys())}
+
+                _update_categorical_legend(static_canvas=_config.static_canvas,
+                                        mapping=mapping, label=layer.name)
 
         # # create color mapping
         # rgba_list, mapping = _data_to_rgba(values, return_mapping=True)

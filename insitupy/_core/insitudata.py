@@ -1396,18 +1396,17 @@ class InSituData:
         # Assign function to an layer addition event
         def _update_uid(event):
             if event is not None:
-
                 layer = event.source
-                if event.action == "add":
+                if event.action == "added":
                     if 'uid' in layer.properties:
                         layer.properties['uid'][-1] = str(uuid4())
                     else:
                         layer.properties['uid'] = np.array([str(uuid4())], dtype='object')
 
-                elif event.action == "remove":
-                    pass
-                else:
-                    raise ValueError("Unexpected value '{event.action}' for `event.action`. Expected 'add' or 'remove'.")
+                # elif event.action == "removed":
+                #     pass
+                # else:
+                #     raise ValueError(f"Unexpected value '{event.action}' for `event.action`. Expected 'add' or 'remove'.")
 
         # Assign the function to data of all existing layers
         for layer in self._viewer.layers:
