@@ -4,6 +4,8 @@ from __future__ import \
 from numbers import Number
 from typing import Collection, Literal, Optional, Union
 
+import numpy as np
+import pandas as pd
 import scanpy as sc
 from parse import *
 from tqdm import tqdm
@@ -45,8 +47,35 @@ def filter_cells(
     min_genes: Optional[int] = None,
     max_counts: Optional[int] = None,
     max_genes: Optional[int] = None,
+    mask: Optional[Union[np.ndarray, list, pd.Series]] = None,
     **kwargs
 ):
+    """
+    Filters cells in the given data based on specified criteria.
+
+    Args:
+        data (Union[InSituExperiment, InSituData]): The data containing cells to be filtered.
+        cells_layer (Optional[str]): The layer of cells to be used for filtering.
+        min_counts (Optional[int]): Minimum number of counts for filtering cells.
+        min_genes (Optional[int]): Minimum number of genes for filtering cells.
+        max_counts (Optional[int]): Maximum number of counts for filtering cells.
+        max_genes (Optional[int]): Maximum number of genes for filtering cells.
+        mask (Optional[np.ndarray]): Boolean array for filtering cells.
+        **kwargs: Additional arguments passed to the filtering function.
+
+    Raises:
+        ValueError: If more than one filtering argument is provided or if the mask is not a boolean array.
+
+    """
+    # Ensure only one of the filtering arguments is not None
+    filter_args = [min_counts, min_genes, max_counts, max_genes, mask]
+    if sum(arg is not None for arg in filter_args) > 1:
+        raise ValueError("Only one of min_counts, min_genes, max_counts, max_genes, or mask can be provided.")
+
+    # Check if mask is a boolean array
+    if mask is not None and not np.issubdtype(mask.dtype, np.bool_):
+        raise ValueError("Mask must be a boolean array.")
+
     is_experiment = _is_experiment(data)
 
     if is_experiment:
@@ -56,14 +85,18 @@ def filter_cells(
 
     for _, xd in iterator:
         celldata = _get_cell_layer(cells=xd.cells, cells_layer=cells_layer)
-        sc.pp.filter_cells(
-            celldata.matrix,
-            min_counts=min_counts,
-            min_genes=min_genes,
-            max_counts=max_counts,
-            max_genes=max_genes,
-            inplace=True,
-            **kwargs
+
+        if mask is not None:
+            celldata.matrix = celldata.matrix[mask]
+        else:
+            sc.pp.filter_cells(
+                celldata.matrix,
+                min_counts=min_counts,
+                min_genes=min_genes,
+                max_counts=max_counts,
+                max_genes=max_genes,
+                inplace=True,
+                **kwargs
             )
 
         # sync cell names between boundaries and matrix

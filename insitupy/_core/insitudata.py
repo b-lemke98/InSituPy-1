@@ -717,6 +717,9 @@ class InSituData:
         files = convert_to_list(files)
         keys = convert_to_list(keys)
 
+        if len(files) != len(keys):
+            raise ValueError("Length of files and keys must be the same.")
+
         if self._annotations is None:
             self._annotations = AnnotationsData()
 
@@ -752,7 +755,10 @@ class InSituData:
         # add regions object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        #pixel_size = self.metadata["method_params"]['pixel_size']
+
+        if len(files) != len(keys):
+            raise ValueError("Length of files and keys must be the same.")
+
 
         if self._regions is None:
             self._regions = RegionsData()
@@ -1501,8 +1507,12 @@ class InSituData:
 
                     # extract shapes coordinates and colors
                     layer_data = layer.data
-                    colors = layer.edge_color.tolist()
                     scale = layer.scale
+
+                    if isinstance(layer, Points):
+                        colors = layer.border_color.tolist()
+                    else:
+                        colors = layer.edge_color.tolist()
 
                     checks_passed = True
                     is_region_layer = False
