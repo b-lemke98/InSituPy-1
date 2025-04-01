@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from numbers import Number
 from pathlib import Path
 from typing import List, Union
@@ -20,9 +21,11 @@ def find_xenium_outputs(
     print(f"Searching for directories starting with '{startswith}' in {str(path)}")
     search_results = []
     for root, dirs, files in os.walk(path):
+        root = Path(root)
         for d in dirs:
             if d.startswith(startswith):
-                search_results.append(os.path.join(root, d))
+                p = root / d
+                search_results.append(p)
 
     print(f"Found {len(search_results)} Xenium output directories.")
     return search_results
@@ -31,14 +34,16 @@ def collect_qc_data(
     data_folders: List[Union[str, os.PathLike, Path]]
     ) -> pd.DataFrame:
 
-    cats = ["run_name", "slide_id", "region_name", "preservation_method",
+    cats = ["date", "run_name", "slide_id", "region_name", "preservation_method",
             "num_cells", "transcripts_per_cell",
             "transcripts_per_100um", "panel_organism", "panel_tissue_type"]
 
     results = []
     for f in data_folders:
+        date_string = Path(f).stem.split("__")[-2]
+        date_object = datetime.strptime(date_string, "%Y%m%d")
         metadata = read_json(Path(f) / "experiment.xenium")
-        extracted = [metadata[c] for c in cats]
+        extracted = [date_object] + [metadata[c] for c in cats[1:]]
         results.append(extracted)
 
     data = pd.DataFrame(results, columns=cats)

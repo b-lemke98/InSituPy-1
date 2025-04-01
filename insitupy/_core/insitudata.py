@@ -717,6 +717,9 @@ class InSituData:
         files = convert_to_list(files)
         keys = convert_to_list(keys)
 
+        if len(files) != len(keys):
+            raise ValueError("Length of files and keys must be the same.")
+
         if self._annotations is None:
             self._annotations = AnnotationsData()
 
@@ -752,7 +755,10 @@ class InSituData:
         # add regions object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        #pixel_size = self.metadata["method_params"]['pixel_size']
+
+        if len(files) != len(keys):
+            raise ValueError("Length of files and keys must be the same.")
+
 
         if self._regions is None:
             self._regions = RegionsData()
@@ -1396,18 +1402,17 @@ class InSituData:
         # Assign function to an layer addition event
         def _update_uid(event):
             if event is not None:
-
                 layer = event.source
-                if event.action == "add":
+                if event.action == "added":
                     if 'uid' in layer.properties:
                         layer.properties['uid'][-1] = str(uuid4())
                     else:
                         layer.properties['uid'] = np.array([str(uuid4())], dtype='object')
 
-                elif event.action == "remove":
-                    pass
-                else:
-                    raise ValueError("Unexpected value '{event.action}' for `event.action`. Expected 'add' or 'remove'.")
+                # elif event.action == "removed":
+                #     pass
+                # else:
+                #     raise ValueError(f"Unexpected value '{event.action}' for `event.action`. Expected 'add' or 'remove'.")
 
         # Assign the function to data of all existing layers
         for layer in self._viewer.layers:
@@ -1502,8 +1507,12 @@ class InSituData:
 
                     # extract shapes coordinates and colors
                     layer_data = layer.data
-                    colors = layer.edge_color.tolist()
                     scale = layer.scale
+
+                    if isinstance(layer, Points):
+                        colors = layer.border_color.tolist()
+                    else:
+                        colors = layer.edge_color.tolist()
 
                     checks_passed = True
                     is_region_layer = False

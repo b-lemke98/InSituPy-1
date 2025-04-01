@@ -77,6 +77,7 @@ def plot_cellular_composition(
     data,
     cell_type_col: str,
     key: str,
+    cells_layer: Optional[str] = None,
     modality: Literal["regions", "annotations"] = "regions",
     plot_type: Literal["pie", "bar", "barh"] = "barh",
     force_assignment: bool = False,
@@ -131,7 +132,7 @@ def plot_cellular_composition(
             raise ImportError("The 'adjustText' module is required for label adjustment. Please install it with `pip install adjusttext` or select adjust_labels=False.")
 
     # check whether the cells were already assigned to the requested annotation
-    _check_assignment(data=data, key=key, force_assignment=force_assignment, modality=modality)
+    _check_assignment(data=data, cells_layer=cells_layer, key=key, force_assignment=force_assignment, modality=modality)
 
     # retrieve data
     try:
