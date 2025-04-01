@@ -1,5 +1,6 @@
 import os
 import textwrap
+import warnings
 from pathlib import Path
 from typing import Literal, Optional, Union
 
@@ -8,7 +9,7 @@ import pandas as pd
 from matplotlib.lines import Line2D
 from napari.viewer import Viewer
 
-import insitupy._core.config as config
+import insitupy._core._config as _config
 from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
 from insitupy._core._checks import _check_assignment
 from insitupy.io.plots import save_and_show_figure
@@ -23,9 +24,10 @@ def plot_colorlegend(
     save_only: bool = False,
     dpi_save: int = 300,
     ):
+    warnings.warn("The function might have issues with colors. Please check the result.", UserWarning)
     # automatically get layer
     if layer_name is None:
-        candidate_layers = [l for l in viewer.layers if l.name.startswith(f"{config.current_data_name}")]
+        candidate_layers = [l for l in viewer.layers if l.name.startswith(f"{_config.current_data_name}")]
         try:
             layer_name = candidate_layers[0].name
         except IndexError:
@@ -75,6 +77,7 @@ def plot_cellular_composition(
     data,
     cell_type_col: str,
     key: str,
+    cells_layer: Optional[str] = None,
     modality: Literal["regions", "annotations"] = "regions",
     plot_type: Literal["pie", "bar", "barh"] = "barh",
     force_assignment: bool = False,
@@ -86,6 +89,7 @@ def plot_cellular_composition(
     return_data: bool = False,
     save_only: bool = False,
     dpi_save: int = 300,
+    layer: str = "main"
     ):
 
     """
@@ -128,10 +132,13 @@ def plot_cellular_composition(
             raise ImportError("The 'adjustText' module is required for label adjustment. Please install it with `pip install adjusttext` or select adjust_labels=False.")
 
     # check whether the cells were already assigned to the requested annotation
-    _check_assignment(data=data, key=key, force_assignment=force_assignment, modality=modality)
+    _check_assignment(data=data, cells_layer=cells_layer, key=key, force_assignment=force_assignment, modality=modality)
 
     # retrieve data
-    adata = data.cells.matrix
+    try:
+        adata = data.cells[layer].matrix
+    except:
+        raise ValueError(f"No {layer} layers in InSituData.cells")
     assignment_series = adata.obsm[modality][key]
     cats = sorted([elem for elem in assignment_series.unique() if (elem != "unassigned") & ("&" not in elem)])
 

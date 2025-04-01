@@ -44,6 +44,8 @@ extensions = [
     "myst_nb"
 ]
 
+
+
 autosummary_generate = True
 autodoc_process_signature = True
 autodoc_member_order = "groupwise"
@@ -53,6 +55,7 @@ napoleon_include_init_with_doc = False
 napoleon_use_rtype = True  # having a separate entry generally helps readability
 napoleon_use_param = True
 myst_heading_anchors = 3  # create anchors for h1-h3
+
 myst_enable_extensions = [
     "amsmath",
     "colon_fence",
@@ -61,6 +64,7 @@ myst_enable_extensions = [
     "html_image",
     "html_admonition",
 ]
+
 myst_url_schemes = ("http", "https", "mailto")
 nb_output_stderr = "remove"
 nb_execution_mode = "off"
@@ -88,6 +92,11 @@ html_theme = 'sphinx_book_theme'
 html_static_path = ["_static"]
 html_title = project
 html_logo = "_static/img/insitupy_logo_with_name_wo_bg.png"
+
+html_static_path = ['_static']
+html_css_files = [
+    'custom.css',
+]
 
 html_theme_options = {
     "repository_url": "https://github.com/SpatialPathology/InSituPy",

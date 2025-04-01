@@ -39,16 +39,18 @@ These tutorials focus on the preprocessing, analysis and handling of individual 
 
     Tutorial on how to generate an `InSituData` object from scratch.
 
+.. card:: Perform segmentation with Proseg and add the results to `InSituData`
+    :link: 11_InSituPy_add_proseg_data
+    :link-type: doc
+
+    Tutorial on how to improve cell segmentation with Proseg and add the data to `InSituData` for downstream analysis.
+
 ```
 
 ```{toctree}
 :hidden: true
 :maxdepth: 1
+:glob:
 
-02_InSituPy_demo_analyze.ipynb
-03_InSituPy_demo_annotations.ipynb
-04_InSituPy_demo_crop.ipynb
-05_InSituPy_cell_type_annotation.ipynb
-06_InSituPy_gene_expression_along_axis.ipynb
-09_InSituPy_build_objects_from_scratch.ipynb
+*
 ```

@@ -20,7 +20,7 @@ For the latest developments check out the [releases](https://github.com/SpatialP
 **Create and activate a conda environment:**
 
    ```bash
-   conda create --name insitupy python=3.9
+   conda create --name insitupy python=3.10
    conda activate insitupy
    ```
 

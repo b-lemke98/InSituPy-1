@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from numbers import Number
 from pathlib import Path
 from typing import List, Union
@@ -7,9 +8,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
+from insitupy.io.plots import save_and_show_figure
+from insitupy.utils.utils import get_nrows_maxcols
+
 from ..io.files import read_json
-from ..io.plots import save_and_show_figure
-from .utils import get_nrows_maxcols
 
 
 def find_xenium_outputs(
@@ -19,9 +21,11 @@ def find_xenium_outputs(
     print(f"Searching for directories starting with '{startswith}' in {str(path)}")
     search_results = []
     for root, dirs, files in os.walk(path):
+        root = Path(root)
         for d in dirs:
             if d.startswith(startswith):
-                search_results.append(os.path.join(root, d))
+                p = root / d
+                search_results.append(p)
 
     print(f"Found {len(search_results)} Xenium output directories.")
     return search_results
@@ -30,18 +34,21 @@ def collect_qc_data(
     data_folders: List[Union[str, os.PathLike, Path]]
     ) -> pd.DataFrame:
 
-    cats = ["run_name", "slide_id", "region_name", "preservation_method",
+    cats = ["date", "run_name", "slide_id", "region_name", "preservation_method",
             "num_cells", "transcripts_per_cell",
             "transcripts_per_100um", "panel_organism", "panel_tissue_type"]
 
     results = []
     for f in data_folders:
+        date_string = Path(f).stem.split("__")[-2]
+        date_object = datetime.strptime(date_string, "%Y%m%d")
         metadata = read_json(Path(f) / "experiment.xenium")
-        extracted = [metadata[c] for c in cats]
+        extracted = [date_object] + [metadata[c] for c in cats[1:]]
         results.append(extracted)
 
     data = pd.DataFrame(results, columns=cats)
     return data
+
 
 def plot_qc(
     data: pd.DataFrame,
@@ -100,3 +107,4 @@ def plot_qc(
     plt.show()
 
     save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save, tight=True)
+

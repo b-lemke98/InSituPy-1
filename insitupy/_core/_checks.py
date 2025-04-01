@@ -1,8 +1,10 @@
-from typing import Literal
+from typing import Literal, Optional
 
 import anndata
 import numpy as np
 from scipy.sparse import issparse
+
+from insitupy._core._utils import _get_cell_layer
 
 
 # checker functions for data sanity
@@ -142,13 +144,15 @@ def check_rgb_column(df, column_name):
 
 def _check_assignment(
     data,
+    cells_layer: str,
     key: str,
     modality: Literal["annotations", "regions"],
     force_assignment: bool = False,
     verbose: bool = False
 ):
+    celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
     try:
-        column = data.cells.matrix.obsm[modality].columns
+        column = celldata.matrix.obsm[modality].columns
     except KeyError:
         do_assignment = True
     else:
@@ -167,3 +171,29 @@ def _check_assignment(
     else:
         if verbose:
             print(f"{modality.capitalize()} with key '{key}' have already been assigned to the dataset.")
+
+def _is_experiment(obj):
+    from insitupy._core.insitudata import InSituData
+    from insitupy._core.insituexperiment import InSituExperiment
+
+    if isinstance(obj, InSituData):
+        return False
+    elif isinstance(obj, InSituExperiment):
+        return True
+    else:
+        raise ValueError(f"Object is neither InSituData or InSituExperiment. Instead: {type(obj)}")
+
+def _is_list_unique(lst):
+    return len(lst) == len(set(lst))
+
+def _all_obs_names_unique(
+    exp,
+    cells_layer: Optional[str],
+    ):
+
+    all_obs_names = []
+    for meta, data in exp.iterdata():
+        celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
+        all_obs_names += celldata.matrix.obs_names.tolist()
+
+    return _is_list_unique(all_obs_names)

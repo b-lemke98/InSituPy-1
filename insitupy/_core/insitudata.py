@@ -1,7 +1,5 @@
 
 import functools as ft
-import gc
-import json
 import os
 import shutil
 from datetime import datetime
@@ -10,54 +8,35 @@ from os.path import abspath
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
-from warnings import catch_warnings, filterwarnings, warn
+from warnings import warn
 
-import anndata
 import dask.dataframe as dd
 import geopandas as gpd
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import scanpy as sc
 import seaborn as sns
-from anndata._core.anndata import AnnData
-from dask_image.imread import imread
 from geopandas import GeoDataFrame
 from parse import *
+from pyarrow import ArrowInvalid
 from scipy.sparse import issparse
-from shapely import Point, Polygon
-from shapely.affinity import scale as scale_func
-from tqdm import tqdm
+from shapely import Point
 
-import insitupy._core.config as config
+import insitupy._core._config as _config
 from insitupy import WITH_NAPARI, __version__
 from insitupy._constants import ISPY_METADATA_FILE, LOAD_FUNCS, REGIONS_SYMBOL
-from insitupy._core._checks import _check_assignment
 from insitupy._core._save import _save_images
-from insitupy._core._xenium import (_read_binned_expression,
-                                    _read_boundaries_from_xenium,
-                                    _read_matrix_from_xenium,
-                                    _restructure_transcripts_dataframe)
-from insitupy._exceptions import UnknownOptionError
+from insitupy._core._utils import _get_cell_layer
 from insitupy._warnings import NoProjectLoadWarning
-from insitupy.images import ImageRegistration, deconvolve_he, resize_image
 from insitupy.images.utils import _get_contrast_limits
 from insitupy.io.files import read_json, write_dict_to_json
 from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
-                            read_celldata, read_shapesdata)
-from insitupy.io.plots import save_and_show_figure
-from insitupy.plotting import volcano_plot
-from insitupy.utils.dge import create_deg_dataframe
-from insitupy.utils.preprocessing import (normalize_and_transform_anndata,
-                                          reduce_dimensions_anndata)
-from insitupy.utils.utils import (_crop_transcripts, convert_to_list,
-                                  get_nrows_maxcols)
+                            read_multicelldata, read_shapesdata)
+from insitupy.utils.utils import _crop_transcripts, convert_to_list
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
 from .._exceptions import (InSituDataMissingObject,
-                           InSituDataRepeatedCropError, ModalityNotFoundError,
-                           NotOneElementError, WrongNapariLayerTypeError)
+                           InSituDataRepeatedCropError, ModalityNotFoundError)
 from ..images.utils import create_img_pyramid
 from ..io.files import check_overwrite_and_remove_if_true, read_json
 from ..plotting import expr_along_obs_val
@@ -65,9 +44,10 @@ from ..utils.utils import (convert_napari_shape_to_polygon_or_line,
                            convert_to_list)
 from ..utils.utils import textformat as tf
 from ._layers import _create_points_layer
-from ._save import (_save_alt, _save_annotations, _save_cells, _save_images,
+from ._save import (_save_annotations, _save_cells, _save_images,
                     _save_regions, _save_transcripts)
-from .dataclasses import AnnotationsData, CellData, ImageData, RegionsData
+from .dataclasses import (AnnotationsData, CellData, ImageData, MultiCellData,
+                          RegionsData)
 
 # optional packages that are not always installed
 if WITH_NAPARI:
@@ -83,8 +63,10 @@ class InSituData:
     #TODO: Docstring of InSituData
 
     # import deprecated functions
-    from ._deprecated import (read_all, read_annotations, read_cells,
-                              read_images, read_regions, read_transcripts)
+    from ._deprecated import (normalize_and_transform, read_all,
+                              read_annotations, read_cells, read_images,
+                              read_regions, read_transcripts,
+                              reduce_dimensions)
 
     def __init__(self,
                  path: Union[str, os.PathLike, Path] = None,
@@ -96,7 +78,10 @@ class InSituData:
         """
         """
         # metadata
-        self._path = Path(path)
+        if path is not None:
+            self._path = Path(path)
+        else:
+            self._path = None
         self._metadata = metadata
         self._slide_id = slide_id
         self._sample_id = sample_id
@@ -105,7 +90,6 @@ class InSituData:
         # modalities
         self._images = None
         self._cells = None
-        self._alt = None
         self._annotations = None
         self._transcripts = None
         self._regions = None
@@ -127,7 +111,7 @@ class InSituData:
             self._path = self._path.resolve()
 
         # check if all modalities are empty
-        is_empty = np.all([elem is None for elem in [self._images, self._cells, self._alt, self._annotations, self._transcripts, self._regions]])
+        is_empty = np.all([elem is None for elem in [self._images, self._cells, self._annotations, self._transcripts, self._regions]])
 
         # if is_empty:
         #     repr = f"{tf.Bold+tf.Red}InSituData{tf.ResetAll}\nEmpty"
@@ -182,15 +166,6 @@ class InSituData:
                 region_repr = self._regions.__repr__()
                 repr = (
                     repr + f"\n{tf.SPACER+tf.RARROWHEAD} " + region_repr.replace("\n", f"\n{tf.SPACER}   ")
-                )
-
-            if self._alt is not None:
-                cells_repr = self._alt.__repr__()
-                altseg_keys = self._alt.keys()
-                repr = (
-                    #repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n{tf.SPACER}   " + cells_repr.replace("\n", f"\n{tf.SPACER}   ")
-                    repr + f"\n{tf.SPACER+tf.RARROWHEAD+tf.Green+tf.Bold} alt{tf.ResetAll}\n"
-                    f"{tf.SPACER}   Alternative CellData objects with following keys: {','.join(altseg_keys)}"
                 )
         return repr
 
@@ -255,12 +230,12 @@ class InSituData:
     def cells(self):
         """Return cell data of the InSituData object.
         Returns:
-            insitupy._core.dataclasses.CellData: Cell data.
+            insitupy._core.dataclasses.MultiCellData: Cell data.
         """
         return self._cells
 
     @cells.setter
-    def cells(self, value: CellData):
+    def cells(self, value: MultiCellData):
         self._cells = value
 
     @cells.deleter
@@ -314,18 +289,6 @@ class InSituData:
         self._annotations = None
 
     @property
-    def alt(self):
-        """Return alternative cell data of the InSituData object.
-        Returns:
-            dict: A dictionary containing `insitupy._core.dataclasses.CellData` objects..
-        """
-        return self._alt
-
-    @alt.deleter
-    def alt(self):
-        self._alt = None
-
-    @property
     def regions(self):
         """Return regions of the InSituData object.
         Returns:
@@ -347,11 +310,11 @@ class InSituData:
                           add_masks: bool = False,
                           add_to_obs: bool = False,
                           overwrite: bool = True,
-                          alt_layer: str = None
+                          cells_layer: str = None
                           ):
         '''
         Function to assign geometries (annotations or regions) to the anndata object in
-        InSituData.cells.matrix. Assignment information is added to the DataFrame in `.obs`.
+        InSituData.cells[layer].matrix. Assignment information is added to the DataFrame in `.obs`.
         '''
         # assert that prerequisites are met
         try:
@@ -359,19 +322,12 @@ class InSituData:
         except AttributeError:
             raise ModalityNotFoundError(modality=geometry_type)
 
-        if alt_layer is None:
-            if self._cells is not None:
-                cell_attr = self._cells
-                name = ".cells"
-            else:
-                raise ModalityNotFoundError("cells")
-        else:
-            #TODO
-            if self._alt is not None:
-                cell_attr = self._alt[alt_layer]
-                name = f".alt[{alt_layer}]"
-            else:
-                raise ModalityNotFoundError(f"alt[{alt_layer}]")
+        # get the right cells layer
+        celldata, cells_layer_name = _get_cell_layer(
+            cells=self.cells, cells_layer=cells_layer,
+            verbose=True, return_layer_name=True
+            )
+        name = f".cells['{cells_layer_name}']"
 
         if keys == "all":
             keys = geom_attr.metadata.keys()
@@ -380,8 +336,8 @@ class InSituData:
         keys = convert_to_list(keys)
 
         # convert coordinates into shapely Point objects
-        x = cell_attr.matrix.obsm["spatial"][:, 0]
-        y = cell_attr.matrix.obsm["spatial"][:, 1]
+        x = celldata.matrix.obsm["spatial"][:, 0]
+        y = celldata.matrix.obsm["spatial"][:, 1]
         cells = gpd.points_from_xy(x, y)
 
         # iterate through annotation keys
@@ -407,15 +363,6 @@ class InSituData:
             # iterate through names
             for n in geom_names:
                 polygons = geom_df[geom_df["name"] == n]["geometry"].tolist()
-                #scales = geom_df[geom_df["name"] == n]["scale"].tolist()
-
-                # in_poly = []
-                # for poly, scale in zip(polygons, scales):
-                #     # scale the polygon
-                #     poly = scale_func(poly, xfact=scale[0], yfact=scale[1], origin=(0,0))
-
-                #     # check if which of the points are inside the current annotation polygon
-                #     in_poly.append(poly.contains(cells))
 
                 in_poly = [poly.contains(cells) for poly in polygons]
 
@@ -427,7 +374,7 @@ class InSituData:
 
             # convert into pandas dataframe
             data = pd.DataFrame(data)
-            data.index = cell_attr.matrix.obs_names
+            data.index = celldata.matrix.obs_names
 
             # transform data into one column
             column_to_add = [" & ".join(geom_names[row.values]) if np.any(row.values) else "unassigned" for _, row in data.iterrows()]
@@ -437,9 +384,9 @@ class InSituData:
                 col_name = f"{geometry_type}-{key}"
                 data[col_name] = column_to_add
 
-                if col_name in cell_attr.matrix.obs:
+                if col_name in celldata.matrix.obs:
                     if overwrite:
-                        cell_attr.matrix.obs.drop(col_name, axis=1, inplace=True)
+                        celldata.matrix.obs.drop(col_name, axis=1, inplace=True)
                         print(f'Existing column "{col_name}" is overwritten.', flush=True)
                         add = True
                     else:
@@ -448,20 +395,20 @@ class InSituData:
 
                 if add:
                     if add_masks:
-                        cell_attr.matrix.obs = pd.merge(left=cell_attr.matrix.obs, right=data, left_index=True, right_index=True)
+                        celldata.matrix.obs = pd.merge(left=celldata.matrix.obs, right=data, left_index=True, right_index=True)
                     else:
-                        cell_attr.matrix.obs = pd.merge(left=cell_attr.matrix.obs, right=data.iloc[:, -1], left_index=True, right_index=True)
+                        celldata.matrix.obs = pd.merge(left=celldata.matrix.obs, right=data.iloc[:, -1], left_index=True, right_index=True)
 
                     # save that the current key was analyzed
                     geom_attr.metadata[key]["analyzed"] = tf.TICK
             else:
                 # add to obsm
-                obsm_keys = cell_attr.matrix.obsm.keys()
+                obsm_keys = celldata.matrix.obsm.keys()
                 if geometry_type not in obsm_keys:
                     # add empty pandas dataframe with obs_names as index
-                    cell_attr.matrix.obsm[geometry_type] = pd.DataFrame(index=cell_attr.matrix.obs_names)
+                    celldata.matrix.obsm[geometry_type] = pd.DataFrame(index=celldata.matrix.obs_names)
 
-                cell_attr.matrix.obsm[geometry_type][key] = column_to_add
+                celldata.matrix.obsm[geometry_type][key] = column_to_add
 
                 # save that the current key was analyzed
                 geom_attr.metadata[key]["analyzed"] = tf.TICK
@@ -475,21 +422,14 @@ class InSituData:
         add_masks: bool = False,
         overwrite: bool = True
     ):
-        self.assign_geometries(
-            geometry_type="annotations",
-            keys=keys,
-            add_masks=add_masks,
-            overwrite=overwrite
-        )
-        if self._alt is not None:
-            for key in self.alt.keys():
-                self.assign_geometries(
-                    geometry_type="annotations",
-                    keys=keys,
-                    add_masks=add_masks,
-                    overwrite=overwrite,
-                    alt_layer=key
-                )
+         for key in self._cells.get_all_keys():
+            self.assign_geometries(
+                geometry_type="annotations",
+                keys=keys,
+                add_masks=add_masks,
+                overwrite=overwrite,
+                cells_layer=key
+            )
 
     def assign_regions(
         self,
@@ -497,38 +437,34 @@ class InSituData:
         add_masks: bool = False,
         overwrite: bool = True
     ):
-        self.assign_geometries(
-            geometry_type="regions",
-            keys=keys,
-            add_masks=add_masks,
-            overwrite=overwrite
-        )
-        if self._alt is not None:
-            for key in self.alt.keys():
-                self.assign_geometries(
-                    geometry_type="regions",
-                    keys=keys,
-                    add_masks=add_masks,
-                    overwrite=overwrite,
-                    alt_layer=key
-                )
+        for key in self._cells.get_all_keys():
+            self.assign_geometries(
+                geometry_type="regions",
+                keys=keys,
+                add_masks=add_masks,
+                overwrite=overwrite,
+                cells_layer=key
+            )
 
-    def copy(self):
+    def copy(self, keep_path: bool = False):
         '''
         Function to generate a deep copy of the InSituData object.
         '''
         from copy import deepcopy
         had_viewer = False
         if self._viewer is not None:
-            had_viewer = True
-
             # make copy of viewer to add it later again
+            had_viewer = True
             viewer_copy = self._viewer.copy()
+
             # remove viewer because there is otherwise a error during deepcopy
             self.viewer = None
 
         # make copy
         self_copy = deepcopy(self)
+
+        if not keep_path:
+            self_copy._path = None
 
         # add viewer again to original object if necessary
         if had_viewer:
@@ -578,6 +514,7 @@ class InSituData:
             region_df = self._regions[region_key]
 
             # extract geometry
+            print(region_name)
             shape = region_df[region_df["name"] == region_name]["geometry"].item()
             #use_shape = True
 
@@ -602,15 +539,6 @@ class InSituData:
                 inplace=True, verbose=False
             )
 
-        if _self.alt is not None:
-            alt = _self.alt
-            for k, alt_cells in alt.items():
-                alt_cells.crop(
-                    shape=shape,
-                    xlim=xlim, ylim=ylim, inplace=True,
-                    verbose=verbose
-                )
-
         if _self.transcripts is not None:
             _self.transcripts = _crop_transcripts(
                 transcript_df=_self.transcripts,
@@ -619,7 +547,7 @@ class InSituData:
             )
 
         if self._images is not None:
-            _self.images.crop(xlim=xlim, ylim=ylim)
+            _self.images.crop(xlim=xlim, ylim=ylim, inplace=True)
 
         if self._annotations is not None:
 
@@ -627,7 +555,7 @@ class InSituData:
                 shape=shape,
                 xlim=tuple([elem for elem in xlim]),
                 ylim=tuple([elem for elem in ylim]),
-                verbose=verbose
+                verbose=verbose, inplace=True
                 )
 
         if self._regions is not None:
@@ -635,7 +563,7 @@ class InSituData:
                 shape=shape,
                 xlim=tuple([elem for elem in xlim]),
                 ylim=tuple([elem for elem in ylim]),
-                verbose=verbose
+                verbose=verbose, inplace=True
             )
 
         if _self.metadata is not None:
@@ -653,109 +581,13 @@ class InSituData:
             # empty current data and data history entry in metadata
             _self.metadata["data"] = {}
             for k in _self.metadata["history"].keys():
-                if k != "alt":
-                    _self.metadata["history"][k] = []
-                else:
-                    empty_alt_hist_dict = {k: [] for k in _self.metadata["history"]["alt"].keys()}
-                    _self.metadata["history"]["alt"] = empty_alt_hist_dict
+                _self.metadata["history"][k] = []
 
         if inplace:
             if self._viewer is not None:
                 del _self.viewer # delete viewer
         else:
             return _self
-
-
-    def hvg(self,
-            hvg_batch_key: Optional[str] = None,
-            hvg_flavor: Literal["seurat", "cell_ranger", "seurat_v3"] = 'seurat',
-            hvg_n_top_genes: Optional[int] = None,
-            verbose: bool = True
-            ) -> None:
-        """
-        Calculate highly variable genes (HVGs) using specified flavor and parameters.
-
-        Args:
-            hvg_batch_key (str, optional):
-                Batch key for computing HVGs separately for each batch. Default is None, indicating all samples are considered.
-            hvg_flavor (Literal["seurat", "cell_ranger", "seurat_v3"], optional):
-                Flavor of the HVG computation method. Choose between "seurat", "cell_ranger", or "seurat_v3".
-                Default is 'seurat'.
-            hvg_n_top_genes (int, optional):
-                Number of top highly variable genes to identify. Mandatory if `hvg_flavor` is set to "seurat_v3".
-                Default is None.
-            verbose (bool, optional):
-                If True, print progress messages during HVG computation. Default is True.
-
-        Raises:
-            ValueError: If `hvg_n_top_genes` is not specified for "seurat_v3" flavor or if an invalid `hvg_flavor` is provided.
-
-        Returns:
-            None: This method modifies the input matrix in place, identifying highly variable genes based on the specified
-                flavor and parameters. It does not return any value.
-        """
-
-        if hvg_flavor in ["seurat", "cell_ranger"]:
-            hvg_layer = None
-        elif hvg_flavor == "seurat_v3":
-            hvg_layer = "counts" # seurat v3 method expects counts data
-
-            # n top genes must be specified for this method
-            if hvg_n_top_genes is None:
-                raise ValueError(f"HVG computation: For flavor {hvg_flavor} `hvg_n_top_genes` is mandatory")
-        else:
-            raise ValueError(f'Unknown value for `hvg_flavor`: {hvg_flavor}. Possible values: {["seurat", "cell_ranger", "seurat_v3"]}')
-
-        if hvg_batch_key is None:
-            print("Calculate highly-variable genes across all samples using {} flavor...".format(hvg_flavor)) if verbose else None
-        else:
-            print("Calculate highly-variable genes per batch key {} using {} flavor...".format(hvg_batch_key, hvg_flavor)) if verbose else None
-
-        sc.pp.highly_variable_genes(self._cells.matrix, batch_key=hvg_batch_key, flavor=hvg_flavor, layer=hvg_layer, n_top_genes=hvg_n_top_genes)
-
-
-    def normalize_and_transform(self,
-                transformation_method: Literal["log1p", "sqrt"] = "log1p",
-                target_sum: int = 250,
-                normalize_alt: bool = True,
-                verbose: bool = True
-                ) -> None:
-        """
-        Normalize the data using either log1p or square root transformation.
-
-        Args:
-            transformation_method (Literal["log1p", "sqrt"], optional):
-                The method used for data transformation. Choose between "log1p" for logarithmic transformation
-                and "sqrt" for square root transformation. Default is "log1p".
-            normalize_alt (bool, optional):
-                If True, `.alt` modalities are also normalized, if available.
-            verbose (bool, optional):
-                If True, print progress messages during normalization. Default is True.
-
-        Raises:
-            ValueError: If `transformation_method` is not one of ["log1p", "sqrt"].
-
-        Returns:
-            None: This method modifies the input matrix in place, normalizing the data based on the specified method.
-                It does not return any value.
-        """
-        if self._cells is not None:
-            cells = self._cells
-        else:
-            raise ModalityNotFoundError(modality="cells")
-
-        normalize_and_transform_anndata(
-            adata=cells.matrix,
-            transformation_method=transformation_method,
-            target_sum=target_sum,
-            verbose=verbose)
-
-        if self._alt is not None:
-            alt = self._alt
-            print("Found `.alt` modality.")
-            for k, cells in alt.items():
-                print(f"\tNormalizing {k}...")
-                normalize_and_transform_anndata(adata=cells.matrix, transformation_method=transformation_method, verbose=verbose)
 
     def add_alt(self,
                 celldata_to_add: CellData,
@@ -769,11 +601,11 @@ class InSituData:
         #    setattr(self, alt_attr_name, {})
         #    alt_attr = getattr(self, alt_attr_name)
 
-        if self._alt is None:
-            self._alt = dict()
+        if self._cells is None:
+            self._cells = MultiCellData()
 
         # add the celldata to the given key
-        self._alt[key_to_add] = celldata_to_add
+        self._cells.add_celldata(cd=celldata_to_add, key=key_to_add)
 
     def add_baysor(self,
                    path: Union[str, os.PathLike, Path],
@@ -885,6 +717,9 @@ class InSituData:
         files = convert_to_list(files)
         keys = convert_to_list(keys)
 
+        if len(files) != len(keys):
+            raise ValueError("Length of files and keys must be the same.")
+
         if self._annotations is None:
             self._annotations = AnnotationsData()
 
@@ -920,7 +755,10 @@ class InSituData:
         # add regions object
         files = convert_to_list(files)
         keys = convert_to_list(keys)
-        #pixel_size = self.metadata["method_params"]['pixel_size']
+
+        if len(files) != len(keys):
+            raise ValueError("Length of files and keys must be the same.")
+
 
         if self._regions is None:
             self._regions = RegionsData()
@@ -946,22 +784,7 @@ class InSituData:
                 if verbose:
                     raise ModalityNotFoundError(modality="cells")
             else:
-                self._cells = read_celldata(path=self._path / cells_path)
-
-            # check if alt data is there and read if yes
-            try:
-                alt_path_dict = self._metadata["data"]["alt"]
-            except KeyError:
-                if verbose:
-                    print("\tNo alternative cells found...")
-            else:
-                print("\tFound alternative cells...")
-                alt_dict = {}
-                for k, p in alt_path_dict.items():
-                    alt_dict[k] = read_celldata(path=self._path / p)
-
-                # add attribute
-                self._alt = alt_dict
+                self._cells = read_multicelldata(path=self._path / cells_path)
         else:
             NoProjectLoadWarning()
 
@@ -1023,7 +846,12 @@ class InSituData:
                     self._transcripts = pd.read_parquet(self._path / transcripts_path)
                 elif mode == "dask":
                     # Load the transcript data using Dask
-                    self._transcripts = dd.read_parquet(self._path / transcripts_path)
+                    try:
+                        self._transcripts = dd.read_parquet(self._path / transcripts_path)
+                    except ArrowInvalid:
+                        parquet_files = list(Path(self._path / transcripts_path).glob("part*.parquet"))
+                        self._transcripts = dd.read_parquet(parquet_files)
+
                 else:
                     raise ValueError(f"Invalid value for `mode`: {mode}")
 
@@ -1063,71 +891,6 @@ class InSituData:
                    )
         return data
 
-    def reduce_dimensions(self,
-                        umap: bool = True,
-                        tsne: bool = True,
-                        layer: Optional[str] = None,
-                        batch_correction_key: Optional[str] = None,
-                        perform_clustering: bool = True,
-                        verbose: bool = True,
-                        tsne_lr: int = 1000,
-                        tsne_jobs: int = 8,
-                        **kwargs
-                        ):
-        """
-        Reduce the dimensionality of the data using PCA, UMAP, and t-SNE techniques, optionally performing batch correction.
-
-        Args:
-            umap (bool, optional):
-                If True, perform UMAP dimensionality reduction. Default is True.
-            tsne (bool, optional):
-                If True, perform t-SNE dimensionality reduction. Default is True.
-            layer (str, optional):
-                Specifies the layer of the AnnData object to operate on. Default is None (uses adata.X).
-            batch_correction_key (str, optional):
-                Batch key for performing batch correction using scanorama. Default is None, indicating no batch correction.
-            verbose (bool, optional):
-                If True, print progress messages during dimensionality reduction. Default is True.
-            tsne_lr (int, optional):
-                Learning rate for t-SNE. Default is 1000.
-            tsne_jobs (int, optional):
-                Number of CPU cores to use for t-SNE computation. Default is 8.
-            **kwargs:
-                Additional keyword arguments to be passed to scanorama function if batch correction is performed.
-
-        Raises:
-            ValueError: If an invalid `batch_correction_key` is provided.
-
-        Returns:
-            None: This method modifies the input matrix in place, reducing its dimensionality using specified techniques and
-                batch correction if applicable. It does not return any value.
-        """
-        if self._cells is None:
-            raise ModalityNotFoundError(modality="cells")
-        else:
-            cells = self._cells
-
-        reduce_dimensions_anndata(adata=cells.matrix,
-                                  umap=umap, tsne=tsne, layer=layer,
-                                  batch_correction_key=batch_correction_key,
-                                  perform_clustering=perform_clustering,
-                                  verbose=verbose,
-                                  tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
-                                  )
-
-        if self._alt is not None:
-            alt = self._alt
-            print("Found `.alt` modality.")
-            for k, cells in alt.items():
-                print(f"\tReducing dimensions in `.alt['{k}']...")
-
-                reduce_dimensions_anndata(adata=cells.matrix,
-                                        umap=umap, tsne=tsne, layer=layer,
-                                        batch_correction_key=batch_correction_key,
-                                        perform_clustering=perform_clustering,
-                                        verbose=verbose,
-                                        tsne_lr=tsne_lr, tsne_jobs=tsne_jobs
-                                        )
 
     def saveas(self,
             path: Union[str, os.PathLike, Path],
@@ -1186,17 +949,8 @@ class InSituData:
                 cells=cells,
                 path=path,
                 metadata=self._metadata,
-                boundaries_zipped=zarr_zipped
-            )
-
-        # save alternative cell data
-        if self._alt is not None:
-            alt = self._alt
-            _save_alt(
-                attr=alt,
-                path=path,
-                metadata=self._metadata,
-                boundaries_zipped=zarr_zipped
+                boundaries_zipped=zarr_zipped,
+                max_resolution_boundaries=images_max_resolution
             )
 
         # save transcripts
@@ -1242,11 +996,11 @@ class InSituData:
             shutil.make_archive(path, 'zip', path, verbose=False)
             shutil.rmtree(path) # delete directory
 
-        # change path to the new one
-        self._path = path.resolve()
+        # # change path to the new one
+        # self._path = path.resolve()
 
-        # reload the modalities
-        self.reload(verbose=False)
+        # # reload the modalities
+        # self.reload(verbose=False)
 
         print("Saved.") if verbose else None
 
@@ -1315,14 +1069,14 @@ class InSituData:
     def save_current_colorlegend(self, savepath):
 
         # Check if static_canvas exists
-        if not hasattr(config, 'static_canvas'):
+        if not hasattr(_config, 'static_canvas'):
             print("Warning: 'static_canvas' attribute not found in config. "
                 "Please display data in the napari viewer using '.show()' first.")
             return
 
         try:
             # Save the figure to a PDF file
-            config.static_canvas.figure.savefig(savepath)
+            _config.static_canvas.figure.savefig(savepath)
             print(f"Figure saved as {savepath}")
         except RuntimeError as e:
             if 'FigureCanvasQTAgg has been deleted' in str(e):
@@ -1351,17 +1105,6 @@ class InSituData:
                 overwrite=True
             )
 
-        # save alternative cell data
-        if self._alt is not None:
-            alt = self._alt
-            if verbose:
-                print("\tUpdating alternative segmentations...", flush=True)
-            _save_alt(
-                attr=alt,
-                path=path,
-                metadata=self._metadata,
-                boundaries_zipped=zarr_zipped
-            )
 
         # save annotations
         if self._annotations is not None:
@@ -1487,6 +1230,7 @@ class InSituData:
 
     def show(self,
         keys: Optional[str] = None,
+        cells_layer: Optional[str] = None,
         # annotation_keys: Optional[str] = None,
         point_size: int = 8,
         scalebar: bool = True,
@@ -1554,37 +1298,36 @@ class InSituData:
                     )
 
         # optionally: add cells as points
-        #if show_cells or keys is not None:
         if keys is not None:
             if self._cells is None:
                 raise InSituDataMissingObject("cells")
             else:
-                cells = self._cells
+                celldata = _get_cell_layer(cells=self.cells, cells_layer=cells_layer)
                 # convert keys to list
                 keys = convert_to_list(keys)
 
                 # get point coordinates
-                points = np.flip(cells.matrix.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
+                points = np.flip(celldata.matrix.obsm["spatial"].copy(), axis=1) # switch x and y (napari uses [row,column])
                 #points *= pixel_size # convert to length unit (e.g. µm)
 
                 # get expression matrix
-                if issparse(cells.matrix.X):
-                    X = cells.matrix.X.toarray()
+                if issparse(celldata.matrix.X):
+                    X = celldata.matrix.X.toarray()
                 else:
-                    X = cells.matrix.X
+                    X = celldata.matrix.X
 
                 for i, k in enumerate(keys):
                     #pvis = False if i < len(keys) - 1 else True # only last image is set visible
                     # get expression values
-                    if k in cells.matrix.obs.columns:
-                        color_value = cells.matrix.obs[k].values
+                    if k in celldata.matrix.obs.columns:
+                        color_value = celldata.matrix.obs[k].values
 
                     else:
-                        geneid = cells.matrix.var_names.get_loc(k)
+                        geneid = celldata.matrix.var_names.get_loc(k)
                         color_value = X[:, geneid]
 
                     # extract names of cells
-                    cell_names = cells.matrix.obs_names.values
+                    cell_names = celldata.matrix.obs_names.values
 
                     # create points layer
                     layer = _create_points_layer(
@@ -1608,7 +1351,7 @@ class InSituData:
             add_geom_widget.max_width = widgets_max_width
             self._viewer.window.add_dock_widget(add_geom_widget, name="Add geometries", area="right")
         else:
-            cells = self._cells
+            celldata = self._cells
             # initialize the widgets
             show_points_widget, locate_cells_widget, show_geometries_widget, show_boundaries_widget, select_data, filter_cells_widget = _initialize_widgets(xdata=self)
 
@@ -1659,18 +1402,17 @@ class InSituData:
         # Assign function to an layer addition event
         def _update_uid(event):
             if event is not None:
-
                 layer = event.source
-                if event.action == "add":
+                if event.action == "added":
                     if 'uid' in layer.properties:
                         layer.properties['uid'][-1] = str(uuid4())
                     else:
                         layer.properties['uid'] = np.array([str(uuid4())], dtype='object')
 
-                elif event.action == "remove":
-                    pass
-                else:
-                    raise ValueError("Unexpected value '{event.action}' for `event.action`. Expected 'add' or 'remove'.")
+                # elif event.action == "removed":
+                #     pass
+                # else:
+                #     raise ValueError(f"Unexpected value '{event.action}' for `event.action`. Expected 'add' or 'remove'.")
 
         # Assign the function to data of all existing layers
         for layer in self._viewer.layers:
@@ -1688,10 +1430,10 @@ class InSituData:
         self._viewer.layers.events.inserted.connect(connect_to_all_shapes_layers)
 
         # add color legend widget
-        import insitupy._core.config as config
-        from insitupy._core.config import init_colorlegend_canvas
+        import insitupy._core._config as _config
+        from insitupy._core._config import init_colorlegend_canvas
         init_colorlegend_canvas()
-        self._viewer.window.add_dock_widget(config.static_canvas, area='left', name='Color legend')
+        self._viewer.window.add_dock_widget(_config.static_canvas, area='left', name='Color legend')
 
         # def update_colorlegend(event):
         #     # if event.type == "inserted":
@@ -1765,8 +1507,12 @@ class InSituData:
 
                     # extract shapes coordinates and colors
                     layer_data = layer.data
-                    colors = layer.edge_color.tolist()
                     scale = layer.scale
+
+                    if isinstance(layer, Points):
+                        colors = layer.border_color.tolist()
+                    else:
+                        colors = layer.edge_color.tolist()
 
                     checks_passed = True
                     is_region_layer = False
@@ -1844,67 +1590,11 @@ class InSituData:
 
         #self._remove_empty_modalities()
 
-    def plot_binned_expression(
-        self,
-        genes: Union[List[str], str],
-        maxcols: int = 4,
-        figsize: Tuple[int, int] = (8,6),
-        savepath: Union[str, os.PathLike, Path] = None,
-        save_only: bool = False,
-        dpi_save: int = 300,
-        show: bool = True,
-        fontsize: int = 28
-        ):
-        # extract binned expression matrix and gene names
-        binex = self._cells.matrix.varm["binned_expression"]
-        gene_names = self._cells.matrix.var_names
-
-        genes = convert_to_list(genes)
-
-        nplots, nrows, ncols = get_nrows_maxcols(len(genes), max_cols=maxcols)
-
-        # setup figure
-        fig, axs = plt.subplots(nrows, ncols, figsize=(figsize[0]*ncols, figsize[1]*nrows))
-
-        # scale font sizes
-        plt.rcParams.update({'font.size': fontsize})
-
-        if nplots > 1:
-            axs = axs.ravel()
-        else:
-            axs = [axs]
-
-        for i, gene in enumerate(genes):
-            # retrieve binned expression
-            img = binex[gene_names.get_loc(gene)]
-
-            # determine upper limit for color
-            vmax = np.percentile(img[img>0], 95)
-
-            # plot expression
-            axs[i].imshow(img, cmap="viridis", vmax=vmax)
-
-            # set title
-            axs[i].set_title(gene)
-
-        if nplots > 1:
-
-            # check if there are empty plots remaining
-            while i < nrows * maxcols - 1:
-                i+=1
-                # remove empty plots
-                axs[i].set_axis_off()
-
-        if show:
-            fig.tight_layout()
-            save_and_show_figure(savepath=savepath, fig=fig, save_only=save_only, dpi_save=dpi_save)
-        else:
-            return fig, axs
-
     def plot_expr_along_obs_val(
         self,
         keys: str,
         obs_val: str,
+        cells_layer: Optional[str] = None,
         groupby: Optional[str] = None,
         method: Literal["lowess", "loess"] = 'loess',
         stderr: bool = False,
@@ -1913,7 +1603,8 @@ class InSituData:
         **kwargs
         ):
         # retrieve anndata object from InSituData
-        adata = self._cells.matrix
+        celldata = _get_cell_layer(cells=self.cells, cells_layer=cells_layer, verbose=True)
+        adata = celldata.matrix
 
         results = expr_along_obs_val(
             adata=adata,
@@ -1923,7 +1614,7 @@ class InSituData:
             method=method,
             stderr=stderr,
             savepath=savepath,
-            return_data=return_data
+            return_data=return_data,
             **kwargs
             )
 
@@ -1936,24 +1627,28 @@ class InSituData:
         verbose: bool = True
         ):
         data_meta = self._metadata["data"]
-        current_modalities = [m for m in MODALITIES if getattr(self, m) is not None and m in data_meta]
+        loaded_modalities = [elem for elem in self.get_loaded_modalities() if elem in data_meta]
 
         if skip is not None:
             # remove the modalities which are supposed to be skipped during reload
             skip = convert_to_list(skip)
             for s in skip:
                 try:
-                    current_modalities.remove(s)
+                    loaded_modalities.remove(s)
                 except ValueError:
                     pass
 
-        if len(current_modalities) > 0:
-            print(f"Reloading following modalities: {', '.join(current_modalities)}") if verbose else None
-            for cm in current_modalities:
+        if len(loaded_modalities) > 0:
+            print(f"Reloading following modalities: {', '.join(loaded_modalities)}") if verbose else None
+            for cm in loaded_modalities:
                 func = getattr(self, f"load_{cm}")
                 func(verbose=verbose)
         else:
             print("No modalities with existing save path found. Consider saving the data with `saveas()` first.")
+
+    def get_loaded_modalities(self):
+        loaded_modalities = [m for m in MODALITIES if getattr(self, m) is not None]
+        return loaded_modalities
 
     def remove_history(self,
                        verbose: bool = True
@@ -1986,356 +1681,3 @@ class InSituData:
         else:
             print(f"No modality '{modality}' found. Nothing removed.")
 
-
-def calc_distance_of_cells_from(
-    data: InSituData,
-    annotation_key: str,
-    annotation_class: str,
-    region_key: Optional[str] = None,
-    region_name: Optional[str] = None,
-    key_to_save: Optional[str] = None
-    ):
-
-    """
-    Calculate the distance of cells from a specified annotation class within a given region and save the results.
-
-    This function calculates the distance of each cell in the spatial data to the closest point
-    of a specified annotation class. The distances are then saved in the cell data matrix.
-
-    Args:
-        data (InSituData): The input data containing cell and annotation information.
-        annotation_key (str): The key to retrieve the annotation information.
-        annotation_class (Optional[str]): The specific annotation class to calculate distances from.
-        region_key: (Optional[str]): If not None, `region_key` is used together with `region_name` to determine the region in which cells are considered
-                                     for the analysis.
-        region_name: (Optional[str]): If not None, `region_name` is used together with `region_key` to determine the region in which cells are considered
-                                     for the analysis.
-        key_to_save (Optional[str]): The key under which to save the calculated distances in the cell data matrix.
-                                     If None, a default key is generated based on the annotation class.
-
-    Returns:
-        None
-    """
-    # extract anndata object
-    adata = data.cells.matrix
-
-    if region_name is None:
-        print(f'Calculate the distance of cells from the annotation "{annotation_class}"')
-        region_mask = [True] * len(adata)
-    else:
-        assert region_key is not None, "`region_key` must not be None if `region_name` is not None."
-        print(f'Calculate the distance of cells from the annotation "{annotation_class}" within region "{region_name}"')
-
-        try:
-            region_df = adata.obsm["regions"]
-        except KeyError:
-            data.assign_regions(keys=region_key)
-            region_df = adata.obsm["regions"]
-        else:
-            if region_key not in region_df.columns:
-                data.assign_regions(keys=region_key)
-
-        # generate mask for selected region
-        region_mask = region_df[region_key] == region_name
-
-    # create geopandas points from cells
-    x = adata.obsm["spatial"][:, 0][region_mask]
-    y = adata.obsm["spatial"][:, 1][region_mask]
-    indices = adata.obs_names[region_mask]
-    cells = gpd.points_from_xy(x, y)
-
-    # retrieve annotation information
-    annot_df = data.annotations[annotation_key]
-    class_df = annot_df[annot_df["name"] == annotation_class]
-
-    # calculate distance of cells to their closest point
-    # scaled_geometries = [
-    #     scale_func(geometry, xfact=scale[0], yfact=scale[1], origin=(0,0))
-    #     for geometry, scale in zip(class_df["geometry"], class_df["scale"])
-    #     ]
-    scaled_geometries = class_df["geometry"].tolist()
-    dists = np.array([cells.distance(geometry) for geometry in scaled_geometries])
-    min_dists = dists.min(axis=0)
-
-    # add indices to minimum distances
-    min_dists = pd.Series(min_dists, index=indices)
-
-    # add results to CellData
-    if key_to_save is None:
-        #key_to_save = f"dist_from_{annotation_class}"
-        key_to_save = annotation_class
-    #adata.obs[key_to_save] = min_dists
-
-    obsm_keys = adata.obsm.keys()
-    if "distance_from" not in obsm_keys:
-        # add empty pandas dataframe with obs_names as index
-        adata.obsm["distance_from"] = pd.DataFrame(index=adata.obs_names)
-
-    adata.obsm["distance_from"][key_to_save] = min_dists
-    print(f'Saved distances to `.cells.matrix.obsm["distance_from"]["{key_to_save}"]`')
-
-from insitupy.utils._dge import _select_data_for_dge, _substitution_func
-
-
-def differential_gene_expression(
-    target: InSituData,
-    target_annotation_tuple: Optional[Tuple[str, str]] = None,
-    target_cell_type_tuple: Optional[Tuple[str, str]] = None,
-    target_region_tuple: Optional[Tuple[str, str]] = None,
-    ref: Optional[Union[InSituData, List[InSituData]]] = None,
-    ref_annotation_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
-    ref_cell_type_tuple: Optional[Union[Literal["rest", "same"], Tuple[str, str]]] = "same",
-    ref_region_tuple: Optional[Tuple[str, str]] = "same",
-    significance_threshold: Number = 0.05,
-    fold_change_threshold: Number = 1,
-    plot_volcano: bool = True,
-    return_results: bool = False,
-    method: Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']] = 't-test',
-    exclude_ambiguous_assignments: bool = False,
-    force_assignment: bool = False,
-    title: Optional[str] = None,
-    savepath: Union[str, os.PathLike, Path] = None,
-    save_only: bool = False,
-    dpi_save: int = 300,
-    verbose: bool = False,
-    **volcano_kwargs
-):
-    """
-    Perform differential gene expression analysis on in situ sequencing data.
-
-    This function compares gene expression between specified annotations within a single
-    InSituData object or between two InSituData objects. It supports various statistical
-    methods for differential expression analysis and can generate a volcano plot of the results.
-
-    Args:
-        target (InSituData): The primary in situ data object.
-        target_annotation_tuple (Optional[Tuple[str, str]]): Tuple containing the annotation key and name for the target data.
-        target_cell_type_tuple (Optional[Tuple[str, str]]): Tuple specifying an observation key and value to filter the target data by cell type.
-        target_region_tuple (Optional[Tuple[str, str]]): Tuple specifying a region key and name to restrict the analysis to a specific region in the target data.
-        ref (Optional[Union[InSituData, List[InSituData]]]): Reference in situ data object(s) for comparison. Defaults to None.
-        ref_annotation_tuple (Optional[Union[Literal["rest", "same"], Tuple[str, str]]]): Tuple containing the reference annotation key and name, or "rest" to use the rest of the data as reference, or "same" to use the same annotation as the target. Defaults to "same".
-        ref_cell_type_tuple (Optional[Union[Literal["rest", "same"], Tuple[str, str]]]): Tuple specifying an observation key and value to filter the reference data by cell type, or "rest" to use the rest of the data, or "same" to use the same cell type as the target. Defaults to "same".
-        ref_region_tuple (Optional[Tuple[str, str]]): Tuple specifying a region key and name to restrict the analysis to a specific region in the reference data. Defaults to None.
-        significance_threshold (float): P-value threshold for significance (default is 0.05).
-        fold_change_threshold (float): Log2 fold change threshold for up/down regulation (default is 1).
-        plot_volcano (bool): Whether to generate a volcano plot of the results. Defaults to True.
-        return_results (bool): Whether to return the results as dictionary including the dataframe differentially expressed genes and the parameters.
-        method (Optional[Literal['logreg', 't-test', 'wilcoxon', 't-test_overestim_var']]): Statistical method to use for differential expression analysis. Defaults to 't-test'.
-        exclude_ambiguous_assignments (bool): Whether to exclude ambiguous assignments in the data. Defaults to False.
-        force_assignment (bool): Whether to force assignment of annotations and regions even if it has been done before already. Defaults to False.
-        title (Optional[str]): Title for the volcano plot. Defaults to None.
-        savepath (Union[str, os.PathLike, Path]): Path to save the plot. Defaults to None.
-        save_only (bool): If True, only save the plot without displaying it. Defaults to False.
-        dpi_save (int): Dots per inch (DPI) for saving the plot. Defaults to 300.
-        verbose (bool): Whether to print detailed information during the analysis. Defaults to False.
-        **volcano_kwargs: Additional keyword arguments for the volcano plot.
-
-    Returns:
-        Union[None, Dict[str, Any]]: If `plot_volcano` is True, returns None. Otherwise, returns a dictionary with the results DataFrame and parameters used for the analysis.
-
-    Raises:
-        ValueError: If `ref_annotation_tuple` is neither 'rest' nor a 2-tuple.
-        AssertionError: If `ref` is provided when `ref_annotation_tuple` is 'rest'.
-        AssertionError: If `target_region_tuple` is provided when `ref` is not None.
-        AssertionError: If the specified region or annotation is not found in the data.
-
-    Example:
-        >>> result = differential_gene_expression(
-                target=my_data,
-                target_annotation_tuple=("pathologist", "tumor"),
-                ref=my_ref_data,
-                ref_annotation_tuple=("cell_type", "astrocyte"),
-                plot_volcano=True,
-                method='wilcoxon'
-            )
-    """
-    if not (plot_volcano | return_results):
-        raise ValueError("Both `plot_volcano` and `return_results` are False. At least one of them must be True.")
-
-    dge_comparison_column = "DGE_COMPARISON_COLUMN"
-
-    # pre-flight checks
-    if ref_annotation_tuple is not None:
-        if ref_annotation_tuple == "rest":
-            if ref is not None:
-                raise ValueError("Value 'rest' for `ref_annotation_tuple` is only allowed if no reference data is given (`ref=None`).")
-        elif ref_annotation_tuple == "same":
-            ref_annotation_tuple = target_annotation_tuple
-        elif not isinstance(ref_annotation_tuple, tuple):
-            raise ValueError(f"Unknown type of `ref_annotation_tuple`: {type(ref_annotation_tuple)}. Must be either tuple, 'rest', 'same' or None.")
-        else:
-            pass
-
-    if ref_region_tuple is not None:
-        if ref_region_tuple == "rest":
-            if ref is not None:
-                raise ValueError("Value 'rest' for `ref_region_tuple` is only allowed if no reference data is given (`ref=None`).")
-        elif ref_region_tuple == "same":
-            ref_region_tuple = target_region_tuple
-        elif not isinstance(ref_region_tuple, tuple):
-            raise ValueError(f"Unknown type of `ref_region_tuple`: {type(ref_region_tuple)}. Must be either tuple, 'rest', 'same' or None.")
-        else:
-            pass
-
-    if ref_cell_type_tuple is not None:
-        if ref_cell_type_tuple == "rest":
-            if ref is not None:
-                raise ValueError("Value 'rest' for `ref_cell_type_tuple` is only allowed if no reference data is given (`ref=None`).")
-        elif ref_cell_type_tuple == "same":
-            ref_cell_type_tuple = target_cell_type_tuple
-        elif not isinstance(ref_cell_type_tuple, tuple):
-            raise ValueError(f"Unknown type of `ref_cell_type_tuple`: {type(ref_cell_type_tuple)}. Must be either tuple, 'rest', 'same' or None.")
-        else:
-            pass
-
-    # select data for analysis
-    adata_data = _select_data_for_dge(
-        data=target,
-        annotation_tuple=target_annotation_tuple,
-        cell_type_tuple=target_cell_type_tuple,
-        region_tuple=target_region_tuple,
-        force_assignment=force_assignment,
-        verbose=verbose
-    )
-
-    # original tuples for plotting the configuration table
-    orig_ref_annotation_tuple = ref_annotation_tuple
-    orig_ref_cell_type_tuple = ref_cell_type_tuple
-
-    if ref is None:
-        ref = target.copy()
-
-        # TODO: Implement behavior for "rest"
-        # The "rest" argument is only implemented if ref_data is None in the beginning
-        if ref_annotation_tuple == "rest":
-            rest_annotations = [
-                elem
-                for elem in ref.cells.matrix.obsm["annotations"][target_annotation_tuple[0]].unique()
-                if elem != target_annotation_tuple[1]
-                ]
-            ref_annotation_tuple = (target_annotation_tuple[0], rest_annotations)
-
-        if ref_region_tuple == "rest":
-            rest_regions = [
-                elem
-                for elem in ref.cells.matrix.obsm["regions"][target_region_tuple[0]].unique()
-                if elem != target_region_tuple[1]
-                ]
-            ref_region_tuple = (target_region_tuple[0], rest_regions)
-
-        if ref_cell_type_tuple == "rest":
-            rest_cell_types = [
-                elem
-                for elem in ref.cells.matrix.obs[target_cell_type_tuple[0]].unique()
-                if elem != target_cell_type_tuple[1]
-                ]
-            ref_cell_type_tuple = (target_cell_type_tuple[0], rest_cell_types)
-
-    if isinstance(ref, InSituData):
-        # generate a list from ref_dta
-        ref = [ref]
-    elif isinstance(ref, list):
-        assert np.all([isinstance(elem, InSituData) for elem in ref]), "Not all elements of list given in `ref` are InSituData objects."
-    else:
-        raise ValueError("`ref` must be an InSituData object or a list of InSituData objects.")
-
-    adata_ref_list = []
-    for rd in ref:
-        # select reference data for analysis
-        ad_ref = _select_data_for_dge(
-            data=rd,
-            annotation_tuple=ref_annotation_tuple,
-            cell_type_tuple=ref_cell_type_tuple,
-            region_tuple=ref_region_tuple,
-            force_assignment=force_assignment,
-            verbose=verbose
-        )
-        adata_ref_list.append(ad_ref)
-
-    if len(adata_ref_list) > 1:
-        adata_ref = anndata.concat(adata_ref_list)
-    else:
-        adata_ref = adata_ref_list[0]
-
-    # check before concatenation whether cells with identical names are found in both data and reference
-    if not set(adata_data.obs_names).isdisjoint(set(adata_ref.obs_names)):
-        n_duplicated_cells = len(set(adata_data.obs_names).intersection(set(adata_ref.obs_names)))
-        pct_duplicated_cells = round((n_duplicated_cells / 2) / (len(adata_data) + len(adata_data)) * 100, 1)
-
-        warn(
-            f"{n_duplicated_cells} ({pct_duplicated_cells}%) cells were found to belong to both data and reference. "
-            "This can happen due to overlapping annotations or non-unique cell names in the individual datasets. "
-            "If you are sure that the same cell cannot be found in both data and reference, you can ignore this warning. "
-            "To exclude ambiguously assigned cells from the analysis, use `exclude_ambiguous_assignments=True`."
-        )
-
-    # concatenate and ignore user warning about observations being not unique since we take care of this later by filtering out duplicate values if wanted.
-    with catch_warnings():
-        filterwarnings("ignore", message="Observation names are not unique. To make them unique, call `.obs_names_make_unique`.")
-        adata_combined = anndata.concat(
-            {
-                "DATA": adata_data,
-                "REFERENCE": adata_ref
-            },
-            label=dge_comparison_column
-        )
-
-    if exclude_ambiguous_assignments:
-        # check whether some cells are in both data and reference
-        duplicated_mask = adata_combined.obs_names.duplicated(keep=False)
-
-        if np.any(duplicated_mask):
-            print("Exclude ambiguously assigned cells...")
-            # remove duplicated values
-            adata_combined = adata_combined[~duplicated_mask].copy()
-
-    # add column to .obs for its use in rank_genes_groups()
-    #adata_combined.obs = adata_combined.obs.filter([dge_comparison_column]) # empty obs
-
-    print(f"Calculate differentially expressed genes with Scanpy's `rank_genes_groups` using '{method}'.")
-    sc.tl.rank_genes_groups(adata=adata_combined,
-                            groupby=dge_comparison_column,
-                            groups=["DATA"],
-                            reference="REFERENCE",
-                            method=method,
-                            )
-
-    # create dataframe from results
-    res_dict = create_deg_dataframe(
-        adata=adata_combined, groups="DATA")
-    df = res_dict["DATA"]
-
-    if plot_volcano:
-        cell_counts = adata_combined.obs[dge_comparison_column].value_counts()
-        data_counts = cell_counts["DATA"]
-        ref_counts = cell_counts["REFERENCE"]
-
-        n_upreg = np.sum((df["pvals"] <= significance_threshold) & (df["logfoldchanges"] > fold_change_threshold))
-        n_downreg = np.sum((df["pvals"] <= significance_threshold) & (df["logfoldchanges"] < -fold_change_threshold))
-
-        config_table = pd.DataFrame({
-            "": ["Annotation", "Cell type", "Region", "Cell number", "DEG number"],
-            "Target": [elem[1] if isinstance(elem, tuple) else elem for elem in [target_annotation_tuple, target_cell_type_tuple, target_region_tuple]] + [data_counts, n_upreg],
-            "Reference": [elem[1] if isinstance(elem, tuple) else elem for elem in [orig_ref_annotation_tuple, orig_ref_cell_type_tuple, ref_region_tuple]] + [ref_counts, n_downreg]
-        })
-
-        # remove empty rows
-        config_table = config_table.set_index("").dropna(how="all").reset_index()
-
-        volcano_plot(
-            data=df,
-            significance_threshold=significance_threshold,
-            fold_change_threshold=fold_change_threshold,
-            title=title,
-            savepath = savepath,
-            save_only = save_only,
-            dpi_save = dpi_save,
-            config_table = config_table,
-            adjust_labels=True,
-            **volcano_kwargs
-            )
-    if return_results:
-        return {
-            "results": df,
-            "params": adata_combined.uns["rank_genes_groups"]["params"]
-        }
