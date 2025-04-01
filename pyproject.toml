@@ -1,6 +1,6 @@
 [project]
 name = "insitupy-spatial"
-version = "0.6.7" #<<COOKIETEMPLE_FORCE_BUMP>>
+version = "0.7.0"
 description = "Package introducing the InSituPy framework to analyze single-cell spatial transcriptomics data."
 license = {text = "BSD-3-Clause"}
 authors = [
@@ -41,3 +41,7 @@ packages =[
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry_bumpversion.file."insitupy/__init__.py"]
+search = '__version__ = "{current_version}"'
+replace = '__version__ = "{new_version}"'
