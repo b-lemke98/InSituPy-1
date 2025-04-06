@@ -888,7 +888,8 @@ class CellData(DeepCopyMixin):
         write_dict_to_json(dictionary=celldata_metadata, file=path / ".celldata")
 
 
-    def sync(self):
+    def sync(self,
+             verbose: bool = False):
         '''
         Function to synchronize matrix and boundaries of CellData.
 
@@ -913,6 +914,9 @@ class CellData(DeepCopyMixin):
                 )
 
             filter_mask_in = ds.index.isin(matrix_cell_ids_hex)
+
+            if not np.any(filter_mask_in):
+                raise ValueError("No matching values between boundaries.cell_names and matrix.obs_names. All boundaries would get filtered out.")
 
             # filter cell names and seg_mask_values
             boundaries._seg_mask_value = da.from_array(np.array(ds[filter_mask_in]))
@@ -944,6 +948,9 @@ class CellData(DeepCopyMixin):
                     nuc_bounds[removed_cells_mask] = 0 # set all nuclei belong to the removed cells 0
             else:
                 warnings.warn(f"Unknown data type for cellular boundaries: {type(cell_bounds)}. Need to be either a dask array or a list of dask arrays. Skipped synchronization of cell ids.")
+
+            if verbose:
+                print(f"Filtered out {np.sum(~filter_mask_in)} boundaries.", flush=True)
 
     def shift(self,
               x: Union[int, float],
