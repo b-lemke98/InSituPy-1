@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 
+import dask.array as da
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -430,6 +431,18 @@ class InSituExperiment:
                                          join_vars='inner', join_obs='inner',
                                          label=label_col)
 
+    def get_n_cells(
+        self,
+        cells_layer: Optional[str] = None
+        ):
+        n_cells = 0
+        for _, d in self.iterdata():
+            if d.cells is not None:
+                celldata = _get_cell_layer(cells=d.cells, cells_layer=cells_layer)
+                n_cells += len(celldata.matrix)
+
+        return n_cells
+
     def load_all(self,
                  skip: Optional[str] = None,
                  ):
@@ -471,17 +484,28 @@ class InSituExperiment:
         for xd in tqdm(self._data):
             xd.load_transcripts()
 
-    def make_obs_names_unique(self,
-                              cells_layer: Optional[str],
-                              force: bool = False):
+    # def make_obs_names_unique(self,
+    #                           cells_layer: Optional[str],
+    #                           force: bool = False):
 
-        if not _all_obs_names_unique(exp=self, cells_layer=cells_layer) or force:
-            print(f"Make `obs_names` unique.")
-            for meta, data in self.iterdata():
-                celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
-                celldata.matrix.obs_names = f'{meta["uid"]}-' + celldata.matrix.obs_names
-        else:
-            print(f"The `obs_names` in samples within the InSituExperiment are already unique. Skipped execution. To force the execution set `force=True`.")
+    #     if not _all_obs_names_unique(exp=self, cells_layer=cells_layer) or force:
+    #         print(f"Make `obs_names` unique.")
+    #         for meta, data in self.iterdata():
+    #             celldata = _get_cell_layer(cells=data.cells, cells_layer=cells_layer)
+
+    #             # generate new, unique names
+    #             new_names = f'{meta["uid"]}-' + celldata.matrix.obs_names
+    #             new_names = new_names.astype(str)
+    #             return new_names
+
+    #             if not len(new_names) == len(np.unique(new_names)):
+    #                 raise ValueError("New names are not unique.")
+
+    #             # add new names to matrix and boundaries
+    #             celldata.matrix.obs_names = new_names
+    #             celldata.boundaries._cell_names = da.from_array(new_names.astype(str))
+    #     else:
+    #         print(f"The `obs_names` in samples within the InSituExperiment are already unique. Skipped execution. To force the execution set `force=True`.")
 
     def plot_umaps(self,
                    cells_layer: Optional[str] = None,
