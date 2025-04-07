@@ -174,6 +174,7 @@ def get_nrows_maxcols(n_keys, max_cols):
     return n_keys, n_rows, max_cols
 
 def remove_empty_subplots(axes, nplots, nrows, ncols):
+    assert len(axes.shape) == 1, "Axis object must have only one dimension."
     if nplots > 1:
         # check if there are empty plots remaining
         i = nplots
