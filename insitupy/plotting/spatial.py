@@ -10,9 +10,11 @@ from matplotlib import colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from insitupy._core._utils import _get_cell_layer
+from insitupy._core.insitudata import InSituData
+from insitupy._core.insituexperiment import InSituExperiment
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting._colors import create_cmap_mapping, get_crange
-from insitupy.plotting._objects import _ExpressionData, _ImageData
+from insitupy.plotting._objects import _ConfigSpatialPlot, _ImageData
 from insitupy.utils._adata import _extract_groups
 from insitupy.utils.utils import convert_to_list, remove_empty_subplots
 
@@ -43,8 +45,7 @@ class MultiSpatialPlot:
                  dpi_display: int = 80,
                  obsm_key: str = 'spatial',
                  origin_zero: bool = True,
-                 plot_pixel: bool = False,
-                 spot_size_unit: float = 50,
+                 spot_size: float = 10,
                  margin: bool = True,
                  spot_type: str = 'o',
                  cmap: str = 'viridis',
@@ -56,6 +57,7 @@ class MultiSpatialPlot:
 
                  # image stuff
                  image_key: Optional[str] = None,
+                 image_pyramid_level: int = 3,
                  histogram_setting: Optional[Tuple[int, int]] = None,
                  lowres: bool = True,
 
@@ -69,10 +71,12 @@ class MultiSpatialPlot:
                  prefix_groups: str = '',
                  groupheader_fontsize: int = 20
                  ):
+        assert isinstance(data, InSituExperiment) or isinstance(data, InSituData), "`data` must be either InSituData or InSituExperiment."
 
         #self.adata = adata
         self.data = data
         self.keys = keys
+        self.cells_layer = cells_layer
         self.data_ids = data_ids
         # self.groupby = groupby
         # self.groups = groups
@@ -91,8 +95,7 @@ class MultiSpatialPlot:
         self.dpi_display = dpi_display
         self.obsm_key = obsm_key
         self.origin_zero = origin_zero,
-        self.plot_pixel = plot_pixel
-        self.spot_size_unit = spot_size_unit
+        self.spot_size = spot_size
         self.margin = margin
         self.spot_type = spot_type
         self.cmap = cmap
@@ -108,6 +111,7 @@ class MultiSpatialPlot:
 
         # image stuff
         self.image_key = image_key
+        self.image_pyramid_level = image_pyramid_level
         self.histogram_setting = histogram_setting
         self.lowres = lowres
 
@@ -183,21 +187,22 @@ class MultiSpatialPlot:
         #     if len(self.groups) > 1:
         #         self.multigroups = True
 
-        # determine the color range for each key
-        self.crange_per_key_dict = {
-            key: get_crange(
-                self.adata,
-                #self.groupby, self.groups,
-                key=key,
-                use_raw=self.raw, layer=self.layer,
-                ctype=self.crange_type
-                ) if key not in self.normalize_crange_not_for else None for key in self.keys
-            }
+        # # determine the color range for each key
+        # self.crange_per_key_dict = {
+        #     key: get_crange(
+        #         self.adata,
+        #         #self.groupby, self.groups,
+        #         key=key,
+        #         use_raw=self.raw, layer=self.layer,
+        #         ctype=self.crange_type
+        #         ) if key not in self.normalize_crange_not_for else None for key in self.keys
+        #     }
+
 
     def setup_subplots(self):
         if self.multigroups:
             if self.multikeys:
-                n_rows = len(self.n_data)
+                n_rows = self.n_data
                 self.max_cols = len(self.keys)
                 n_plots = n_rows * self.max_cols
                 self.fig, self.axs = plt.subplots(n_rows, self.max_cols,
@@ -206,7 +211,7 @@ class MultiSpatialPlot:
                 self.fig.tight_layout() # helps to equalize size of subplots. Without the subplots change parameters during plotting which results in differently sized spots.
 
             else:
-                n_plots = len(self.n_data)
+                n_plots = self.n_data
                 if n_plots > self.max_cols:
                     n_rows = math.ceil(n_plots / self.max_cols)
                 else:
@@ -243,7 +248,7 @@ class MultiSpatialPlot:
                     self.max_cols = n_plots
 
             self.fig, self.axs = plt.subplots(n_rows, self.max_cols,
-                                              figsize=(7.6 * self.max_cols, 6 * n_rows),
+                                              figsize=(8 * self.max_cols, 6 * n_rows),
                                               dpi=self.dpi_display)
 
             if n_plots > 1:
@@ -272,9 +277,18 @@ class MultiSpatialPlot:
             # get image data for this group
 
             # extract the InSituData
-            xd = self.data.data[idx]
-            celldata = _get_cell_layer(cells=d.cells, cells_layer=cells_layer)
+            try:
+                xd = self.data.data[idx]
+            except AttributeError:
+                xd = self.data
+            celldata = _get_cell_layer(cells=xd.cells, cells_layer=self.cells_layer)
             ad = celldata.matrix
+            name = xd.sample_id
+
+            if self.image_key is not None:
+                imagedata = xd.images
+            else:
+                imagedata = None
             # ImgD = _ImageData(
             #         adata=ad,
             #         image_key=self.image_key,
@@ -285,11 +299,14 @@ class MultiSpatialPlot:
 
             for col, key in enumerate(self.keys):
                 # create color dictionary if key is categorical
-                color_dict = create_cmap_mapping(data=ad.obs[key])
+
                 #color_dict = create_color_dict(ad, key, self.palette)
 
                 if self.crange is None:
-                    _crange = self.crange_per_key_dict[key]
+                    if key not in self.normalize_crange_not_for:
+                        _crange = get_crange(ad, key=key, use_raw=self.raw, layer=self.layer, ctype=self.crange_type)
+                    else:
+                        _crange = None
                 else:
                     _crange = self.crange
 
@@ -311,32 +328,33 @@ class MultiSpatialPlot:
                 i+=1
 
                 # get data
-                ExpD = _ExpressionData(
+                ConfigData = _ConfigSpatialPlot(
                     adata=ad,
                     key=key,
-                    ImageDataObject=ImgD,
+                    ImageDataObject=imagedata,
+                    image_key=self.image_key,
+                    image_pyramid_level=self.image_pyramid_level,
                     raw=self.raw,
                     layer=self.layer,
                     obsm_key=self.obsm_key,
                     origin_zero=self.origin_zero,
-                    plot_pixel=self.plot_pixel,
                     xlim=self.xlim,
                     ylim=self.ylim,
-                    spot_size_unit=self.spot_size_unit,
+                    spot_size=self.spot_size,
                     margin=self.margin
                 )
 
-                if ExpD.exists:
+                if ConfigData.exists:
                     # set axis
-                    ax.set_xlim(ExpD.xlim[0], ExpD.xlim[1])
-                    ax.set_ylim(ExpD.ylim[0], ExpD.ylim[1])
+                    ax.set_xlim(ConfigData.xlim[0], ConfigData.xlim[1])
+                    ax.set_ylim(ConfigData.ylim[0], ConfigData.ylim[1])
 
-                    if ImgD.image_metadata is None or self.plot_pixel:
-                        ax.set_xlabel('pixels', fontsize=14)
-                        ax.set_ylabel('pixels', fontsize=14)
-                    else:
-                        ax.set_xlabel('µm', fontsize=14)
-                        ax.set_ylabel('µm', fontsize=14)
+                    # if imagedata.image_metadata is None or self.plot_pixel:
+                    #     ax.set_xlabel('pixels', fontsize=14)
+                    #     ax.set_ylabel('pixels', fontsize=14)
+                    # else:
+                    ax.set_xlabel('µm', fontsize=14)
+                    ax.set_ylabel('µm', fontsize=14)
 
                     ax.invert_yaxis()
                     ax.grid(False)
@@ -345,34 +363,31 @@ class MultiSpatialPlot:
                     ax.tick_params(labelsize=12)
 
                     if self.multigroups and not self.multikeys:
-                        ax.set_title(group + "\n" + ExpD.key, fontsize=20, fontweight='bold')
+                        ax.set_title(name + "\n" + ConfigData.key, fontsize=14, fontweight='bold', rotation=90)
                     else:
                         # set titles
-                        ax.set_title(ExpD.key, fontsize=20, fontweight='bold')
+                        ax.set_title(ConfigData.key, fontsize=14, fontweight='bold')
 
                         if col == 0:
-                            ax.annotate(group,
+                            ax.annotate(name,
                                         xy=(0, 0.5), xytext=(-ax.yaxis.labelpad - 5, 0),
                                         xycoords=ax.yaxis.label, textcoords='offset points',
-                                        size=20,
+                                        size=14, rotation=90,
                                         ha='right', va='center', weight='bold')
 
-                    # calculate marker size
-                    pixels_per_unit = ax.transData.transform(
-                        [(0, 1), (1, 0)]) - ax.transData.transform((0, 0))
-                    # x_ppu = pixels_per_unit[1, 0]
-                    y_ppu = pixels_per_unit[0, 1]
-                    pxs = y_ppu * self.spot_size_unit
-                    size = (72. / self.fig.dpi * pxs)**2
-
-                    if color_dict is None:
+                    if ConfigData.categorical:
+                        color_dict = create_cmap_mapping(data=ad.obs[key])
+                    else:
                         color_dict = self.palette
+
+                    # if color_dict is None:
+                    #     color_dict = self.palette
 
                     # plot single spatial plot in given axis
                     self.single_spatial(
-                        ExpData=ExpD,
-                        ImgData=ImgD,
-                        size=size,
+                        ConfigData=ConfigData,
+                        #ImgData=imagedata,
+                        #size=size,
                         axis=ax,
                         color_dict=color_dict,
                         crange=_crange
@@ -382,66 +397,109 @@ class MultiSpatialPlot:
                     ax.set_axis_off()
 
                 # free RAM
-                del ExpD
+                del ConfigData
                 gc.collect()
 
             # free RAM
-            del ImgD
+            del imagedata
             gc.collect()
 
     def single_spatial(
         self,
-        ExpData: Type[_ExpressionData],
-        ImgData: Type[_ImageData],
-        size: float,
+        ConfigData: Type[_ConfigSpatialPlot],
+        #ImgData: Type[_ImageData],
+        #size: float,
         axis: plt.Axes,
         color_dict: Dict,
         crange: Optional[Tuple[float, float]]
         ):
 
-        if self.plot_pixel:
-            # plot image data
-            if ImgData.image is not None:
-                axis.imshow(ImgData.image, origin='upper', cmap='gray')
+        # calculate marker size
+        pixels_per_unit = axis.transData.transform(
+            [(0, 1), (1, 0)]) - axis.transData.transform((0, 0))
+        # x_ppu = pixels_per_unit[1, 0]
+        y_ppu = pixels_per_unit[0, 1]
+        pxs = y_ppu * ConfigData.spot_size
+        size = (72. / self.fig.dpi * pxs)**2
 
-            # plot transcriptomic data
+        # if self.plot_pixel:
+        #     # plot image data
+        #     if ConfigData.image is not None:
+        #         axis.imshow(ConfigData.image, origin='upper', cmap='gray')
+
+        #     # plot transcriptomic data
+        #     s = axis.scatter(
+        #         ConfigData.x_pixelcoord * ImgData.scale_factor,
+        #         ConfigData.y_pixelcoord * ImgData.scale_factor,
+        #         c=ConfigData.color, marker=self.spot_type,
+        #         s=ConfigData.spot_size, alpha=self.alpha,
+        #         linewidths=0,
+        #         cmap=self.cmap
+        #         )
+        # else:
+        # plot image data
+        if ConfigData.image is not None:
+            axis.imshow(
+                ConfigData.image,
+                extent=(
+                    -0.5 - ConfigData.x_offset,
+                    ConfigData.image.shape[1] * ConfigData.pixel_size - 0.5 - ConfigData.x_offset,
+                    ConfigData.image.shape[0] * ConfigData.pixel_size - 0.5 - ConfigData.y_offset,
+                    # ConfigData.image.shape[1] / ConfigData.pixel_per_um / ConfigData.scale_factor - 0.5 - ConfigData.x_offset,
+                    # ConfigData.image.shape[0] / ConfigData.pixel_per_um / ConfigData.scale_factor - 0.5 - ConfigData.y_offset,
+                    -0.5 - ConfigData.y_offset
+                    ),
+                origin='upper', cmap='gray')
+        # plot transcriptomic data
+        if not ConfigData.categorical:
             s = axis.scatter(
-                ExpData.x_pixelcoord * ImgData.scale_factor,
-                ExpData.y_pixelcoord * ImgData.scale_factor,
-                c=ExpData.color, marker=self.spot_type,
-                s=size, alpha=self.alpha,
+                ConfigData.x_coords, ConfigData.y_coords, c=ConfigData.color,
+                marker=self.spot_type,
+                #s=ConfigData.spot_size,
+                s=size,
+                alpha=self.alpha,
                 linewidths=0,
-                cmap=self.cmap
+                cmap=self.cmap,
+                norm=self.normalize
                 )
         else:
-            # plot image data
-            if ImgData.image is not None:
-                axis.imshow(ImgData.image,
-                            extent=(
-                                -0.5 - ExpData.x_offset,
-                                ImgData.image.shape[1] / ImgData.pixel_per_um / ImgData.scale_factor - 0.5 - ExpData.x_offset,
-                                ImgData.image.shape[0] / ImgData.pixel_per_um / ImgData.scale_factor - 0.5 - ExpData.y_offset,
-                                -0.5 - ExpData.y_offset
-                                ),
-                            origin='upper', cmap='gray')
-            # plot transcriptomic data
-            if not ExpData.categorical:
-                s = axis.scatter(ExpData.x_coord, ExpData.y_coord, c=ExpData.color, marker=self.spot_type,
-                            s=size, alpha=self.alpha,
-                            linewidths=0,
-                            cmap=self.cmap, norm=self.normalize)
-            else:
-                sns.scatterplot(x='x_coord', y='y_coord', data=ExpData.data,
-                                hue=ExpData.key, marker=self.spot_type, s=size,
-                                #edgecolor="none",
-                                linewidth=0,
-                                palette=color_dict, alpha=self.alpha,
-                                ax=axis,
-                                )
-
+            sns.scatterplot(
+                data=ConfigData.data,
+                x='x_coord', y='y_coord',
+                hue=ConfigData.key,
+                marker=self.spot_type,
+                #s=ConfigData.spot_size,
+                s=size,
+                #edgecolor="none",
+                linewidth=0,
+                palette=color_dict, alpha=self.alpha,
+                ax=axis
+                )
         # plot legend
-        if ExpData.categorical:
-            axis.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=1)
+        if ConfigData.categorical:
+            # divide axis to fit legend
+            divider = make_axes_locatable(axis)
+            lax = divider.append_axes("right", size="4%", pad=0)
+
+            # Get handles and labels from the axis
+            handles, labels = axis.get_legend_handles_labels()
+
+            # Create a legend manually
+            legend = lax.legend(handles, labels, loc='center left', ncol=2, frameon=False)
+
+            # Remove the axis ticks and labels
+            lax.set_xticks([])
+            lax.set_yticks([])
+            lax.axis('off')
+
+            # Adjust the size of the legend markers
+            for handle in legend.legend_handles:
+                handle.set_markersize(12)  # Adjust the size as needed
+                handle.set_markeredgecolor('black')  # Set the edge color to black
+                handle.set_markeredgewidth(1.5)  # Set the edge width
+
+            # Remove the legend from the main axis
+            axis.legend().remove()
         else:
             if self.colorbar:
                 # divide axis to fit colorbar
@@ -454,12 +512,43 @@ class MultiSpatialPlot:
 
                 if self.clb_title is not None:
                     clb.ax.set_ylabel(self.clb_title,
-                                      rotation=270,
-                                      fontdict={"fontsize": 14},
-                                      labelpad=20)
+                                    rotation=270,
+                                    fontdict={"fontsize": 14},
+                                    labelpad=20)
 
                 if crange is not None:
-                        clb.mappable.set_clim(crange[0], crange[1])
+                    clb.mappable.set_clim(crange[0], crange[1])
                 else:
                     if self.crange_type == 'percentile':
-                        clb.mappable.set_clim(0, np.percentile(ExpData.color, 99))
+                        clb.mappable.set_clim(0, np.percentile(ConfigData.color, 99))
+        # # plot legend
+        # if ConfigData.categorical:
+        #     legend = axis.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=2)
+
+        #     # Adjust the size of the legend markers
+        #     for handle in legend.legend_handles:
+        #         handle.set_markersize(12)  # Adjust the size as needed
+        #         handle.set_markeredgecolor('black')  # Set the edge color to black
+        #         handle.set_markeredgewidth(1.5)  # Set the edge width
+        # else:
+        #     if self.colorbar:
+        #         # divide axis to fit colorbar
+        #         divider = make_axes_locatable(axis)
+        #         cax = divider.append_axes("right", size="4%", pad=0.1)
+        #         clb = self.fig.colorbar(s, cax=cax)
+
+        #         # set colorbar
+        #         clb.ax.tick_params(labelsize=14)
+
+        #         if self.clb_title is not None:
+        #             clb.ax.set_ylabel(self.clb_title,
+        #                               rotation=270,
+        #                               fontdict={"fontsize": 14},
+        #                               labelpad=20)
+
+        #         if crange is not None:
+        #                 clb.mappable.set_clim(crange[0], crange[1])
+        #         else:
+        #             if self.crange_type == 'percentile':
+        #                 clb.mappable.set_clim(0, np.percentile(ConfigData.color, 99))
+

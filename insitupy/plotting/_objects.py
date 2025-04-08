@@ -196,7 +196,7 @@ class _ImageData:
         else:
             print("No key `spatial` in adata.uns. Therefore pixel_per_um scalefactor could not be found. Plotted pixel coordinates instead.")
 
-class _ExpressionData:
+class _ConfigSpatialPlot:
     '''
     Object extracting spatial coordinates and expression data from anndata object.
     '''
@@ -204,16 +204,17 @@ class _ExpressionData:
         self,
         adata: AnnData,
         key: List[str],
-        ImageDataObject: Type[_ImageData],
+        ImageDataObject: Optional[Type[_ImageData]],
+        image_key: Optional[str] = None,
+        image_pyramid_level: int = 3,
         raw: bool = False,
         layer: Optional[str] = None,
         obsm_key: str = 'spatial',
         origin_zero: bool = True, # whether to start axes ticks at 0
-        plot_pixel: bool = False,
         xlim: Optional[Tuple[int, int]] = None,
         ylim: Optional[Tuple[int, int]] = None,
-        spot_size_unit: float = 50, # whether to leave margin of one spot width around the plot
-        margin: bool = True
+        spot_size: float = 10,
+        margin: bool = True # whether to leave margin of one spot width around the plot
         ):
 
         # add arguments to object
@@ -222,64 +223,76 @@ class _ExpressionData:
         self.layer = layer
         self.xlim = xlim
         self.ylim = ylim
+        self.spot_size = spot_size
 
         ## Extract coordinates
-        # extract parameters from ImageDataObject
-        pixel_per_um = ImageDataObject.pixel_per_um
-        scale_factor = ImageDataObject.scale_factor
+        if ImageDataObject is not None:
+            # extract parameters from ImageDataObject
+            self.pixel_size = ImageDataObject.metadata[image_key]["pixel_size"] * (2**image_pyramid_level)
+            #pixel_per_um = 1 / pixel_size
+            #pixel_per_um = ImageDataObject.pixel_per_um
+            #scale_factor = 1
+            # scale_factor = ImageDataObject.scale_factor
+            self.image = ImageDataObject[image_key][image_pyramid_level]
+        else:
+            self.image = None
 
         # extract x and y pixel coordinates and convert to micrometer
-        self.x_pixelcoord = adata.obsm[obsm_key][:, 0].copy()
-        self.y_pixelcoord = adata.obsm[obsm_key][:, 1].copy()
-        self.x_coord = self.x_pixelcoord / pixel_per_um
-        self.y_coord = self.y_pixelcoord / pixel_per_um
+        self.x_coords = adata.obsm[obsm_key][:, 0].copy()
+        self.y_coords = adata.obsm[obsm_key][:, 1].copy()
+        # self.x_pixelcoord = adata.obsm[obsm_key][:, 0].copy()
+        # self.y_pixelcoord = adata.obsm[obsm_key][:, 1].copy()
+        # self.x_coord = self.x_pixelcoord / pixel_per_um
+        # self.y_coord = self.y_pixelcoord / pixel_per_um
 
         # shift coordinates that they start at (0,0)
         if origin_zero:
-            self.x_offset = self.x_coord.min()
-            self.y_offset = self.y_coord.min()
-            self.x_coord -= self.x_offset
-            self.y_coord -= self.y_offset
+            self.x_offset = self.x_coords.min()
+            self.y_offset = self.y_coords.min()
+            self.x_coords -= self.x_offset
+            self.y_coords -= self.y_offset
         else:
             self.x_offset = self.y_offset = 0
 
         if self.xlim is None:
-            if plot_pixel:
-                xmin = self.x_pixelcoord.min() * scale_factor
-                xmax = self.x_pixelcoord.max() * scale_factor
-            else:
-                xmin = np.min([self.x_coord.min(), self.y_coord.min()]) # make sure that result is always a square
-                xmax = np.max([self.x_coord.max(), self.y_coord.max()])
+            # if plot_pixel:
+            #     xmin = self.x_pixelcoord.min() * scale_factor
+            #     xmax = self.x_pixelcoord.max() * scale_factor
+            # else:
+            xmin = np.min([self.x_coords.min(), self.y_coords.min()]) # make sure that result is always a square
+            xmax = np.max([self.x_coords.max(), self.y_coords.max()])
 
-            self.xlim = (xmin - spot_size_unit, xmax + spot_size_unit)
+            self.xlim = (xmin - spot_size, xmax + spot_size)
         elif margin:
-            self.xlim[0] -= spot_size_unit
-            self.xlim[1] += spot_size_unit
+            self.xlim[0] -= spot_size
+            self.xlim[1] += spot_size
 
         if self.ylim is None:
-            if plot_pixel:
-                ymin = self.y_pixelcoord.min() * scale_factor
-                ymax = self.y_pixelcoord.max() * scale_factor
-            else:
+            # if plot_pixel:
+            #     ymin = self.y_pixelcoord.min() * scale_factor
+            #     ymax = self.y_pixelcoord.max() * scale_factor
+            # else:
                 # ymin = y_coord.min()
                 # ymax = y_coord.max()
-                ymin = np.min([self.x_coord.min(), self.y_coord.min()])
-                ymax = np.max([self.x_coord.max(), self.y_coord.max()])
+            ymin = np.min([self.x_coords.min(), self.y_coords.min()])
+            ymax = np.max([self.x_coords.max(), self.y_coords.max()])
 
-            self.ylim = (ymin - spot_size_unit, ymax + spot_size_unit)
+            self.ylim = (ymin - spot_size, ymax + spot_size)
         elif margin:
-            self.ylim[0] -= spot_size_unit
-            self.ylim[1] += spot_size_unit
+            self.ylim[0] -= spot_size
+            self.ylim[1] += spot_size
 
         ## Extract expression data
         # check if plotting raw data
-        adata_X, adata_var, adata_var_names = check_raw(adata,
-                                                        use_raw=self.raw,
-                                                        layer=self.layer)
+        adata_X, adata_var, adata_var_names = check_raw(
+            adata,
+            use_raw=self.raw,
+            layer=self.layer
+            )
 
         self.data = adata.obs.copy()
-        self.data['x_coord'] = self.x_coord
-        self.data['y_coord'] = self.y_coord
+        self.data['x_coord'] = self.x_coords
+        self.data['y_coord'] = self.y_coords
 
         # locate gene in matrix and extract values
         if key in adata_var_names:
