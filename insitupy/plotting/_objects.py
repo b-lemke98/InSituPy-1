@@ -214,25 +214,21 @@ class _ConfigSpatialPlot:
         xlim: Optional[Tuple[int, int]] = None,
         ylim: Optional[Tuple[int, int]] = None,
         spot_size: float = 10,
-        margin: bool = True # whether to leave margin of one spot width around the plot
+        margin: bool = False # whether to leave margin of one spot width around the plot
         ):
 
         # add arguments to object
         self.key = key
         self.raw = raw
         self.layer = layer
-        self.xlim = xlim
-        self.ylim = ylim
+        self.xlim = list(xlim)
+        self.ylim = list(ylim)
         self.spot_size = spot_size
 
         ## Extract coordinates
         if ImageDataObject is not None:
             # extract parameters from ImageDataObject
             self.pixel_size = ImageDataObject.metadata[image_key]["pixel_size"] * (2**image_pyramid_level)
-            #pixel_per_um = 1 / pixel_size
-            #pixel_per_um = ImageDataObject.pixel_per_um
-            #scale_factor = 1
-            # scale_factor = ImageDataObject.scale_factor
             self.image = ImageDataObject[image_key][image_pyramid_level]
         else:
             self.image = None
@@ -240,10 +236,6 @@ class _ConfigSpatialPlot:
         # extract x and y pixel coordinates and convert to micrometer
         self.x_coords = adata.obsm[obsm_key][:, 0].copy()
         self.y_coords = adata.obsm[obsm_key][:, 1].copy()
-        # self.x_pixelcoord = adata.obsm[obsm_key][:, 0].copy()
-        # self.y_pixelcoord = adata.obsm[obsm_key][:, 1].copy()
-        # self.x_coord = self.x_pixelcoord / pixel_per_um
-        # self.y_coord = self.y_pixelcoord / pixel_per_um
 
         # shift coordinates that they start at (0,0)
         if origin_zero:
@@ -255,10 +247,6 @@ class _ConfigSpatialPlot:
             self.x_offset = self.y_offset = 0
 
         if self.xlim is None:
-            # if plot_pixel:
-            #     xmin = self.x_pixelcoord.min() * scale_factor
-            #     xmax = self.x_pixelcoord.max() * scale_factor
-            # else:
             xmin = np.min([self.x_coords.min(), self.y_coords.min()]) # make sure that result is always a square
             xmax = np.max([self.x_coords.max(), self.y_coords.max()])
 
@@ -268,12 +256,6 @@ class _ConfigSpatialPlot:
             self.xlim[1] += spot_size
 
         if self.ylim is None:
-            # if plot_pixel:
-            #     ymin = self.y_pixelcoord.min() * scale_factor
-            #     ymax = self.y_pixelcoord.max() * scale_factor
-            # else:
-                # ymin = y_coord.min()
-                # ymax = y_coord.max()
             ymin = np.min([self.x_coords.min(), self.y_coords.min()])
             ymax = np.max([self.x_coords.max(), self.y_coords.max()])
 

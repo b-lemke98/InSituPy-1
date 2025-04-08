@@ -4,7 +4,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 
-def save_and_show_figure(savepath, fig, save_only=False, show=True, dpi_save=300, background_color=None, tight=True):
+def save_and_show_figure(
+    savepath, fig,
+    save_only=False, show=True, dpi_save=300,
+    background_color=None, tight=True
+    ):
 
     if tight:
         fig.tight_layout()
