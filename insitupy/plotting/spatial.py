@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from anndata import AnnData
 from matplotlib import colors
@@ -13,10 +14,12 @@ from insitupy._core._utils import _get_cell_layer
 from insitupy._core.insitudata import InSituData
 from insitupy._core.insituexperiment import InSituExperiment
 from insitupy.io.plots import save_and_show_figure
-from insitupy.plotting._colors import create_cmap_mapping, get_crange
-from insitupy.plotting._objects import _ConfigSpatialPlot, _ImageData
+from insitupy.plotting._colors import create_cmap_mapping
+from insitupy.plotting._objects import (_ConfigSpatialPlot,
+                                        _extract_color_values)
 from insitupy.utils._adata import _extract_groups
-from insitupy.utils.utils import convert_to_list, remove_empty_subplots
+from insitupy.utils.utils import (convert_to_list, get_nrows_maxcols,
+                                  remove_empty_subplots)
 
 
 class MultiSpatialPlot:
@@ -65,9 +68,10 @@ class MultiSpatialPlot:
                  dpi_save: int = 300,
                  show: bool = True,
 
-                 # less important
+                 # other
                  prefix_groups: str = '',
-                 groupheader_fontsize: int = 20
+                 groupheader_fontsize: int = 20,
+                 verbose: bool = False
                  ):
         assert isinstance(data, InSituExperiment) or isinstance(data, InSituData), "`data` must be either InSituData or InSituExperiment."
 
@@ -111,12 +115,16 @@ class MultiSpatialPlot:
         self.histogram_setting = histogram_setting
         self.lowres = lowres
 
-        # less important
+        # other
         self.prefix_groups = prefix_groups
         self.groupheader_fontsize = groupheader_fontsize
+        self.verbose = verbose
 
         # check arguments
         self.check_arguments()
+
+        # prepare color legends
+        self.prepare_colorlegends()
 
         # plotting
         if self.ax is None:
@@ -138,8 +146,7 @@ class MultiSpatialPlot:
         gc.collect()
 
     def check_arguments(self):
-        #
-
+        print("Check arguments.") if self.verbose else None
         # convert arguments to lists
         self.keys = convert_to_list(self.keys)
 
@@ -170,6 +177,7 @@ class MultiSpatialPlot:
 
 
     def setup_subplots(self):
+        print("Setup subplots.") if self.verbose else None
         if self.multigroups:
             if self.multikeys:
                 self.n_rows = self.n_data
@@ -182,11 +190,12 @@ class MultiSpatialPlot:
 
             else:
                 n_plots = self.n_data
-                if n_plots > self.max_cols:
-                    self.n_rows = math.ceil(n_plots / self.max_cols)
-                else:
-                    self.n_rows = 1
-                    self.max_cols = n_plots
+                n_plots, self.n_rows, self.max_cols = get_nrows_maxcols(n_keys=self.n_data, max_cols=self.max_cols)
+                # if n_plots > self.max_cols:
+                #     self.n_rows = math.ceil(n_plots / self.max_cols)
+                # else:
+                #     self.n_rows = 1
+                #     self.max_cols = n_plots
 
                 self.fig, self.axs = plt.subplots(self.n_rows, self.max_cols,
                                         figsize=(7.6 * self.max_cols, 6 * self.n_rows),
@@ -199,10 +208,10 @@ class MultiSpatialPlot:
                     self.axs = [self.axs]
 
                 remove_empty_subplots(
-                    n_plots=n_plots,
+                    axes=self.axs,
+                    nplots=n_plots,
                     nrows=self.n_rows,
-                    ncols=self.max_cols,
-                    axis=self.axs
+                    ncols=self.max_cols
                     )
 
         else:
@@ -217,9 +226,10 @@ class MultiSpatialPlot:
                     self.n_rows = 1
                     self.max_cols = n_plots
 
-            self.fig, self.axs = plt.subplots(self.n_rows, self.max_cols,
-                                              figsize=(8 * self.max_cols, 6 * self.n_rows),
-                                              dpi=self.dpi_display)
+            self.fig, self.axs = plt.subplots(
+                self.n_rows, self.max_cols,
+                figsize=(8 * self.max_cols, 8 * self.n_rows),
+                dpi=self.dpi_display)
 
             if n_plots > 1:
                 self.axs = self.axs.ravel()
@@ -237,7 +247,46 @@ class MultiSpatialPlot:
         if self.header is not None:
             plt.suptitle(self.header, fontsize=18, x=0.5, y=0.98)
 
+    def prepare_colorlegends(self):
+        print("Prepare color legends.") if self.verbose else None
+        self.cmap_dict = {}
+        self.maxval_dict = {}
+        for key in self.keys:
+            value_list = []
+            categorical_list = []
+            for idx in range(self.n_data):
+                # extract the InSituData
+                try:
+                    xd = self.data.data[idx]
+                except AttributeError:
+                    xd = self.data
+                celldata = _get_cell_layer(cells=xd.cells, cells_layer=self.cells_layer)
+                ad = celldata.matrix
+
+                # extract the data
+                color_values, is_categorical = _extract_color_values(
+                    adata=ad, key=key, raw=self.raw, layer=self.layer
+                )
+
+                if is_categorical:
+                    value_list.append(np.unique(color_values))
+                else:
+                    value_list.append(np.max(color_values))
+
+                categorical_list.append(is_categorical)
+
+            if np.all(categorical_list):
+                # all values are categorical - concatenate all values
+                all_values = np.concat(value_list)
+                self.cmap_dict[key] = create_cmap_mapping(all_values)
+            elif not np.any(categorical_list):
+                # no values are categorical - collect the maximum values
+                self.maxval_dict[key] = np.max(value_list)
+            else:
+                raise ValueError(f"Values found for key {key} showed mixed type (categorical/numeric).")
+
     def plot_to_subplots(self):
+        print("Do plotting.") if self.verbose else None
         i = 0
         for idx in range(self.n_data):
             # extract the InSituData
@@ -259,13 +308,7 @@ class MultiSpatialPlot:
 
                 #color_dict = create_color_dict(ad, key, self.palette)
 
-                if self.crange is None:
-                    if key not in self.normalize_crange_not_for:
-                        _crange = get_crange(ad, key=key, use_raw=self.raw, layer=self.layer, ctype=self.crange_type)
-                    else:
-                        _crange = None
-                else:
-                    _crange = self.crange
+
 
                 # get axis to plot
                 if self.ax is None:
@@ -306,18 +349,12 @@ class MultiSpatialPlot:
                     margin=self.margin
                 )
 
-                if ConfigData.exists:
+                if ConfigData.color_values is not None:
                     # set axis
                     ax.set_xlim(ConfigData.xlim[0], ConfigData.xlim[1])
                     ax.set_ylim(ConfigData.ylim[0], ConfigData.ylim[1])
-
-                    # if imagedata.image_metadata is None or self.plot_pixel:
-                    #     ax.set_xlabel('pixels', fontsize=14)
-                    #     ax.set_ylabel('pixels', fontsize=14)
-                    # else:
                     ax.set_xlabel('µm', fontsize=14)
                     ax.set_ylabel('µm', fontsize=14)
-
                     ax.invert_yaxis()
                     ax.grid(False)
                     ax.set_aspect(1)
@@ -325,10 +362,14 @@ class MultiSpatialPlot:
                     ax.tick_params(labelsize=12)
 
                     if self.multigroups and not self.multikeys:
-                        ax.set_title(name + "\n" + ConfigData.key, fontsize=14, fontweight='bold', rotation=90)
+                        ax.set_title(name + "\n" + ConfigData.key,
+                                     fontsize=14, #fontweight='bold',
+                                     rotation=90)
                     else:
                         # set titles
-                        ax.set_title(ConfigData.key, fontsize=14, fontweight='bold')
+                        ax.set_title(ConfigData.key,
+                                     fontsize=14, #fontweight='bold'
+                                     )
 
                         if col == 0:
                             ax.annotate(name,
@@ -338,18 +379,28 @@ class MultiSpatialPlot:
                                         ha='right', va='center', weight='bold')
 
                     if ConfigData.categorical:
-                        color_dict = create_cmap_mapping(data=ad.obs[key])
+                        #color_dict = create_cmap_mapping(data=ad.obs[key])
+                        color_dict = self.cmap_dict[key]
+                        crange = None
                     else:
-                        color_dict = self.palette
+                        #color_dict = self.palette
+                        color_dict = None
+                        crange = [0, self.maxval_dict[key]]
+
+                    # if self.crange is None:
+                    #     if key not in self.normalize_crange_not_for:
+                    #         _crange = get_crange(ad, key=key, use_raw=self.raw, layer=self.layer, ctype=self.crange_type)
+                    #     else:
+                    #         _crange = None
+                    # else:
+                    #     _crange = self.crange
 
                     # plot single spatial plot in given axis
                     self.single_spatial(
                         ConfigData=ConfigData,
-                        #ImgData=imagedata,
-                        #size=size,
                         axis=ax,
                         color_dict=color_dict,
-                        crange=_crange,
+                        crange=crange,
                         add_legend=add_legend
                         )
                 else:
@@ -397,7 +448,8 @@ class MultiSpatialPlot:
         # plot transcriptomic data
         if not ConfigData.categorical:
             s = axis.scatter(
-                ConfigData.x_coords, ConfigData.y_coords, c=ConfigData.color,
+                ConfigData.x_coords, ConfigData.y_coords,
+                c=ConfigData.color_values,
                 marker=self.spot_type,
                 #s=ConfigData.spot_size,
                 s=size,
@@ -408,22 +460,18 @@ class MultiSpatialPlot:
                 )
         else:
             sns.scatterplot(
-                data=ConfigData.data,
-                x='x_coord', y='y_coord',
-                hue=ConfigData.key,
+                x=ConfigData.x_coords, y=ConfigData.y_coords,
+                hue=ConfigData.color_values,
                 marker=self.spot_type,
-                #s=ConfigData.spot_size,
                 s=size,
-                #edgecolor="none",
                 linewidth=0,
-                palette=color_dict, alpha=self.alpha,
+                palette=color_dict,
+                alpha=self.alpha,
                 ax=axis
                 )
 
         # plot legend
         if ConfigData.categorical:
-
-
             # divide axis to fit legend
             divider = make_axes_locatable(axis)
             lax = divider.append_axes("bottom", size="2%", pad=0)
@@ -434,7 +482,7 @@ class MultiSpatialPlot:
             if add_legend:
                 # Create a legend manually
                 legend = lax.legend(handles, labels, loc='upper center',
-                                    ncol=3, frameon=False,
+                                    ncol=3, frameon=True,
                                     bbox_to_anchor=(0.5, -5) # move legend outside of plot
                                     )
 
@@ -472,4 +520,4 @@ class MultiSpatialPlot:
                 clb.mappable.set_clim(crange[0], crange[1])
             else:
                 if self.crange_type == 'percentile':
-                    clb.mappable.set_clim(0, np.percentile(ConfigData.color, 99))
+                    clb.mappable.set_clim(0, np.percentile(ConfigData.color_values, 99))

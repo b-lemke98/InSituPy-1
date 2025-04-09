@@ -14,7 +14,7 @@ from insitupy._core._checks import check_raw
 from insitupy.palettes import CustomPalettes
 
 
-def create_cmap_mapping(data, cmap: Union[str, ListedColormap] = None):
+def create_cmap_mapping(data, cmap: Optional[Union[str, ListedColormap]] = None):
 
     if cmap is None:
         pal = CustomPalettes()
@@ -178,40 +178,41 @@ def _data_to_rgba(
 
     return rgba_list, mapping, cmap
 
-def get_crange(adata, key, use_raw,
-    layer=None,
-    ctype='minmax', cmin_at_zero=True
-    ):
-    obs = adata.obs
-    adata_X, adata_var, adata_var_names = check_raw(adata, use_raw=use_raw, layer=layer)
+# def get_crange(adata, key, use_raw,
+#     layer=None,
+#     ctype='minmax', cmin_at_zero=True
+#     ):
+#     obs = adata.obs
+#     adata_X, adata_var, adata_var_names = check_raw(adata, use_raw=use_raw, layer=layer)
 
-    if key in adata_var_names:
-        #c = adata_X[[elem in groups for elem in adata.obs[groupby]], adata_var_names == key]
-        c = adata_X[:, adata_var_names == key]
-        if cmin_at_zero:
-            cmin = 0
-        else:
-            cmin = c.min()
+#     if key in adata_var_names:
+#         #c = adata_X[[elem in groups for elem in adata.obs[groupby]], adata_var_names == key]
+#         c = adata_X[:, adata_var_names == key]
+#         if cmin_at_zero:
+#             cmin = 0
+#         else:
+#             cmin = c.min()
 
-        if ctype == 'percentile':
-            cmax = np.percentile(c, 95)
-        else:
-            cmax = c.max()
-        crange = [cmin, cmax]
-    elif key in obs.columns:
-        if obs[key].dtype.name.startswith('float') or obs[key].dtype.name.startswith('int'):
-            #c = obs[key][[elem in groups for elem in obs[groupby]]]
-            c = obs[key]
-            if cmin_at_zero:
-                cmin = 0
-            else:
-                cmin = c.min()
-            cmax = np.percentile(c, 95)
-            crange = [cmin, cmax]
-        else:
-            return
-    else:
-        print("Key not in var_names of adata object. Use raw?")
-        return
+#         if ctype == 'percentile':
+#             cmax = np.percentile(c, 95)
+#         else:
+#             cmax = c.max()
+#         crange = [cmin, cmax]
+#     elif key in obs.columns:
+#         #if obs[key].dtype.name.startswith('float') or obs[key].dtype.name.startswith('int'):
+#         if is_numeric_dtype(obs[key]):
+#             #c = obs[key][[elem in groups for elem in obs[groupby]]]
+#             c = obs[key]
+#             if cmin_at_zero:
+#                 cmin = 0
+#             else:
+#                 cmin = c.min()
+#             cmax = np.percentile(c, 95)
+#             crange = [cmin, cmax]
+#         else:
+#             return None
+#     else:
+#         print(f"Key {key} not in var_names of adata object. Use raw?")
+#         return
 
-    return crange
+#     return crange
