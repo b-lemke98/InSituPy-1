@@ -77,7 +77,7 @@ class MultiSpatialPlot:
 
         #self.adata = adata
         self.data = data
-        self.keys = keys
+        self.keys = convert_to_list(keys)
         self.cells_layer = cells_layer
         self.data_ids = data_ids
         self.raw = raw
@@ -158,7 +158,7 @@ class MultiSpatialPlot:
 
         # set multiplot variables
         self.multikeys = False
-        self.multigroups = False
+        self.multidata = False
         if len(self.keys) > 1:
             self.multikeys = True
 
@@ -169,34 +169,33 @@ class MultiSpatialPlot:
             self.n_data = 1
 
         if self.n_data > 1:
-            self.multigroups = True
+            self.multidata = True
         elif self.n_data == 1:
-            self.multigroups = False
+            self.multidata = False
         else:
             raise ValueError(f"n_data < 1: {self.n_data}")
 
 
     def setup_subplots(self):
         print("Setup subplots.") if self.verbose else None
-        if self.multigroups:
+        self.separate_categorical_legend = False
+        if self.multidata:
             if self.multikeys:
+                # determine the layout of the subplots
                 self.n_rows = self.n_data
                 self.max_cols = len(self.keys)
                 n_plots = self.n_rows * self.max_cols
+
+                # create subplots
                 self.fig, self.axs = plt.subplots(self.n_rows, self.max_cols,
                                                   figsize=(7.6 * self.max_cols, 6 * self.n_rows),
                                                   dpi=self.dpi_display)
                 self.fig.tight_layout() # helps to equalize size of subplots. Without the subplots change parameters during plotting which results in differently sized spots.
-
             else:
-                n_plots = self.n_data
+                self.separate_categorical_legend = True
+                # determine the layout of the subplots
                 n_plots, self.n_rows, self.max_cols = get_nrows_maxcols(n_keys=self.n_data, max_cols=self.max_cols)
-                # if n_plots > self.max_cols:
-                #     self.n_rows = math.ceil(n_plots / self.max_cols)
-                # else:
-                #     self.n_rows = 1
-                #     self.max_cols = n_plots
-
+                n_plots += 1
                 self.fig, self.axs = plt.subplots(self.n_rows, self.max_cols,
                                         figsize=(7.6 * self.max_cols, 6 * self.n_rows),
                                         dpi=self.dpi_display)
@@ -277,7 +276,7 @@ class MultiSpatialPlot:
 
             if np.all(categorical_list):
                 # all values are categorical - concatenate all values
-                all_values = np.concat(value_list)
+                all_values = np.unique(np.concat(value_list))
                 self.cmap_dict[key] = create_cmap_mapping(all_values)
             elif not np.any(categorical_list):
                 # no values are categorical - collect the maximum values
@@ -287,7 +286,7 @@ class MultiSpatialPlot:
 
     def plot_to_subplots(self):
         print("Do plotting.") if self.verbose else None
-        i = 0
+        #i = 0
         for idx in range(self.n_data):
             # extract the InSituData
             try:
@@ -303,34 +302,31 @@ class MultiSpatialPlot:
             else:
                 imagedata = None
 
-            for col, key in enumerate(self.keys):
-                # create color dictionary if key is categorical
-
-                #color_dict = create_color_dict(ad, key, self.palette)
-
-
-
+            for idx_key, key in enumerate(self.keys):
                 # get axis to plot
                 if self.ax is None:
                     if len(self.axs.shape) == 2:
-                        ax = self.axs[idx, col]
+                        ax = self.axs[idx, idx_key]
                         if idx == (self.n_rows - 1):
                             add_legend = True
                         else:
                             add_legend = False
                     elif len(self.axs.shape) == 1:
-                        add_legend = True
                         if self.multikeys:
-                            ax = self.axs[col]
+                            ax = self.axs[idx_key]
+                            add_legend = True
                         else:
-                            ax = self.axs[i]
+                            ax = self.axs[idx]
+                            add_legend = False
+                            # if idx == (self.n_data - 1):
+                            #     separate_categorical_legend = True
                     else:
                         raise ValueError("`len(self.axs.shape)` has wrong shape {}. Requires 1 or 2.".format(len(self.axs.shape)))
                 else:
                     ax = self.ax
 
                 # counter for axis
-                i+=1
+                #i+=1
 
                 # get data
                 ConfigData = _ConfigSpatialPlot(
@@ -361,17 +357,17 @@ class MultiSpatialPlot:
                     ax.set_facecolor(self.background_color)
                     ax.tick_params(labelsize=12)
 
-                    if self.multigroups and not self.multikeys:
+                    if self.multidata and not self.multikeys:
                         ax.set_title(name + "\n" + ConfigData.key,
                                      fontsize=14, #fontweight='bold',
-                                     rotation=90)
+                                     rotation=0)
                     else:
                         # set titles
                         ax.set_title(ConfigData.key,
                                      fontsize=14, #fontweight='bold'
                                      )
 
-                        if col == 0:
+                        if idx_key == 0:
                             ax.annotate(name,
                                         xy=(0, 0.5), xytext=(-ax.yaxis.labelpad - 5, 0),
                                         xycoords=ax.yaxis.label, textcoords='offset points',
@@ -387,21 +383,13 @@ class MultiSpatialPlot:
                         color_dict = None
                         crange = [0, self.maxval_dict[key]]
 
-                    # if self.crange is None:
-                    #     if key not in self.normalize_crange_not_for:
-                    #         _crange = get_crange(ad, key=key, use_raw=self.raw, layer=self.layer, ctype=self.crange_type)
-                    #     else:
-                    #         _crange = None
-                    # else:
-                    #     _crange = self.crange
-
                     # plot single spatial plot in given axis
                     self.single_spatial(
                         ConfigData=ConfigData,
                         axis=ax,
                         color_dict=color_dict,
                         crange=crange,
-                        add_legend=add_legend
+                        add_legend=add_legend,
                         )
                 else:
                     print("Key '{}' not found.".format(key), flush=True)
@@ -415,13 +403,44 @@ class MultiSpatialPlot:
             del imagedata
             gc.collect()
 
+        if self.separate_categorical_legend:
+            if len(self.cmap_dict) == 1:
+                ax = self.axs[-1]
+
+                k = list(self.cmap_dict.keys())[0]
+                color_dict = self.cmap_dict[k]
+
+                # Create legend manually
+                handles = []
+                labels = []
+
+                for label, color in color_dict.items():
+                    handle = plt.Line2D([0], [0], marker='o', color='w',
+                                        markerfacecolor=color, markersize=12,
+                                        markeredgecolor='black', markeredgewidth=1.5)
+                    handles.append(handle)
+                    labels.append(label)
+
+                legend = ax.legend(
+                    handles, labels,
+                    loc='center', ncol=2,
+                    frameon=True,
+                    bbox_to_anchor=(0.5, 0.5)
+                    )
+
+                # Hide the axis
+                ax.axis('off')
+            else:
+                self.axs[-1].set_axis_off()
+
+
     def single_spatial(
         self,
         ConfigData: Type[_ConfigSpatialPlot],
         axis: plt.Axes,
         color_dict: Dict,
         crange: Optional[Tuple[float, float]],
-        add_legend: bool
+        add_legend: bool,
         ):
 
         # calculate marker size
