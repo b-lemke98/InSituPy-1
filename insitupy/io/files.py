@@ -5,7 +5,6 @@ import shutil
 from pathlib import Path
 from typing import Union
 
-from insitupy.io.files import read_json
 from insitupy.utils.utils import nested_dict_numpy_to_list
 
 
@@ -64,7 +63,7 @@ def copy_files_from_folder(
     target_dir,
     filename,
     signature_filename: str = "experiment.xenium"
-):
+    ):
     """
     Copies specified files from subdirectories within a source directory to a target directory,
     renaming them based on metadata found in a signature file.

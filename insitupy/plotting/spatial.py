@@ -14,7 +14,8 @@ from insitupy._core._utils import _get_cell_layer
 from insitupy._core.insitudata import InSituData
 from insitupy._core.insituexperiment import InSituExperiment
 from insitupy.io.plots import save_and_show_figure
-from insitupy.plotting._colors import create_cmap_mapping
+from insitupy.plotting._colors import (_add_colorlegend_to_axis,
+                                       create_cmap_mapping)
 from insitupy.plotting._objects import (_ConfigSpatialPlot,
                                         _extract_color_values)
 from insitupy.utils._adata import _extract_groups
@@ -404,34 +405,16 @@ class MultiSpatialPlot:
             gc.collect()
 
         if self.separate_categorical_legend:
+            # get axis of last subplots for color legend
+            ax = self.axs[-1]
             if len(self.cmap_dict) == 1:
-                ax = self.axs[-1]
-
                 k = list(self.cmap_dict.keys())[0]
                 color_dict = self.cmap_dict[k]
 
-                # Create legend manually
-                handles = []
-                labels = []
+                _add_colorlegend_to_axis(color_dict=color_dict, ax=ax)
 
-                for label, color in color_dict.items():
-                    handle = plt.Line2D([0], [0], marker='o', color='w',
-                                        markerfacecolor=color, markersize=12,
-                                        markeredgecolor='black', markeredgewidth=1.5)
-                    handles.append(handle)
-                    labels.append(label)
-
-                legend = ax.legend(
-                    handles, labels,
-                    loc='center', ncol=2,
-                    frameon=True,
-                    bbox_to_anchor=(0.5, 0.5)
-                    )
-
-                # Hide the axis
-                ax.axis('off')
             else:
-                self.axs[-1].set_axis_off()
+                ax.set_axis_off()
 
 
     def single_spatial(
@@ -465,7 +448,37 @@ class MultiSpatialPlot:
                     ),
                 origin='upper', cmap='gray')
         # plot transcriptomic data
-        if not ConfigData.categorical:
+        if ConfigData.categorical:
+            sns.scatterplot(
+                x=ConfigData.x_coords, y=ConfigData.y_coords,
+                hue=ConfigData.color_values,
+                marker=self.spot_type,
+                s=size,
+                linewidth=0,
+                palette=color_dict,
+                alpha=self.alpha,
+                ax=axis
+                )
+            # add legend
+            # divide axis to fit legend
+            divider = make_axes_locatable(axis)
+            lax = divider.append_axes("bottom", size="2%", pad=0)
+
+            if add_legend:
+                _add_colorlegend_to_axis(
+                    color_dict=color_dict, ax=lax, max_per_row=6,
+                    loc='upper center',
+                    bbox_to_anchor=(0.5, -5)
+                    )
+
+            # Remove the axis ticks and labels
+            lax.set_xticks([])
+            lax.set_yticks([])
+            lax.axis('off')
+
+            # Remove the legend from the main axis
+            axis.legend().remove()
+        else:
             s = axis.scatter(
                 ConfigData.x_coords, ConfigData.y_coords,
                 c=ConfigData.color_values,
@@ -477,54 +490,11 @@ class MultiSpatialPlot:
                 cmap=self.cmap,
                 norm=self.normalize
                 )
-        else:
-            sns.scatterplot(
-                x=ConfigData.x_coords, y=ConfigData.y_coords,
-                hue=ConfigData.color_values,
-                marker=self.spot_type,
-                s=size,
-                linewidth=0,
-                palette=color_dict,
-                alpha=self.alpha,
-                ax=axis
-                )
 
-        # plot legend
-        if ConfigData.categorical:
-            # divide axis to fit legend
-            divider = make_axes_locatable(axis)
-            lax = divider.append_axes("bottom", size="2%", pad=0)
-
-            # Get handles and labels from the axis
-            handles, labels = axis.get_legend_handles_labels()
-
-            if add_legend:
-                # Create a legend manually
-                legend = lax.legend(handles, labels, loc='upper center',
-                                    ncol=3, frameon=True,
-                                    bbox_to_anchor=(0.5, -5) # move legend outside of plot
-                                    )
-
-                # Adjust the size of the legend markers
-                for handle in legend.legend_handles:
-                    handle.set_markersize(12)  # Adjust the size as needed
-                    handle.set_markeredgecolor('black')  # Set the edge color to black
-                    handle.set_markeredgewidth(1.5)  # Set the edge width
-
-            # Remove the axis ticks and labels
-            lax.set_xticks([])
-            lax.set_yticks([])
-            lax.axis('off')
-
-            # Remove the legend from the main axis
-            axis.legend().remove()
-        else:
-                #if self.colorbar:
             # divide axis to fit colorbar
             divider = make_axes_locatable(axis)
             cax = divider.append_axes("right", size="4%", pad=0.1)
 
-            # if add_legend:
             # add colorbar
             clb = self.fig.colorbar(s, cax=cax, orientation='vertical')
             # set colorbar

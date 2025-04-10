@@ -1,3 +1,4 @@
+import math
 from typing import Optional, Union
 
 import matplotlib as mpl
@@ -13,6 +14,36 @@ from insitupy._constants import (DEFAULT_CATEGORICAL_CMAP,
 from insitupy._core._checks import check_raw
 from insitupy.palettes import CustomPalettes
 
+
+def _add_colorlegend_to_axis(
+    color_dict: dict,
+    ax: plt.Axes,
+    max_per_row: int = 10,
+    loc: str = 'center',
+    bbox_to_anchor: tuple = (0.5, 0.5)
+):
+    # Create legend manually
+    handles = []
+    labels = []
+
+    for label, color in color_dict.items():
+        handle = plt.Line2D([0], [0], marker='o', color='w',
+                            markerfacecolor=color, markersize=15,
+                            markeredgecolor='black', markeredgewidth=1.5)
+        handles.append(handle)
+        labels.append(label)
+
+    n_col = math.ceil(len(labels) / max_per_row)
+
+    legend = ax.legend(
+        handles, labels,
+        loc=loc, ncol=n_col,
+        frameon=True,
+        bbox_to_anchor=bbox_to_anchor
+        )
+
+    # Hide the axis
+    ax.set_axis_off()
 
 def create_cmap_mapping(data, cmap: Optional[Union[str, ListedColormap]] = None):
 

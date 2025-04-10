@@ -13,7 +13,7 @@ import insitupy._core._config as _config
 from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
 from insitupy._core._checks import _check_assignment
 from insitupy.io.plots import save_and_show_figure
-from insitupy.plotting._colors import _data_to_rgba
+from insitupy.plotting._colors import _add_colorlegend_to_axis, _data_to_rgba
 from insitupy.utils.utils import get_nrows_maxcols
 
 
@@ -50,13 +50,8 @@ def plot_colorlegend(
             )
         fig.subplots_adjust(bottom=0.5)
 
-        circles = [Line2D([0], [0],
-                            marker='o', color='w', label=label,
-                            markerfacecolor=color, markeredgecolor='k',
-                            markersize=15) for label, color in mapping.items()]
-
-        ax.legend(handles=circles, loc="center", labelspacing=1, borderpad=0.5)
-        ax.set_axis_off()
+        # add color legend to axis
+        _add_colorlegend_to_axis(color_dict=mapping, ax=ax)
 
     else:
         # continuous colorlegend
