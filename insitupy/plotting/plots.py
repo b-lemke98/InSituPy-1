@@ -52,7 +52,8 @@ def plot_colorlegend(
 
         circles = [Line2D([0], [0],
                             marker='o', color='w', label=label,
-                            markerfacecolor=color, markeredgecolor='k', markersize=15) for label, color in mapping.items()]
+                            markerfacecolor=color, markeredgecolor='k',
+                            markersize=15) for label, color in mapping.items()]
 
         ax.legend(handles=circles, loc="center", labelspacing=1, borderpad=0.5)
         ax.set_axis_off()

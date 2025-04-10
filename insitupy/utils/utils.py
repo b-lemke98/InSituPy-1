@@ -7,7 +7,6 @@ from warnings import warn
 
 import dask.dataframe as dd
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from numpy import ndarray
@@ -434,3 +433,5 @@ def _crop_transcripts(
         transcript_df["y_location"] -= miny
 
     return transcript_df
+
+

@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Union
 
+from insitupy.io.files import read_json
 from insitupy.utils.utils import nested_dict_numpy_to_list
 
 
@@ -57,3 +58,53 @@ def check_overwrite_and_remove_if_true(
         else:
             raise FileExistsError(f"The output file already exists at {path}. To overwrite it, please set the `overwrite` parameter to True."
 )
+
+def copy_files_from_folder(
+    source_dir,
+    target_dir,
+    filename,
+    signature_filename: str = "experiment.xenium"
+):
+    """
+    Copies specified files from subdirectories within a source directory to a target directory,
+    renaming them based on metadata found in a signature file.
+
+    Args:
+        source_dir (str): The path to the source directory containing subdirectories.
+        target_dir (str): The path to the target directory where files will be copied.
+        filename (str): The name of the file to be copied from each subdirectory.
+        signature_filename (str, optional): The name of the signature file used to identify
+                                            valid subdirectories and extract metadata. Defaults to "experiment.xenium".
+
+    Raises:
+        FileNotFoundError: If the specified file or signature file does not exist in a subdirectory.
+
+    Example:
+        copy_files_from_folder("/path/to/source", "/path/to/target", "data.txt")
+
+    This function ensures the target directory exists, iterates through all subdirectories in the source directory,
+    checks for the presence of a signature file, and copies the specified file to the target directory with a new name
+    based on metadata from the signature file.
+    """
+    # Ensure the target directory exists
+    target_path = Path(target_dir)
+    target_path.mkdir(parents=True, exist_ok=True)
+
+    # Iterate through all folders in the source directory
+    for folder in Path(source_dir).glob('*'):
+        if folder.is_dir():
+            # check if it is a Xenium output directory
+            xenium_file = folder / signature_filename
+            if xenium_file.exists():
+                print(f"Found Xenium output directory: {folder}")
+                # Check if the specified file exists in the current folder
+                file_path = folder / filename
+
+                # get metadata
+                region_name = read_json(xenium_file)["region_name"]
+                if file_path.exists():
+                    # Copy the file to the target directory
+                    shutil.copy(file_path, target_path / f"{region_name}__{filename}")
+                    print(f"\tCopied {file_path} to {target_path}")
+                else:
+                    print("\tFile not found in directory.")
