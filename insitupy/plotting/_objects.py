@@ -22,6 +22,7 @@ class _ConfigSpatialPlot:
         ImageDataObject: Optional[ImageData],
         image_key: Optional[str] = None,
         image_pyramid_level: int = 3,
+        npixels_per_subplot: int = 200,
         raw: bool = False,
         layer: Optional[str] = None,
         obsm_key: str = 'spatial',
@@ -40,15 +41,7 @@ class _ConfigSpatialPlot:
         self.xlim = list(xlim) if xlim is not None else xlim
         self.ylim = list(ylim) if ylim is not None else ylim
 
-
         ## Extract coordinates
-        if ImageDataObject is not None:
-            # extract parameters from ImageDataObject
-            self.pixel_size = ImageDataObject.metadata[image_key]["pixel_size"] * (2**image_pyramid_level)
-            self.image = ImageDataObject[image_key][image_pyramid_level]
-        else:
-            self.image = None
-
         # extract x and y pixel coordinates and convert to micrometer
         self.x_coords = adata.obsm[obsm_key][:, 0].copy()
         self.y_coords = adata.obsm[obsm_key][:, 1].copy()
@@ -79,6 +72,34 @@ class _ConfigSpatialPlot:
         elif margin:
             self.ylim[0] -= spot_size
             self.ylim[1] += spot_size
+
+        # extract image information
+        if ImageDataObject is not None:
+            # pick the image with the right resolution for plotting
+            max_pixel_size = np.max([self.xlim[1] - self.xlim[0], self.ylim[1] - self.ylim[0]]) / npixels_per_subplot
+            orig_pixel_size = ImageDataObject.metadata[image_key]["pixel_size"]
+            img_pyramid = ImageDataObject[image_key]
+            pixel_sizes_levels = np.array([orig_pixel_size * (2**i) for i in range(len(img_pyramid))])
+
+            try:
+                selected_level = np.where(pixel_sizes_levels <= max_pixel_size)[0][-1].item()
+                selected_pixel_size = pixel_sizes_levels[selected_level].item()
+            except IndexError:
+                selected_level = 0
+                selected_pixel_size = pixel_sizes_levels[selected_level].item()
+
+            # extract parameters from ImageDataObject
+            self.pixel_size = selected_pixel_size
+            self.image = img_pyramid[selected_level]
+        else:
+            self.image = None
+
+        # # crop image
+        # pixel_xlim = [int(elem / selected_pixel_size) for elem in self.xlim]
+        # pixel_ylim = [int(elem / selected_pixel_size) for elem in self.ylim]
+
+        # print(pixel_xlim)
+        # self.image = self.image[pixel_ylim[0]:pixel_ylim[1], pixel_xlim[0]:pixel_xlim[1]]
 
         self.color_values, self.categorical = _extract_color_values(
             adata=adata, key=self.key, raw=raw, layer=layer
