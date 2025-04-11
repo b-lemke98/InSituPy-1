@@ -5,6 +5,7 @@ import gc
 import math
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
+import dask.array as da
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -60,7 +61,7 @@ class MultiSpatialPlot:
                  # image stuff
                  image_key: Optional[str] = None,
                  pixelwidth_per_subplot: int = 200,
-                 histogram_setting: Optional[Tuple[int, int]] = None,
+                 histogram_setting: Optional[Union[Literal["auto"], Tuple[int, int]]] = "auto",
 
                  # saving
                  savepath: Optional[str] = None,
@@ -335,6 +336,7 @@ class MultiSpatialPlot:
                     xlim=self.xlim,
                     ylim=self.ylim,
                     spot_size=self.spot_size,
+                    histogram_setting=self.histogram_setting
                 )
 
                 if ConfigData.color_values is not None:
@@ -425,13 +427,8 @@ class MultiSpatialPlot:
         pxs = y_ppu * ConfigData.spot_size
         size = (72. / self.fig.dpi * pxs)**2
 
-        # plot image data
         if ConfigData.image is not None:
-            if self.histogram_setting is not None:
-                vmin = self.histogram_setting[0]
-                vmax = self.histogram_setting[1]
-            else:
-                vmin = vmax = None
+        # plot image data
 
             # axis.imshow(
             #     ConfigData.image,
@@ -466,7 +463,7 @@ class MultiSpatialPlot:
             axis.imshow(
                 ConfigData.image,
                 extent=extent,
-                origin='upper', cmap='gray', vmin=vmin, vmax=vmax)
+                origin='upper', cmap='gray', vmin=ConfigData.vmin, vmax=ConfigData.vmax)
 
         # plot transcriptomic data
         if ConfigData.categorical:

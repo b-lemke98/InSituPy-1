@@ -29,6 +29,7 @@ class _ConfigSpatialPlot:
         xlim: Optional[Tuple[int, int]] = None,
         ylim: Optional[Tuple[int, int]] = None,
         spot_size: float = 10,
+        histogram_setting: Optional[Union[Literal["auto"], Tuple[int, int]]] = "auto"
         ):
 
         # add arguments to object
@@ -54,18 +55,26 @@ class _ConfigSpatialPlot:
             self.x_offset = self.y_offset = 0
 
         if self.xlim is None:
-            xmin = np.min([self.x_coords.min(), self.y_coords.min()]) # make sure that result is always a square
-            xmax = np.max([self.x_coords.max(), self.y_coords.max()])
+            # xmin = np.min([self.x_coords.min(), self.y_coords.min()]) # make sure that result is always a square
+            # xmax = np.max([self.x_coords.max(), self.y_coords.max()])
+            xmin = self.x_coords.min()
+            xmax = self.x_coords.max()
+            print(xmin)
+            print(xmax)
 
             # include margin
-            self.xlim = (xmin - spot_size, xmax + spot_size)
+            #self.xlim = (xmin - spot_size, xmax + spot_size)
+            self.xlim = (xmin, xmax)
 
         if self.ylim is None:
-            ymin = np.min([self.x_coords.min(), self.y_coords.min()])
-            ymax = np.max([self.x_coords.max(), self.y_coords.max()])
+            # ymin = np.min([self.x_coords.min(), self.y_coords.min()])
+            # ymax = np.max([self.x_coords.max(), self.y_coords.max()])
+            ymin = self.y_coords.min()
+            ymax = self.y_coords.max()
 
             # include margin
-            self.ylim = (ymin - spot_size, ymax + spot_size)
+            #self.ylim = (ymin - spot_size, ymax + spot_size)
+            self.ylim = (ymin, ymax)
 
         # extract image information
         if ImageDataObject is not None:
@@ -86,14 +95,30 @@ class _ConfigSpatialPlot:
             self.pixel_size = selected_pixel_size
             self.image = img_pyramid[selected_level]
 
+            ywidth = self.image.shape[0]
+            xwidth = self.image.shape[1]
+
             # crop image
-            self.pixel_xlim = [int(elem / selected_pixel_size) for elem in self.xlim]
-            self.pixel_ylim = [int(elem / selected_pixel_size) for elem in self.ylim]
+            # self.pixel_xlim = [int(elem / selected_pixel_size) for elem in self.xlim]
+            # self.pixel_ylim = [int(elem / selected_pixel_size) for elem in self.ylim]
+            self.pixel_xlim = [int(elem / selected_pixel_size) if int(elem / selected_pixel_size) <= xwidth else xwidth for elem in self.xlim]
+            self.pixel_ylim = [int(elem / selected_pixel_size) if int(elem / selected_pixel_size) <= ywidth else ywidth for elem in self.ylim]
 
             self.image = self.image[
                 self.pixel_ylim[0]:self.pixel_ylim[1],
                 self.pixel_xlim[0]:self.pixel_xlim[1]
                 ]
+
+            if histogram_setting is None:
+                self.vmin = self.vmax = None
+            elif histogram_setting == "auto":
+                self.vmin = da.percentile(self.image.ravel(), 30).compute().item()
+                self.vmax = da.percentile(self.image.ravel(), 99.5).compute().item()
+            elif isinstance(histogram_setting, tuple):
+                self.vmin = histogram_setting[0]
+                self.vmax = histogram_setting[1]
+            else:
+                raise ValueError(f"Unknown type for histogram_setting: {type(histogram_setting)}")
 
         else:
             self.image = None
