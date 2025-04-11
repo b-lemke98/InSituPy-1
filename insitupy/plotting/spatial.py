@@ -1,3 +1,6 @@
+from __future__ import \
+    annotations  # this prevents circular imports of type hints such as InSituExperiment in this case
+
 import gc
 import math
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
@@ -11,8 +14,6 @@ from matplotlib import colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from insitupy._core._utils import _get_cell_layer
-from insitupy._core.insitudata import InSituData
-from insitupy._core.insituexperiment import InSituExperiment
 from insitupy.io.plots import save_and_show_figure
 from insitupy.plotting._colors import (_add_colorlegend_to_axis,
                                        create_cmap_mapping)
@@ -74,7 +75,6 @@ class MultiSpatialPlot:
                  groupheader_fontsize: int = 20,
                  verbose: bool = False
                  ):
-        assert isinstance(data, InSituExperiment) or isinstance(data, InSituData), "`data` must be either InSituData or InSituExperiment."
 
         #self.adata = adata
         self.data = data
@@ -189,7 +189,7 @@ class MultiSpatialPlot:
 
                 # create subplots
                 self.fig, self.axs = plt.subplots(self.n_rows, self.max_cols,
-                                                  figsize=(7.6 * self.max_cols, 6 * self.n_rows),
+                                                  figsize=(6 * self.max_cols, 6 * self.n_rows),
                                                   dpi=self.dpi_display)
                 self.fig.tight_layout() # helps to equalize size of subplots. Without the subplots change parameters during plotting which results in differently sized spots.
             else:
