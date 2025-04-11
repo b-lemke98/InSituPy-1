@@ -21,16 +21,14 @@ class _ConfigSpatialPlot:
         key: List[str],
         ImageDataObject: Optional[ImageData],
         image_key: Optional[str] = None,
-        image_pyramid_level: int = 3,
-        npixels_per_subplot: int = 200,
+        pixelwidth_per_subplot: int = 200,
         raw: bool = False,
         layer: Optional[str] = None,
         obsm_key: str = 'spatial',
-        origin_zero: bool = True, # whether to start axes ticks at 0
+        origin_zero: bool = False, # whether to start axes ticks at 0
         xlim: Optional[Tuple[int, int]] = None,
         ylim: Optional[Tuple[int, int]] = None,
         spot_size: float = 10,
-        margin: bool = False # whether to leave margin of one spot width around the plot
         ):
 
         # add arguments to object
@@ -59,24 +57,20 @@ class _ConfigSpatialPlot:
             xmin = np.min([self.x_coords.min(), self.y_coords.min()]) # make sure that result is always a square
             xmax = np.max([self.x_coords.max(), self.y_coords.max()])
 
+            # include margin
             self.xlim = (xmin - spot_size, xmax + spot_size)
-        elif margin:
-            self.xlim[0] -= spot_size
-            self.xlim[1] += spot_size
 
         if self.ylim is None:
             ymin = np.min([self.x_coords.min(), self.y_coords.min()])
             ymax = np.max([self.x_coords.max(), self.y_coords.max()])
 
+            # include margin
             self.ylim = (ymin - spot_size, ymax + spot_size)
-        elif margin:
-            self.ylim[0] -= spot_size
-            self.ylim[1] += spot_size
 
         # extract image information
         if ImageDataObject is not None:
             # pick the image with the right resolution for plotting
-            max_pixel_size = np.max([self.xlim[1] - self.xlim[0], self.ylim[1] - self.ylim[0]]) / npixels_per_subplot
+            max_pixel_size = np.max([self.xlim[1] - self.xlim[0], self.ylim[1] - self.ylim[0]]) / pixelwidth_per_subplot
             orig_pixel_size = ImageDataObject.metadata[image_key]["pixel_size"]
             img_pyramid = ImageDataObject[image_key]
             pixel_sizes_levels = np.array([orig_pixel_size * (2**i) for i in range(len(img_pyramid))])
@@ -91,16 +85,21 @@ class _ConfigSpatialPlot:
             # extract parameters from ImageDataObject
             self.pixel_size = selected_pixel_size
             self.image = img_pyramid[selected_level]
+
+            # crop image
+            self.pixel_xlim = [int(elem / selected_pixel_size) for elem in self.xlim]
+            self.pixel_ylim = [int(elem / selected_pixel_size) for elem in self.ylim]
+
+            self.image = self.image[
+                self.pixel_ylim[0]:self.pixel_ylim[1],
+                self.pixel_xlim[0]:self.pixel_xlim[1]
+                ]
+
         else:
             self.image = None
 
-        # # crop image
-        # pixel_xlim = [int(elem / selected_pixel_size) for elem in self.xlim]
-        # pixel_ylim = [int(elem / selected_pixel_size) for elem in self.ylim]
 
-        # print(pixel_xlim)
-        # self.image = self.image[pixel_ylim[0]:pixel_ylim[1], pixel_xlim[0]:pixel_xlim[1]]
-
+        # get color values for expression data or categories
         self.color_values, self.categorical = _extract_color_values(
             adata=adata, key=self.key, raw=raw, layer=layer
         )

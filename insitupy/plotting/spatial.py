@@ -47,9 +47,8 @@ class MultiSpatialPlot:
                  cmap_center: Optional[float] = None,
                  dpi_display: int = 80,
                  obsm_key: str = 'spatial',
-                 origin_zero: bool = True,
+                 origin_zero: bool = False,
                  spot_size: float = 10,
-                 margin: bool = False,
                  spot_type: str = 'o',
                  cmap: str = 'viridis',
                  background_color: str = 'white',
@@ -60,9 +59,8 @@ class MultiSpatialPlot:
 
                  # image stuff
                  image_key: Optional[str] = None,
-                 image_pyramid_level: int = 3,
+                 pixelwidth_per_subplot: int = 200,
                  histogram_setting: Optional[Tuple[int, int]] = None,
-                 lowres: bool = True,
 
                  # saving
                  savepath: Optional[str] = None,
@@ -71,8 +69,6 @@ class MultiSpatialPlot:
                  show: bool = True,
 
                  # other
-                 prefix_groups: str = '',
-                 groupheader_fontsize: int = 20,
                  verbose: bool = False
                  ):
 
@@ -95,9 +91,8 @@ class MultiSpatialPlot:
         self.cmap_center = cmap_center
         self.dpi_display = dpi_display
         self.obsm_key = obsm_key
-        self.origin_zero = origin_zero,
+        self.origin_zero = origin_zero
         self.spot_size = spot_size
-        self.margin = margin
         self.spot_type = spot_type
         self.cmap = cmap
         self.background_color = background_color
@@ -112,13 +107,10 @@ class MultiSpatialPlot:
 
         # image stuff
         self.image_key = image_key
-        self.image_pyramid_level = image_pyramid_level
+        self.pixelwidth_per_subplot = pixelwidth_per_subplot
         self.histogram_setting = histogram_setting
-        self.lowres = lowres
 
         # other
-        self.prefix_groups = prefix_groups
-        self.groupheader_fontsize = groupheader_fontsize
         self.verbose = verbose
 
         # check arguments
@@ -335,7 +327,7 @@ class MultiSpatialPlot:
                     key=key,
                     ImageDataObject=imagedata,
                     image_key=self.image_key,
-                    image_pyramid_level=self.image_pyramid_level,
+                    pixelwidth_per_subplot=self.pixelwidth_per_subplot,
                     raw=self.raw,
                     layer=self.layer,
                     obsm_key=self.obsm_key,
@@ -343,7 +335,6 @@ class MultiSpatialPlot:
                     xlim=self.xlim,
                     ylim=self.ylim,
                     spot_size=self.spot_size,
-                    margin=self.margin
                 )
 
                 if ConfigData.color_values is not None:
@@ -436,17 +427,47 @@ class MultiSpatialPlot:
 
         # plot image data
         if ConfigData.image is not None:
+            if self.histogram_setting is not None:
+                vmin = self.histogram_setting[0]
+                vmax = self.histogram_setting[1]
+            else:
+                vmin = vmax = None
+
+            # axis.imshow(
+            #     ConfigData.image,
+            #     extent=(
+            #         -0.5 - ConfigData.x_offset,
+            #         ConfigData.image.shape[1] * ConfigData.pixel_size - 0.5 - ConfigData.x_offset,
+            #         ConfigData.image.shape[0] * ConfigData.pixel_size - 0.5 - ConfigData.y_offset,
+            #         # ConfigData.image.shape[1] / ConfigData.pixel_per_um / ConfigData.scale_factor - 0.5 - ConfigData.x_offset,
+            #         # ConfigData.image.shape[0] / ConfigData.pixel_per_um / ConfigData.scale_factor - 0.5 - ConfigData.y_offset,
+            #         -0.5 - ConfigData.y_offset
+            #         ),
+            #     origin='upper', cmap='gray', vmin=vmin, vmax=vmax)
+
+            # calculate the extent
+            # the 0.5 is necessary bcause by default the image coordinates start at the center of the first pixel
+            # and -0.5 moves the origin to the edge of the first pixel
+            # extent = (
+            #     -ConfigData.x_offset - 0.5,
+            #     ConfigData.image.shape[1] * ConfigData.pixel_size - ConfigData.x_offset - 0.5,
+            #     ConfigData.image.shape[0] * ConfigData.pixel_size - ConfigData.y_offset - 0.5,
+            #     -ConfigData.y_offset - 0.5
+            #         )
+
+            extent = (
+                #ConfigData.pixel_xlim[0] * ConfigData.pixel_size - 0.5,
+                ConfigData.pixel_xlim[0] * ConfigData.pixel_size - 0.5,
+                ConfigData.pixel_xlim[1] * ConfigData.pixel_size - 0.5,
+                ConfigData.pixel_ylim[1] * ConfigData.pixel_size - 0.5,
+                ConfigData.pixel_ylim[0] * ConfigData.pixel_size - 0.5
+                    )
+
             axis.imshow(
                 ConfigData.image,
-                extent=(
-                    -0.5 - ConfigData.x_offset,
-                    ConfigData.image.shape[1] * ConfigData.pixel_size - 0.5 - ConfigData.x_offset,
-                    ConfigData.image.shape[0] * ConfigData.pixel_size - 0.5 - ConfigData.y_offset,
-                    # ConfigData.image.shape[1] / ConfigData.pixel_per_um / ConfigData.scale_factor - 0.5 - ConfigData.x_offset,
-                    # ConfigData.image.shape[0] / ConfigData.pixel_per_um / ConfigData.scale_factor - 0.5 - ConfigData.y_offset,
-                    -0.5 - ConfigData.y_offset
-                    ),
-                origin='upper', cmap='gray')
+                extent=extent,
+                origin='upper', cmap='gray', vmin=vmin, vmax=vmax)
+
         # plot transcriptomic data
         if ConfigData.categorical:
             sns.scatterplot(
