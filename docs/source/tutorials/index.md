@@ -50,5 +50,6 @@ The tutorial is structured in three main topics:
 preprocessing/index.md
 sample_level/index.md
 multisample_level/index.md
+plotting_demos/index.md
 publication/index.md
 ```

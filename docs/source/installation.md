@@ -1,6 +1,6 @@
-## Installation
+# Installation
 
-### Prerequisites
+## Prerequisites
 
 **Create and activate a conda environment:**
 
@@ -9,13 +9,13 @@
    conda activate insitupy
    ```
 
-### Method 1: From PyPi
+## Method 1: From PyPi
 
    ```bash
    pip install insitupy-spatial
    ```
 
-### Method 2: Installation from Cloned Repository
+## Method 2: Installation from Cloned Repository
 
 1. **Clone the repository to your local machine:**
 
@@ -42,7 +42,7 @@
    pip install -e .
    ```
 
-### Method 3: Direct Installation from GitHub
+## Method 3: Direct Installation from GitHub
 
 1. **Install directly from GitHub:**
 
@@ -54,14 +54,3 @@
 Make sure you have Conda installed on your system before proceeding with these steps. If not, you can install Miniconda or Anaconda from [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html).
 
 To ensure that the InSituPy package is available as a kernel in Jupyter notebooks within your conda environment, you can follow the instructions [here](https://ipython.readthedocs.io/en/stable/install/kernel_install.html).
-
-## Getting started
-
-```{eval-rst}
-.. card:: Tutorials for `InSituPy`
-    :link: tutorials/index
-    :link-type: doc
-
-    Tutorials introducing the concepts behind `InSituPy`.
-
-```
