@@ -48,7 +48,7 @@ These tutorials focus on the preprocessing, analysis and handling of individual 
 ```
 
 ```{toctree}
-:hidden: true
+:hidden: false
 :maxdepth: 1
 :glob:
 

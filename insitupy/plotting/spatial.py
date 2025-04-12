@@ -121,7 +121,7 @@ class MultiSpatialPlot:
                 # determine the layout of the subplots
                 self.n_rows = self.n_data
                 self.max_cols = len(self.keys)
-                n_plots = self.n_rows * self.max_cols
+                self.n_plots = self.n_rows * self.max_cols
 
                 # create subplots
                 self.fig, self.axs = plt.subplots(self.n_rows, self.max_cols,
@@ -131,43 +131,42 @@ class MultiSpatialPlot:
             else:
                 self.separate_categorical_legend = True
                 # determine the layout of the subplots
-                n_plots, self.n_rows, self.max_cols = get_nrows_maxcols(n_keys=self.n_data, max_cols=self.max_cols)
-                n_plots += 1
+                self.n_plots, self.n_rows, self.max_cols = get_nrows_maxcols(n_keys=self.n_data+1, max_cols=self.max_cols)
                 self.fig, self.axs = plt.subplots(self.n_rows, self.max_cols,
                                         figsize=(7.6 * self.max_cols, 6 * self.n_rows),
                                         dpi=self.dpi_display)
                 self.fig.tight_layout() # helps to equalize size of subplots. Without the subplots change parameters during plotting which results in differently sized spots.
 
-                if n_plots > 1:
+                if self.n_plots > 1:
                     self.axs = self.axs.ravel()
                 else:
                     self.axs = [self.axs]
 
                 remove_empty_subplots(
                     axes=self.axs,
-                    nplots=n_plots,
+                    nplots=self.n_plots,
                     nrows=self.n_rows,
                     ncols=self.max_cols
                     )
 
         else:
-            n_plots = len(self.keys)
+            self.n_plots = len(self.keys)
             if self.max_cols is None:
-                self.max_cols = n_plots
+                self.max_cols = self.n_plots
                 self.n_rows = 1
             else:
-                if n_plots > self.max_cols:
-                    self.n_rows = math.ceil(n_plots / self.max_cols)
+                if self.n_plots > self.max_cols:
+                    self.n_rows = math.ceil(self.n_plots / self.max_cols)
                 else:
                     self.n_rows = 1
-                    self.max_cols = n_plots
+                    self.max_cols = self.n_plots
 
             self.fig, self.axs = plt.subplots(
                 self.n_rows, self.max_cols,
                 figsize=(8 * self.max_cols, 8 * self.n_rows),
                 dpi=self.dpi_display)
 
-            if n_plots > 1:
+            if self.n_plots > 1:
                 self.axs = self.axs.ravel()
             else:
                 self.axs = np.array([self.axs])
@@ -175,7 +174,7 @@ class MultiSpatialPlot:
             # remove axes from empty plots
             remove_empty_subplots(
                 axes=self.axs,
-                nplots=n_plots,
+                nplots=self.n_plots,
                 nrows=self.n_rows,
                 ncols=self.max_cols,
                 )
@@ -348,7 +347,7 @@ class MultiSpatialPlot:
 
         if self.separate_categorical_legend:
             # get axis of last subplots for color legend
-            ax = self.axs[-1]
+            ax = self.axs[self.n_plots-1]
             if len(self.cmap_dict) == 1:
                 k = list(self.cmap_dict.keys())[0]
                 color_dict = self.cmap_dict[k]
