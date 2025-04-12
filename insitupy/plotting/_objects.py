@@ -96,12 +96,11 @@ class _ConfigSpatialPlot:
             ywidth = self.image.shape[0]
             xwidth = self.image.shape[1]
 
-            # crop image
-            # self.pixel_xlim = [int(elem / selected_pixel_size) for elem in self.xlim]
-            # self.pixel_ylim = [int(elem / selected_pixel_size) for elem in self.ylim]
-            self.pixel_xlim = [int(elem / selected_pixel_size) if int(elem / selected_pixel_size) <= xwidth else xwidth for elem in self.xlim]
-            self.pixel_ylim = [int(elem / selected_pixel_size) if int(elem / selected_pixel_size) <= ywidth else ywidth for elem in self.ylim]
+            # determine limits for selected pyramid image - clip to maximum image dims (important for extent of image during plotting)
+            self.pixel_xlim = np.clip([int(elem / selected_pixel_size) for elem in self.xlim], a_min=0, a_max=xwidth).tolist()
+            self.pixel_ylim = np.clip([int(elem / selected_pixel_size) for elem in self.ylim], a_min=0, a_max=ywidth).tolist()
 
+            # crop image
             self.image = self.image[
                 self.pixel_ylim[0]:self.pixel_ylim[1],
                 self.pixel_xlim[0]:self.pixel_xlim[1]

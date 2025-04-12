@@ -26,7 +26,7 @@ def save_and_show_figure(
     if save_only:
         plt.close(fig)
     elif show:
-        'heyho'
         plt.show()
     else:
+
         return

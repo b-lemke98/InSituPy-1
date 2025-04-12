@@ -74,74 +74,13 @@ class MultiSpatialPlot:
                  verbose: bool = False
                  ):
 
-        #self.adata = adata
-        self.data = data
-        self.keys = convert_to_list(keys)
-        self.cells_layer = cells_layer
-        self.data_ids = data_ids
-        self.raw = raw
-        self.layer = layer
-        self.fig = fig
-        self.ax = ax
-        self.max_cols = max_cols
-        self.xlim = xlim
-        self.ylim = ylim
-        self.normalize_crange_not_for = normalize_crange_not_for
-        self.crange = crange
-        self.crange_type = crange_type
-        self.palette = palette
-        self.cmap_center = cmap_center
-        self.dpi_display = dpi_display
-        self.obsm_key = obsm_key
-        self.origin_zero = origin_zero
-        self.spot_size = spot_size
-        self.spot_type = spot_type
-        self.cmap = cmap
-        self.background_color = background_color
-        self.alpha = alpha
-        self.colorbar = colorbar
-        self.clb_title = clb_title
-        self.header = header
-        self.name_column = name_column
 
-        # saving
-        self.savepath = savepath
-        self.save_only = save_only
-        self.dpi_save = dpi_save
-        self.show = show
 
-        # image stuff
-        self.image_key = image_key
-        self.pixelwidth_per_subplot = pixelwidth_per_subplot
-        self.histogram_setting = histogram_setting
+        # Assign all kwargs to instance variables
+        for key, value in locals().items():
+            if key != "self":
+                setattr(self, key, value)
 
-        # other
-        self.verbose = verbose
-
-        # check arguments
-        self.check_arguments()
-
-        # prepare color legends
-        self.prepare_colorlegends()
-
-        # plotting
-        if self.ax is None:
-            self.setup_subplots()
-        else:
-            assert self.fig is not None, "If axis for plotting is given, also a figure object needs to be provided via `fig`"
-            assert len(self.keys) == 1, "If single axis is given not more than one key is allowed."
-
-        self.plot_to_subplots()
-
-        save_and_show_figure(
-            savepath=self.savepath,
-            fig=self.fig,
-            save_only=self.save_only,
-            show=self.show,
-            dpi_save=self.dpi_save
-            )
-
-        gc.collect()
 
     def check_arguments(self):
         print("Check arguments.") if self.verbose else None
@@ -438,37 +377,13 @@ class MultiSpatialPlot:
         size = (72. / self.fig.dpi * pxs)**2
 
         if ConfigData.image is not None:
-        # plot image data
-
-            # axis.imshow(
-            #     ConfigData.image,
-            #     extent=(
-            #         -0.5 - ConfigData.x_offset,
-            #         ConfigData.image.shape[1] * ConfigData.pixel_size - 0.5 - ConfigData.x_offset,
-            #         ConfigData.image.shape[0] * ConfigData.pixel_size - 0.5 - ConfigData.y_offset,
-            #         # ConfigData.image.shape[1] / ConfigData.pixel_per_um / ConfigData.scale_factor - 0.5 - ConfigData.x_offset,
-            #         # ConfigData.image.shape[0] / ConfigData.pixel_per_um / ConfigData.scale_factor - 0.5 - ConfigData.y_offset,
-            #         -0.5 - ConfigData.y_offset
-            #         ),
-            #     origin='upper', cmap='gray', vmin=vmin, vmax=vmax)
-
-            # calculate the extent
-            # the 0.5 is necessary bcause by default the image coordinates start at the center of the first pixel
-            # and -0.5 moves the origin to the edge of the first pixel
-            # extent = (
-            #     -ConfigData.x_offset - 0.5,
-            #     ConfigData.image.shape[1] * ConfigData.pixel_size - ConfigData.x_offset - 0.5,
-            #     ConfigData.image.shape[0] * ConfigData.pixel_size - ConfigData.y_offset - 0.5,
-            #     -ConfigData.y_offset - 0.5
-            #         )
-
+            # plot image data
             extent = (
-                #ConfigData.pixel_xlim[0] * ConfigData.pixel_size - 0.5,
                 ConfigData.pixel_xlim[0] * ConfigData.pixel_size - 0.5,
                 ConfigData.pixel_xlim[1] * ConfigData.pixel_size - 0.5,
                 ConfigData.pixel_ylim[1] * ConfigData.pixel_size - 0.5,
                 ConfigData.pixel_ylim[0] * ConfigData.pixel_size - 0.5
-                    )
+                )
 
             axis.imshow(
                 ConfigData.image,
@@ -538,3 +453,76 @@ class MultiSpatialPlot:
             else:
                 if self.crange_type == 'percentile':
                     clb.mappable.set_clim(0, np.percentile(ConfigData.color_values, 99))
+
+def plot_spatial(
+    data,
+    keys: Union[str, List[str]],
+    cells_layer: Optional[str] = None,
+    data_ids: Optional[List[int]] = None,
+    raw: bool = False,
+    layer: Optional[str] = None,
+    fig: plt.figure = None,
+    ax: plt.Axes = None,
+    max_cols: int = 4,
+    xlim: Optional[Tuple[float, float]] = None,
+    ylim: Optional[Tuple[float, float]] = None,
+    normalize_crange_not_for: List = [],
+    crange: Optional[List[int]] = None,
+    crange_type: Literal['minmax', 'percentile'] = 'minmax',
+    palette: str = 'tab10',
+    cmap_center: Optional[float] = None,
+    dpi_display: int = 80,
+    obsm_key: str = 'spatial',
+    origin_zero: bool = False,
+    spot_size: float = 10,
+    spot_type: str = 'o',
+    cmap: str = 'viridis',
+    background_color: str = 'white',
+    alpha: float = 1,
+    colorbar: bool = True,
+    clb_title: Optional[str] = None,
+    header: Optional[str] = None,
+    name_column: str = None,
+
+    # image stuff
+    image_key: Optional[str] = None,
+    pixelwidth_per_subplot: int = 200,
+    histogram_setting: Optional[Union[Literal["auto"], Tuple[int, int]]] = "auto",
+
+    # saving
+    savepath: Optional[str] = None,
+    save_only: bool = False,
+    dpi_save: int = 300,
+    show: bool = True,
+
+    # other
+    verbose: bool = False,
+    ):
+
+    msp = MultiSpatialPlot(**locals())
+
+    # check arguments
+    msp.check_arguments()
+
+    # prepare color legends
+    msp.prepare_colorlegends()
+
+    # plotting
+    if msp.ax is None:
+        msp.setup_subplots()
+    else:
+        assert msp.fig is not None, "If axis for plotting is given, also a figure object needs to be provided via `fig`"
+        assert len(msp.keys) == 1, "If single axis is given not more than one key is allowed."
+
+    msp.plot_to_subplots()
+
+    save_and_show_figure(
+        savepath=msp.savepath,
+        fig=msp.fig,
+        save_only=msp.save_only,
+        show=msp.show,
+        dpi_save=msp.dpi_save
+        )
+
+    gc.collect()
+
