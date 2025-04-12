@@ -57,6 +57,7 @@ class MultiSpatialPlot:
                  colorbar: bool = True,
                  clb_title: Optional[str] = None,
                  header: Optional[str] = None,
+                 name_column: str = None,
 
                  # image stuff
                  image_key: Optional[str] = None,
@@ -101,6 +102,9 @@ class MultiSpatialPlot:
         self.colorbar = colorbar
         self.clb_title = clb_title
         self.header = header
+        self.name_column = name_column
+
+        # saving
         self.savepath = savepath
         self.save_only = save_only
         self.dpi_save = dpi_save
@@ -182,7 +186,7 @@ class MultiSpatialPlot:
 
                 # create subplots
                 self.fig, self.axs = plt.subplots(self.n_rows, self.max_cols,
-                                                  figsize=(6 * self.max_cols, 6 * self.n_rows),
+                                                  figsize=(8 * self.max_cols, 8 * self.n_rows),
                                                   dpi=self.dpi_display)
                 self.fig.tight_layout() # helps to equalize size of subplots. Without the subplots change parameters during plotting which results in differently sized spots.
             else:
@@ -285,11 +289,17 @@ class MultiSpatialPlot:
             # extract the InSituData
             try:
                 xd = self.data.data[idx]
+                meta = self.data.metadata.iloc[idx]
             except AttributeError:
                 xd = self.data
+                meta = None
             celldata = _get_cell_layer(cells=xd.cells, cells_layer=self.cells_layer)
             ad = celldata.matrix
-            name = xd.sample_id
+
+            if self.name_column is None or meta is None:
+                name = xd.sample_id
+            else:
+                name = meta[self.name_column]
 
             if self.image_key is not None:
                 imagedata = xd.images

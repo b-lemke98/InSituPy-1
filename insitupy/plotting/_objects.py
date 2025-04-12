@@ -59,8 +59,6 @@ class _ConfigSpatialPlot:
             # xmax = np.max([self.x_coords.max(), self.y_coords.max()])
             xmin = self.x_coords.min()
             xmax = self.x_coords.max()
-            print(xmin)
-            print(xmax)
 
             # include margin
             #self.xlim = (xmin - spot_size, xmax + spot_size)
