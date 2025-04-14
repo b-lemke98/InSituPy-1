@@ -8,6 +8,12 @@ These tutorials focus on data plotting possibilities in `InSituPy`.
     :link-type: doc
 
     Tutorial showing how to generate spatial plots both on a sample and experiment level.
+
+.. card:: Plotting of color legends
+    :link: plotting_colorlegends
+    :link-type: doc
+
+    Tutorial showing how to plot the color legends from napari viewer for publication.
 ```
 
 ```{toctree}
