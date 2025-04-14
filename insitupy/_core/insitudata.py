@@ -32,6 +32,7 @@ from insitupy.images.utils import _get_contrast_limits
 from insitupy.io.files import read_json, write_dict_to_json
 from insitupy.io.io import (read_baysor_cells, read_baysor_transcripts,
                             read_multicelldata, read_shapesdata)
+from insitupy.plotting.plots import plot_colorlegend
 from insitupy.utils.utils import _crop_transcripts, convert_to_list
 
 from .._constants import CACHE, ISPY_METADATA_FILE, MODALITIES
@@ -66,7 +67,7 @@ class InSituData:
     from ._deprecated import (normalize_and_transform, read_all,
                               read_annotations, read_cells, read_images,
                               read_regions, read_transcripts,
-                              reduce_dimensions)
+                              reduce_dimensions, save_current_colorlegend)
 
     def __init__(self,
                  path: Union[str, os.PathLike, Path] = None,
@@ -1066,23 +1067,43 @@ class InSituData:
             # save to the respective directory
             self.saveas(path=path)
 
-    def save_current_colorlegend(self, savepath):
+    def save_colorlegends(
+        self,
+        savepath: Optional[Union[str, os.PathLike, Path]] = None,
+        from_canvas: bool = False,
+        max_per_row: int = 10
+        ):
 
-        # Check if static_canvas exists
-        if not hasattr(_config, 'static_canvas'):
-            print("Warning: 'static_canvas' attribute not found in config. "
-                "Please display data in the napari viewer using '.show()' first.")
-            return
+        if from_canvas:
+            # Check if static_canvas exists
+            if not hasattr(_config, 'static_canvas'):
+                print("Warning: 'static_canvas' attribute not found in config. "
+                    "Please display data in the napari viewer using '.show()' first.")
+                return
 
-        try:
-            # Save the figure to a PDF file
-            _config.static_canvas.figure.savefig(savepath)
-            print(f"Figure saved as {savepath}")
-        except RuntimeError as e:
-            if 'FigureCanvasQTAgg has been deleted' in str(e):
-                print("Warning: The color legend has been deleted and cannot be saved.")
-            else:
-                raise  # Re-raise the exception if it's a different error
+            try:
+                # Save the figure to a PDF file
+                _config.static_canvas.figure.savefig(savepath)
+                print(f"Figure saved as {savepath}")
+            except RuntimeError as e:
+                if 'FigureCanvasQTAgg has been deleted' in str(e):
+                    print("Warning: The color legend has been deleted and cannot be saved.")
+                else:
+                    raise  # Re-raise the exception if it's a different error
+        else:
+            if not hasattr(self, "viewer"):
+                raise ValueError("No viewer attribute found. Open a napari viewer with `.show()`.")
+
+            selected_layers = self.viewer.layers.selection
+            for layer in selected_layers:
+                if savepath is None:
+                    savepath = Path(f"figures/colorlegend-{layer.name}.pdf")
+                plot_colorlegend(
+                    viewer=self.viewer,
+                    layer_name=layer.name,
+                    max_per_row=max_per_row,
+                    savepath=savepath
+                    )
 
     def _update_to_existing_project(self,
                                     path: Optional[Union[str, os.PathLike, Path]],

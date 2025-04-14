@@ -32,7 +32,8 @@ Contributions are welcome! If you find any issues or have suggestions for new fe
 :maxdepth: 3
 :glob:
 
-usage.md
+installation.md
+getting_started.md
 tutorials/*
 api.md
 ```

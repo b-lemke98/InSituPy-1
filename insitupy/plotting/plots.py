@@ -13,18 +13,19 @@ import insitupy._core._config as _config
 from insitupy._constants import DEFAULT_CATEGORICAL_CMAP
 from insitupy._core._checks import _check_assignment
 from insitupy.io.plots import save_and_show_figure
-from insitupy.plotting._colors import _data_to_rgba
+from insitupy.plotting._colors import (_add_colorlegend_to_axis, _data_to_rgba,
+                                       create_cmap_mapping)
 from insitupy.utils.utils import get_nrows_maxcols
 
 
 def plot_colorlegend(
     viewer: Viewer,
     layer_name: Optional[str] = None,
+    max_per_row: int = 10,
     savepath: Union[str, os.PathLike, Path] = None,
     save_only: bool = False,
     dpi_save: int = 300,
     ):
-    warnings.warn("The function might have issues with colors. Please check the result.", UserWarning)
     # automatically get layer
     if layer_name is None:
         candidate_layers = [l for l in viewer.layers if l.name.startswith(f"{_config.current_data_name}")]
@@ -40,7 +41,7 @@ def plot_colorlegend(
     values = layer.properties["value"]
 
     # create color mapping
-    rgba_list, mapping, cmap = _data_to_rgba(values)
+    rgba_list, mapping, cmap = _data_to_rgba(values, rgba_values=layer.face_color, nan_val=None)
 
     if isinstance(mapping, dict):
         # categorical colorbar
@@ -50,12 +51,8 @@ def plot_colorlegend(
             )
         fig.subplots_adjust(bottom=0.5)
 
-        circles = [Line2D([0], [0],
-                            marker='o', color='w', label=label,
-                            markerfacecolor=color, markeredgecolor='k', markersize=15) for label, color in mapping.items()]
-
-        ax.legend(handles=circles, loc="center", labelspacing=1, borderpad=0.5)
-        ax.set_axis_off()
+        # add color legend to axis
+        _add_colorlegend_to_axis(color_dict=mapping, ax=ax, max_per_row=max_per_row)
 
     else:
         # continuous colorlegend

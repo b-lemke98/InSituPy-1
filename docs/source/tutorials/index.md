@@ -26,6 +26,13 @@ The tutorial is structured in three main topics:
 
     This set of tutorials focuses on the analysis of multiple samples using the `InSituExperiment` class.
 
+.. card:: Plotting
+    :link: plotting_demos/index
+    :link-type: doc
+    :link-alt: Plotting tutorials
+
+    Tutorials introducing different plotting functionalities.
+
 .. card:: Manuscript-related analyses
     :link: publication/index
     :link-type: doc
@@ -43,5 +50,6 @@ The tutorial is structured in three main topics:
 preprocessing/index.md
 sample_level/index.md
 multisample_level/index.md
+plotting_demos/index.md
 publication/index.md
 ```

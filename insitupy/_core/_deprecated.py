@@ -31,3 +31,6 @@ def reduce_dimensions(self, *args, **kwargs):
 
 def plot_overview(self, *args, **kwargs):
     warn("`plot_overview()` is deprecated. Use `insitupy.plotting.plot_overview()` instead.", DeprecationWarning, stacklevel=2)
+
+def save_current_colorlegend(self, *args, **kwargs):
+    warn("`save_current_colorlegend()` is deprecated. Use `.save_colorlegends()` instead.", DeprecationWarning, stacklevel=2)
