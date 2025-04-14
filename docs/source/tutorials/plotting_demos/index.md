@@ -3,7 +3,7 @@
 These tutorials focus on data plotting possibilities in `InSituPy`.
 
 ```{eval-rst}
-.. card:: Spatial plotting
+.. card:: Spatial plotting functionalities
     :link: plotting_demo
     :link-type: doc
 
@@ -19,7 +19,7 @@ These tutorials focus on data plotting possibilities in `InSituPy`.
 ```{toctree}
 :hidden: false
 :maxdepth: 1
-:glob:
 
-*
+plotting_demo
+plotting_colorlegends
 ```
