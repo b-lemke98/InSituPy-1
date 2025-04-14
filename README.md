@@ -54,10 +54,6 @@ For alternative installation strategies see the [documentation](https://insitupy
 
 Contributions are welcome! If you find any issues or have suggestions for new features, please open an [issue](https://github.com/SpatialPathology/InSituPy/issues) or submit a pull request.
 
-## License
-
-InSituPy is licensed under the [BSD-3-Clause](LICENSE).
-
 ## Citation
 
 If you use `InSituPy` in your work, please cite the [preprint](https://www.biorxiv.org/content/10.1101/2025.03.07.641860v1) as follows:
@@ -65,6 +61,9 @@ If you use `InSituPy` in your work, please cite the [preprint](https://www.biorx
 > InSituPy – A Framework for Histology-Guided, Multi-Sample Analysis of Single-Cell Spatial Transcriptomics Data. <br>Wirth, Johannes, Anna Chernysheva, Birthe Lemke, Isabel Giray, Aitana Egea Lavandera, and Katja Steiger.<br>
 bioRxiv, March 12, 2025. https://doi.org/10.1101/2025.03.07.641860.
 
+## License
+
+InSituPy is licensed under the [BSD-3-Clause](LICENSE).
 
 ---
 
