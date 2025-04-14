@@ -393,6 +393,8 @@ class InSituData:
                     else:
                         warn(f'Column "{col_name}" exists already in `{name}.matrix.obs`. Assignment of key "{key}" was skipped. To force assignment, select `overwrite=True`.')
                         add = False
+                else:
+                    add = True
 
                 if add:
                     if add_masks:
