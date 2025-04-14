@@ -14,7 +14,7 @@ def save_and_show_figure(
         fig.tight_layout()
 
     if savepath is not None:
-        print("Saving figure to file " + savepath)
+        print("Saving figure to file " + str(savepath))
 
         # create path if it does not exist
         Path(os.path.dirname(savepath)).mkdir(parents=True, exist_ok=True)

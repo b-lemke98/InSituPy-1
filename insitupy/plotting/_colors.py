@@ -45,11 +45,8 @@ def _add_colorlegend_to_axis(
     # Hide the axis
     ax.set_axis_off()
 
-def create_cmap_mapping(data, cmap: Optional[Union[str, ListedColormap]] = None):
-
-    if cmap is None:
-        pal = CustomPalettes()
-        cmap = pal.tab20_mod
+def _parse_unique_categories(data):
+    # retrieve data
     try:
         unique_categories = data.cat.categories # in case of categorical pandas series
     except AttributeError:
@@ -67,26 +64,48 @@ def create_cmap_mapping(data, cmap: Optional[Union[str, ListedColormap]] = None)
                     # Convert all elements to strings before sorting
                     unique_categories = np.sort(np.unique(data.astype(str)))
 
-    # get colormap if necessary
-    if not isinstance(cmap, ListedColormap):
-        cmap = plt.get_cmap(cmap)
+    return unique_categories
 
-    len_colormap = cmap.N
-    category_to_rgba = {category: cmap(i % len_colormap) for i, category in enumerate(unique_categories)}
+
+def create_cmap_mapping(
+    data,
+    cmap: Optional[Union[str, ListedColormap]] = None,
+    rgba_values: Optional[np.ndarray] = None
+    ):
+    unique_categories = _parse_unique_categories(data)
+
+    if rgba_values is None:
+        if cmap is None:
+            pal = CustomPalettes()
+            cmap = pal.tab20_mod
+
+        # get colormap if necessary
+        if not isinstance(cmap, ListedColormap):
+            cmap = plt.get_cmap(cmap)
+
+        len_colormap = cmap.N
+        category_to_rgba = {category: cmap(i % len_colormap) for i, category in enumerate(unique_categories)}
+    else:
+        category_to_rgba = {}
+        for v in unique_categories:
+            idx = np.argwhere(data == v)[0][0].item()
+            category_to_rgba[v] = rgba_values[idx]
+
     return category_to_rgba
 
 
 def categorical_data_to_rgba(data,
                              cmap: Union[str, ListedColormap],
                              return_mapping: bool = False,
-                             nan_val: tuple = (1,1,1,0)
+                             nan_val: tuple = (1,1,1,0),
+                             rgba_values: Optional[np.ndarray] = None
                              ):
 
     # len_colormap = cmap.N
     # category_to_rgba = {category: cmap(i % len_colormap) for i, category in enumerate(unique_categories)}
 
     if not isinstance(cmap, dict):
-        category_to_rgba = create_cmap_mapping(data, cmap)
+        category_to_rgba = create_cmap_mapping(data, cmap, rgba_values)
     else:
         category_to_rgba = cmap
 
@@ -186,6 +205,7 @@ def _data_to_rgba(
     upper_climit_pct: int = 99,
     #return_all: bool = False,
     nan_val: tuple = (1,1,1,0),
+    rgba_values: Optional[np.ndarray] = None
     ):
     if not is_numeric_dtype(data) or is_bool_dtype(data):
         if is_bool_dtype(data):
@@ -199,7 +219,8 @@ def _data_to_rgba(
             categorical_cmap = DEFAULT_CATEGORICAL_CMAP
         rgba_list, mapping = categorical_data_to_rgba(data=data, cmap=categorical_cmap,
                                         return_mapping=True,
-                                        nan_val=nan_val)
+                                        nan_val=nan_val,
+                                        rgba_values=rgba_values)
         cmap = categorical_cmap
     else:
         rgba_list, mapping = continuous_data_to_rgba(data=data, cmap=continuous_cmap,
