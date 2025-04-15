@@ -1,4 +1,4 @@
-# Tutorials
+# Getting started
 
 To help you get started with **InSituPy**, you can find a collection of different tutorials here. These are divided into the following six topics:
 
