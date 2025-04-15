@@ -33,18 +33,18 @@
 ## Plotting
 
 ```{eval-rst}
-.. module:: insitupy.pl
+.. module:: insitupy.plotting
 .. currentmodule:: insitupy
 
 .. autosummary::
     :toctree: generated
 
-    pl.plot_spatial
-    pl.plot_cellular_composition
-    pl.cell_abundance_along_axis
-    pl.cell_expression_along_axis
-    pl.volcano_plot
-    pl.plot_colorlegend
-    pl.plot_overview
+    plotting.plot_spatial
+    plotting.plot_cellular_composition
+    plotting.cell_abundance_along_axis
+    plotting.cell_expression_along_axis
+    plotting.volcano_plot
+    plotting.plot_colorlegend
+    plotting.plot_overview
 ```
 
