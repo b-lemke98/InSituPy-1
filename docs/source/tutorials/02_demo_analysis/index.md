@@ -1,4 +1,4 @@
-# Step-by-step analysis walkthrough
+# Step-by-step analysis
 
 This section provides a detailed, step-by-step demonstration of the preprocessing, analysis, and handling of individual samples in single-cell spatial transcriptomics data using **InSituPy**. Each part of the tutorial builds upon the previous one, and it is recommended to follow the steps sequentially from top to bottom to ensure proper functionality.
 
