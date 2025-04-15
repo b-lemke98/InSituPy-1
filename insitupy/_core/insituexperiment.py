@@ -669,7 +669,9 @@ class InSituExperiment:
     @classmethod
     def from_config(cls,
                     config_path: Union[str, os.PathLike, Path],
-                    mode: Literal["insitupy", "xenium"] = "insitupy"):
+                    mode: Literal["insitupy", "xenium"] = "insitupy",
+                    **kwargs
+                    ):
         """
         Create an InSituExperiment object from a configuration file.
 
@@ -729,7 +731,7 @@ class InSituExperiment:
             if mode == "insitupy":
                 dataset = InSituData.read(dataset_path)
             elif mode == "xenium":
-                dataset = read_xenium(dataset_path, verbose=False)
+                dataset = read_xenium(dataset_path, verbose=False, **kwargs)
             else:
                 raise ValueError("Invalid mode. Supported modes are 'insitupy' and 'xenium'.")
 
