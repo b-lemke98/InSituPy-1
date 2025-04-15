@@ -3,7 +3,7 @@
 These tutorials explain how to import data from different technologies and tools into `InSituPy`.
 
 ```{eval-rst}
-.. card:: Build an `InSituData` object from scratch
+.. card:: Build an `InSituData` object from custom data
     :link: 09_InSituPy_build_objects_from_scratch
     :link-type: doc
 

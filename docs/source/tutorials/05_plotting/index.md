@@ -1,6 +1,6 @@
 # Plotting
 
-These tutorials focus on data plotting possibilities in `InSituPy`.
+These tutorials focus on data plotting functionalities in `InSituPy`.
 
 ```{eval-rst}
 .. card:: Spatial plotting functionalities

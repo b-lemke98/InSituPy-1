@@ -1,6 +1,6 @@
 # Tutorials
 
-Tutorial demonstrating the use of `InSituPy` for analyzing single-cell spatial transcriptomics data. The tutorial is structured in three main topics:
+To help you get started with **InSituPy**, you can find a collection of different tutorials here. These are divided into the following six topics:
 
 ```{eval-rst}
 .. card:: Preparations
@@ -10,7 +10,7 @@ Tutorial demonstrating the use of `InSituPy` for analyzing single-cell spatial t
 
     Tutorials focusing on preparatory steps that are necessary before actually getting started with the analysis, including download of datasets and cropping of whole slide images.
 
-.. card:: Step-by-step analysis demonstration
+.. card:: Step-by-step analysis walkthrough
     :link: 02_demo_analysis/index
     :link-type: doc
     :link-alt: Analysis demo

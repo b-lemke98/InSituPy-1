@@ -1,6 +1,6 @@
-# Sample-level analysis
+# Step-by-step analysis walkthrough
 
-These tutorials focus on the preprocessing, analysis and handling of individual samples of single-cell spatial transcriptomics data. These notebooks can be run from top to bottom and require the notebook about [automated image registration](../preprocessing/01_InSituPy_demo_register_images.ipynb) to be run first.
+This section provides a detailed, step-by-step demonstration of the preprocessing, analysis, and handling of individual samples in single-cell spatial transcriptomics data using **InSituPy**. Each part of the tutorial builds upon the previous one, and it is recommended to follow the steps sequentially from top to bottom to ensure proper functionality.
 
 ```{eval-rst}
 .. card:: 01: Automated image registration

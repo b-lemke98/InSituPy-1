@@ -1,6 +1,6 @@
 # Preparations
 
-Tutorials focusing on preparation steps that are necessary before actually getting started with the analysis:
+This section contains tutorials focusing on preparatory steps that are necessary before actually getting started with the analysis.
 
 ```{eval-rst}
 .. card:: Download of demo datasets
