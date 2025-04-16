@@ -1,6 +1,6 @@
 # API
 
-## Core Data Modules
+## Dataclasses
 
 ```{eval-rst}
 .. module:: insitupy._core
@@ -11,6 +11,23 @@
 
     InSituData
     InSituExperiment
+    MultiCellData
+    CellData
+    BoundariesData
+    ImageData
+    AnnotationsData
+    RegionsData
+```
+
+## Technology reading functions
+
+```{eval-rst}
+.. module:: insitupy._core
+.. currentmodule:: insitupy
+
+.. autosummary::
+    :toctree: generated
+
     read_xenium
 ```
 

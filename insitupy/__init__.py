@@ -17,7 +17,8 @@ from . import plotting as pl
 from . import preprocessing as pp
 from . import tools as tl
 from . import utils
-from ._core.dataclasses import AnnotationsData, BoundariesData, ImageData
+from ._core.dataclasses import (AnnotationsData, BoundariesData, CellData,
+                                ImageData, MultiCellData, RegionsData)
 from ._core.insitudata import InSituData
 from ._core.insituexperiment import InSituExperiment
 from ._core.readers import read_xenium
@@ -28,9 +29,22 @@ from .tools.distance import calc_distance_of_cells_from
 
 __all__ = [
     "InSituData",
+    "InSituExperiment",
+    "CustomPalettes",
     "AnnotationsData",
     "BoundariesData",
+    "CellData",
     "ImageData",
+    "MultiCellData",
+    "RegionsData",
+    "read_xenium",
+    "differential_gene_expression",
+    "calc_distance_of_cells_from",
+    "register_images",
     "im",
+    "io",
+    "pl",
+    "pp",
+    "tl",
     "utils"
 ]
