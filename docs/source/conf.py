@@ -51,7 +51,6 @@ autosummary_generate = True
 autodoc_process_signature = True
 autodoc_member_order = "groupwise"
 default_role = "literal"
-rtd_links_prefix = PurePosixPath(".")
 napoleon_google_docstring = True
 napoleon_include_init_with_doc = False
 napoleon_use_rtype = True  # having a separate entry generally helps readability
