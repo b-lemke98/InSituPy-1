@@ -31,7 +31,87 @@ from insitupy.utils.utils import textformat as tf
 
 
 class InSituExperiment:
-    #TODO: Docstring
+    """
+    Class to manage and analyze multiple spatially resolved single-cell transcriptomics experiments.
+
+    .. figure:: ../_static/img/insituexperiment_overview.svg
+       :width: 350px
+       :align: right
+       :class: dark-light
+
+    The class consists of multiple :class:`~insitudata.InSituData` datasets and associated metadata as `pandas.DataFrame`.
+    This class provides functionality for managing datasets, performing differential gene expression analysis,
+    querying metadata, visualizing data, and saving/loading experiments.
+
+    Attributes:
+        _metadata (pd.DataFrame): A DataFrame containing metadata for the datasets.
+        _data (list): A list of datasets in the experiment.
+        _path (str): The save path of the InSituExperiment object.
+        _collection (anndata.experimental.AnnCollection): A collection of AnnData objects.
+
+    Methods:
+        __repr__():
+            Provides a string representation of the InSituExperiment object.
+        __getitem__(key):
+            Retrieves a subset of the experiment based on the provided key.
+        __len__():
+            Returns the number of datasets in the experiment.
+        collection():
+            Returns the collection of AnnData objects.
+        data():
+            Returns the list of datasets.
+        metadata():
+            Returns a copy of the metadata DataFrame.
+        path():
+            Returns the save path of the InSituExperiment object.
+        _check_obs_uniqueness(cells_layer=None):
+            Checks if observation names are unique across all datasets.
+        add(data, mode="insitupy", metadata=None):
+            Adds a dataset to the experiment and updates metadata.
+        append_metadata(new_metadata, by=None, overwrite=False):
+            Appends metadata to the existing InSituExperiment object.
+        copy():
+            Creates a deep copy of the InSituExperiment object.
+        dge(target_id, ref_id=None, target_annotation_tuple=None, ...):
+            Performs differential gene expression analysis.
+        iterdata():
+            Iterates over the metadata rows and corresponding data.
+        generate_collection(cells_layer=None, label_col="uid"):
+            Generates a collection of AnnData objects.
+        get_n_cells(cells_layer=None):
+            Returns the total number of cells across all datasets.
+        load_all(skip=None):
+            Loads all data modalities for all datasets.
+        load_annotations():
+            Loads annotations for all datasets.
+        load_cells():
+            Loads cell data for all datasets.
+        load_images(names="all", nuclei_type="mip", ...):
+            Loads images for all datasets.
+        load_regions():
+            Loads regions for all datasets.
+        load_transcripts(transcript_filename="transcripts.parquet"):
+            Loads transcript data for all datasets.
+        plot_umaps(cells_layer=None, color=None, title_columns=None, ...):
+            Creates a plot with UMAPs of all datasets as subplots.
+        query(criteria):
+            Queries the experiment based on metadata criteria.
+        concat(objs, new_col_name=None):
+            Concatenates multiple InSituExperiment objects.
+        read(path):
+            Reads an InSituExperiment object from a specified folder.
+        from_config(config_path, mode="insitupy"):
+            Creates an InSituExperiment object from a configuration file.
+        from_regions(data, region_key, region_names=None):
+            Creates an InSituExperiment object from regions of a dataset.
+        remove_history():
+            Removes the history of all datasets.
+        save(verbose=False, overwrite_metadata=True, **kwargs):
+            Saves the InSituExperiment object to its current path.
+        saveas(path, overwrite=False, verbose=False, **kwargs):
+            Saves the InSituExperiment object to a specified path.
+        show(index, return_viewer=True):
+    """
 
     from ._deprecated import plot_overview
     def __init__(self):
