@@ -1,6 +1,6 @@
 # API
 
-## Dataclasses
+## Core Dataclasses
 
 ```{eval-rst}
 .. module:: insitupy._core
@@ -19,7 +19,7 @@
     RegionsData
 ```
 
-## Technology reading functions
+## Core reading functions
 
 ```{eval-rst}
 .. module:: insitupy._core
