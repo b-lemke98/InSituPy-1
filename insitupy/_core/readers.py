@@ -32,6 +32,35 @@ def read_xenium(
     transcript_mode: Literal["pandas", "dask"] = "dask",
     restructure_transcripts: bool = False
     ) -> InSituData:
+    """
+    Reads `Xenium In Situ data <https://www.10xgenomics.com/support/software/xenium-onboard-analysis/latest>`__
+    from the specified directory.
+
+    Args:
+        path (Union[str, os.PathLike, Path]): Path to the Xenium data bundle.
+        nuclei_type (Literal["focus", "mip", ""], optional): Type of nuclei image to load. Defaults to "mip".
+            If "mip" is unavailable, "focus" will be used as a fallback.
+        load_cell_segmentation_images (bool, optional): Whether to load cell segmentation images. Defaults to True.
+        verbose (bool, optional): Whether to print progress messages. Defaults to True.
+        transcript_mode (Literal["pandas", "dask"], optional): Mode to load transcript data. Defaults to "dask".
+            - "pandas": Loads the data into a pandas DataFrame.
+            - "dask": Loads the data into a Dask DataFrame for larger datasets.
+        restructure_transcripts (bool, optional): Whether to restructure the transcript data. Defaults to False.
+
+    Returns:
+        InSituData: An object containing the processed Xenium experiment data, including metadata, cells, images, and transcripts.
+
+    Raises:
+        InvalidXeniumDirectory: If the specified directory does not contain the required Xenium metadata file.
+        FileNotFoundError: If the specified directory does not exist.
+        ValueError: If an invalid value is provided for `transcript_mode`.
+
+    Notes:
+        - The function initializes an `InSituData` object with metadata and loads cell data, images, and transcripts.
+        - For Xenium versions <2.0, the "mip" image is used if available; otherwise, the "focus" image is loaded.
+        - Cell segmentation images are loaded if available and `load_cell_segmentation_images` is True.
+        - Transcript data can be loaded using either pandas or Dask, depending on the `transcript_mode` parameter.
+    """
 
     path = Path(path) # make sure the path is a pathlib path
     metadata_filename: str = "experiment.xenium"
