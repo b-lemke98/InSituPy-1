@@ -63,25 +63,31 @@ if WITH_NAPARI:
 class InSituData:
     """
     InSituData is a class for managing and analyzing spatially resolved transcriptomics data.
-    It provides methods for loading, saving, visualizing, and manipulating various modalities
-    of data, such as images, cells, annotations, regions, and transcripts.
 
     .. figure:: ../_static/img/insitudata_overview.svg
        :width: 260px
        :align: right
        :class: dark-light
 
+    It provides methods for loading, saving, visualizing, and manipulating various modalities
+    of data, such as images, cells, annotations, regions, and transcripts.
+
     Attributes:
-        path (Union[str, os.PathLike, Path]): Path to the data directory.
-        metadata (dict): Metadata associated with the InSituData object.
-        slide_id (str): Identifier for the slide.
-        sample_id (str): Identifier for the sample.
-        from_insitudata (bool): Indicates whether the object was loaded from an InSituData project.
+        # data modalities
         images (ImageData): Image data associated with the object.
         cells (MultiCellData): Cell data associated with the object.
         annotations (AnnotationsData): Annotation data associated with the object.
         regions (RegionsData): Region data associated with the object.
         transcripts (pd.DataFrame): Transcript data associated with the object.
+
+        # metadata
+        path (Union[str, os.PathLike, Path]): Path to the data directory.
+        metadata (dict): Metadata associated with the InSituData object.
+        slide_id (str): Identifier for the slide.
+        sample_id (str): Identifier for the sample.
+        from_insitudata (bool): Indicates whether the object was loaded from an InSituData project.
+
+        # others
         viewer (napari.Viewer): Napari viewer for visualizing the data.
         quicksave_dir (Path): *Experimental feature!* Directory for quicksave operations.
 
