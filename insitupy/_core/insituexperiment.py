@@ -44,10 +44,10 @@ class InSituExperiment:
     querying metadata, visualizing data, and saving/loading experiments.
 
     Attributes:
-        _metadata (pd.DataFrame): A DataFrame containing metadata for the datasets.
-        _data (list): A list of datasets in the experiment.
-        _path (str): The save path of the InSituExperiment object.
-        _collection (anndata.experimental.AnnCollection): A collection of AnnData objects.
+        data (list): A list of datasets in the experiment.
+        metadata (pd.DataFrame): A DataFrame containing metadata for the datasets.
+        path (str): The save path of the InSituExperiment object.
+        collection (anndata.experimental.AnnCollection): *Experimental feature!* A collection of AnnData objects.
 
     Methods:
         __repr__():
