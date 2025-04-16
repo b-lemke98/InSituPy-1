@@ -39,7 +39,7 @@ class InSituExperiment:
        :align: right
        :class: dark-light
 
-    The class consists of multiple :class:`~insitudata.InSituData` datasets and associated metadata as `pandas.DataFrame`.
+    The class consists of multiple :class:`~insitudata._core.InSituData` datasets and associated metadata as `pandas.DataFrame`.
     This class provides functionality for managing datasets, performing differential gene expression analysis,
     querying metadata, visualizing data, and saving/loading experiments.
 
