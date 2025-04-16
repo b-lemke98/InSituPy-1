@@ -65,7 +65,7 @@ class InSituData:
     InSituData class for managing and analyzing spatially resolved transcriptomics data.
 
     .. figure:: ../_static/img/insitudata_overview.svg
-       :width: 400px
+       :width: 500px
        :align: right
        :class: dark-light
 
