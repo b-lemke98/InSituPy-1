@@ -73,23 +73,23 @@ class InSituData:
     of data, such as images, cells, annotations, regions, and transcripts.
 
     Attributes:
-        # data modalities
-        images (ImageData): Image data associated with the object.
-        cells (MultiCellData): Cell data associated with the object.
-        annotations (AnnotationsData): Annotation data associated with the object.
-        regions (RegionsData): Region data associated with the object.
-        transcripts (pd.DataFrame): Transcript data associated with the object.
+        Data modalities:
+            images (ImageData): Image data associated with the object.
+            cells (MultiCellData): Cell data associated with the object.
+            annotations (AnnotationsData): Annotation data associated with the object.
+            regions (RegionsData): Region data associated with the object.
+            transcripts (pd.DataFrame): Transcript data associated with the object.
 
-        # metadata
-        path (Union[str, os.PathLike, Path]): Path to the data directory.
-        metadata (dict): Metadata associated with the InSituData object.
-        slide_id (str): Identifier for the slide.
-        sample_id (str): Identifier for the sample.
-        from_insitudata (bool): Indicates whether the object was loaded from an InSituData project.
+        Metadata:
+            path (Union[str, os.PathLike, Path]): Path to the data directory.
+            metadata (dict): Metadata associated with the InSituData object.
+            slide_id (str): Identifier for the slide.
+            sample_id (str): Identifier for the sample.
+            from_insitudata (bool): Indicates whether the object was loaded from an InSituData project.
 
-        # others
-        viewer (napari.Viewer): Napari viewer for visualizing the data.
-        quicksave_dir (Path): *Experimental feature!* Directory for quicksave operations.
+        Others:
+            viewer (napari.Viewer): Napari viewer for visualizing the data.
+            quicksave_dir (Path): *Experimental feature!* Directory for quicksave operations.
 
     Methods:
         __init__(path, metadata, slide_id, sample_id, from_insitudata):
