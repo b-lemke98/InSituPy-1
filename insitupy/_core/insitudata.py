@@ -61,7 +61,92 @@ if WITH_NAPARI:
 
 
 class InSituData:
-    #TODO: Docstring of InSituData
+    """
+    InSituData is a class for managing and analyzing spatially resolved transcriptomics data.
+    It provides methods for loading, saving, visualizing, and manipulating various modalities
+    of data, such as images, cells, annotations, regions, and transcripts.
+
+    Attributes:
+        path (Union[str, os.PathLike, Path]): Path to the data directory.
+        metadata (dict): Metadata associated with the InSituData object.
+        slide_id (str): Identifier for the slide.
+        sample_id (str): Identifier for the sample.
+        from_insitudata (bool): Indicates whether the object was loaded from an InSituData project.
+        images (ImageData): Image data associated with the object.
+        cells (MultiCellData): Cell data associated with the object.
+        annotations (AnnotationsData): Annotation data associated with the object.
+        regions (RegionsData): Region data associated with the object.
+        transcripts (pd.DataFrame): Transcript data associated with the object.
+        viewer (napari.Viewer): Napari viewer for visualizing the data.
+        quicksave_dir (Path): *Experimental feature!* Directory for quicksave operations.
+
+    Methods:
+        __init__(path, metadata, slide_id, sample_id, from_insitudata):
+            Initializes an InSituData object.
+        __repr__():
+            Returns a string representation of the object.
+        assign_geometries(geometry_type, keys, add_masks, add_to_obs, overwrite, cells_layer):
+            Assigns geometries (annotations or regions) to the cell data.
+        assign_annotations(keys, add_masks, overwrite):
+            Assigns annotations to the cell data.
+        assign_regions(keys, add_masks, overwrite):
+            Assigns regions to the cell data.
+        copy(keep_path):
+            Creates a deep copy of the InSituData object.
+        crop(region_tuple, xlim, ylim, inplace, verbose):
+            Crops the data based on the provided parameters.
+        add_alt(celldata_to_add, key_to_add):
+            Adds alternative cell data to the object.
+        add_baysor(path, read_transcripts, key_to_add, pixel_size):
+            Adds Baysor output data to the object.
+        plot_dimred(save):
+            Plots dimensionality reduction results.
+        load_all(skip, verbose):
+            Loads all available modalities.
+        load_annotations(verbose):
+            Loads annotation data.
+        import_annotations(files, keys, scale_factor, verbose):
+            Imports annotation data from external files.
+        load_regions(verbose):
+            Loads region data.
+        import_regions(files, keys, scale_factor, verbose):
+            Imports region data from external files.
+        load_cells(verbose):
+            Loads cell data.
+        load_images(names, overwrite, verbose):
+            Loads image data.
+        load_transcripts(verbose, mode):
+            Loads transcript data.
+        read(path):
+            Reads an InSituData object from a specified folder.
+        saveas(path, overwrite, zip_output, images_as_zarr, zarr_zipped, images_max_resolution, verbose):
+            Saves the InSituData object to a specified path.
+        save(path, zarr_zipped, verbose, keep_history):
+            Saves the InSituData object to its current path or a specified path.
+        save_colorlegends(savepath, from_canvas, max_per_row):
+            Saves color legends from the viewer.
+        quicksave(note):
+            *Experimental feature!* Saves a quick snapshot of the annotations.
+        list_quicksaves():
+            *Experimental feature!* Lists all available quicksaves.
+        load_quicksave(uid):
+            *Experimental feature!* Loads a quicksave by its unique identifier.
+        show(keys, cells_layer, point_size, scalebar, unit, grayscale_colormap, return_viewer, widgets_max_width):
+            Visualizes the data using a napari viewer.
+        store_geometries(name_pattern, uid_col):
+            Extracts geometric layers from the viewer and stores them as annotations or regions.
+        plot_expr_along_obs_val(keys, obs_val, cells_layer, groupby, method, stderr, savepath, return_data, **kwargs):
+            Plots expression values along an observation value.
+        reload(skip, verbose):
+            Reloads the loaded modalities.
+        get_loaded_modalities():
+            Returns a list of currently loaded modalities.
+        remove_history(verbose):
+            Removes the history of saved modalities.
+        remove_modality(modality):
+            Removes a specific modality from the object.
+
+    """
 
     # import deprecated functions
     from ._deprecated import (normalize_and_transform, read_all,
