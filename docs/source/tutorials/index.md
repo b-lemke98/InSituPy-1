@@ -10,7 +10,7 @@ To help you get started with **InSituPy**, you can find a collection of differen
 
     Tutorials focusing on preparatory steps that are necessary before actually getting started with the analysis, including download of datasets and cropping of whole slide images.
 
-.. card:: Step-by-step analysis walkthrough
+.. card:: Step-by-step analysis
     :link: 02_demo_analysis/index
     :link-type: doc
     :link-alt: Analysis demo

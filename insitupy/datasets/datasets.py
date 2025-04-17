@@ -5,7 +5,7 @@ from pathlib import Path
 
 from insitupy._constants import CACHE
 from insitupy._core.insitudata import InSituData
-from insitupy.io.readers import read_xenium
+from insitupy._core.readers import read_xenium
 from insitupy.datasets.download import download_url
 
 # parameters for download functions

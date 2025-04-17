@@ -61,12 +61,101 @@ if WITH_NAPARI:
 
 
 class InSituData:
-    #TODO: Docstring of InSituData
+    """
+    InSituData class for managing and analyzing spatially resolved transcriptomics data.
+
+    .. figure:: ../_static/img/insitudata_overview.svg
+       :width: 500px
+       :align: right
+       :class: dark-light
+
+    It provides methods for loading, saving, visualizing, and manipulating various modalities
+    of data, such as images, cells, annotations, regions, and transcripts.
+
+    Attributes:
+        images (ImageData): Image data associated with the object.
+        cells (MultiCellData): Cell data associated with the object.
+        annotations (AnnotationsData): Annotation data associated with the object.
+        regions (RegionsData): Region data associated with the object.
+        transcripts (pd.DataFrame): Transcript data associated with the object.
+
+        path (Union[str, os.PathLike, Path]): Path to the data directory.
+        metadata (dict): Metadata associated with the InSituData object.
+        slide_id (str): Identifier for the slide.
+        sample_id (str): Identifier for the sample.
+        from_insitudata (bool): Indicates whether the object was loaded from an InSituData project.
+
+        viewer (napari.Viewer): Napari viewer for visualizing the data.
+        quicksave_dir (Path): *Experimental feature!* Directory for quicksave operations.
+
+    Methods:
+        __init__(path, metadata, slide_id, sample_id, from_insitudata):
+            Initializes an InSituData object.
+        __repr__():
+            Returns a string representation of the object.
+        assign_geometries(geometry_type, keys, add_masks, add_to_obs, overwrite, cells_layer):
+            Assigns geometries (annotations or regions) to the cell data.
+        assign_annotations(keys, add_masks, overwrite):
+            Assigns annotations to the cell data.
+        assign_regions(keys, add_masks, overwrite):
+            Assigns regions to the cell data.
+        copy(keep_path):
+            Creates a deep copy of the InSituData object.
+        crop(region_tuple, xlim, ylim, inplace, verbose):
+            Crops the data based on the provided parameters.
+        plot_dimred(save):
+            Plots dimensionality reduction results.
+        load_all(skip, verbose):
+            Loads all available modalities.
+        load_annotations(verbose):
+            Loads annotation data.
+        import_annotations(files, keys, scale_factor, verbose):
+            Imports annotation data from external files.
+        load_regions(verbose):
+            Loads region data.
+        import_regions(files, keys, scale_factor, verbose):
+            Imports region data from external files.
+        load_cells(verbose):
+            Loads cell data.
+        load_images(names, overwrite, verbose):
+            Loads image data.
+        load_transcripts(verbose, mode):
+            Loads transcript data.
+        read(path):
+            Reads an InSituData object from a specified folder.
+        saveas(path, overwrite, zip_output, images_as_zarr, zarr_zipped, images_max_resolution, verbose):
+            Saves the InSituData object to a specified path.
+        save(path, zarr_zipped, verbose, keep_history):
+            Saves the InSituData object to its current path or a specified path.
+        save_colorlegends(savepath, from_canvas, max_per_row):
+            Saves color legends from the viewer.
+        quicksave(note):
+            *Experimental feature!* Saves a quick snapshot of the annotations.
+        list_quicksaves():
+            *Experimental feature!* Lists all available quicksaves.
+        load_quicksave(uid):
+            *Experimental feature!* Loads a quicksave by its unique identifier.
+        show(keys, cells_layer, point_size, scalebar, unit, grayscale_colormap, return_viewer, widgets_max_width):
+            Visualizes the data using a napari viewer.
+        store_geometries(name_pattern, uid_col):
+            Extracts geometric layers from the viewer and stores them as annotations or regions.
+        plot_expr_along_obs_val(keys, obs_val, cells_layer, groupby, method, stderr, savepath, return_data, **kwargs):
+            Plots expression values along an observation value.
+        reload(skip, verbose):
+            Reloads the loaded modalities.
+        get_loaded_modalities():
+            Returns a list of currently loaded modalities.
+        remove_history(verbose):
+            Removes the history of saved modalities.
+        remove_modality(modality):
+            Removes a specific modality from the object.
+
+    """
 
     # import deprecated functions
-    from ._deprecated import (normalize_and_transform, read_all,
-                              read_annotations, read_cells, read_images,
-                              read_regions, read_transcripts,
+    from ._deprecated import (add_alt, add_baysor, normalize_and_transform,
+                              read_all, read_annotations, read_cells,
+                              read_images, read_regions, read_transcripts,
                               reduce_dimensions, save_current_colorlegend)
 
     def __init__(self,
@@ -592,60 +681,60 @@ class InSituData:
         else:
             return _self
 
-    def add_alt(self,
-                celldata_to_add: CellData,
-                key_to_add: str
-                ) -> None:
-        # check if the current self has already an alt object and add a empty one if not
-        #alt_attr_name = "alt"
-        #try:
-        #    alt_attr = getattr(self, alt_attr_name)
-        #except AttributeError:
-        #    setattr(self, alt_attr_name, {})
-        #    alt_attr = getattr(self, alt_attr_name)
+    # def add_alt(self,
+    #             celldata_to_add: CellData,
+    #             key_to_add: str
+    #             ) -> None:
+    #     # check if the current self has already an alt object and add a empty one if not
+    #     #alt_attr_name = "alt"
+    #     #try:
+    #     #    alt_attr = getattr(self, alt_attr_name)
+    #     #except AttributeError:
+    #     #    setattr(self, alt_attr_name, {})
+    #     #    alt_attr = getattr(self, alt_attr_name)
 
-        if self._cells is None:
-            self._cells = MultiCellData()
+    #     if self._cells is None:
+    #         self._cells = MultiCellData()
 
-        # add the celldata to the given key
-        self._cells.add_celldata(cd=celldata_to_add, key=key_to_add)
+    #     # add the celldata to the given key
+    #     self._cells.add_celldata(cd=celldata_to_add, key=key_to_add)
 
-    def add_baysor(self,
-                   path: Union[str, os.PathLike, Path],
-                   read_transcripts: bool = False,
-                   key_to_add: str = "baysor",
-                   pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
-                   ):
+    # def add_baysor(self,
+    #                path: Union[str, os.PathLike, Path],
+    #                read_transcripts: bool = False,
+    #                key_to_add: str = "baysor",
+    #                pixel_size: Number = 1 # the pixel size is usually 1 since baysor runs on the µm coordinates
+    #                ):
 
-        # # convert to pathlib path
-        path = Path(path)
+    #     # # convert to pathlib path
+    #     path = Path(path)
 
-        # read baysor data
-        celldata = read_baysor_cells(baysor_output=path, pixel_size=pixel_size)
+    #     # read baysor data
+    #     celldata = read_baysor_cells(baysor_output=path, pixel_size=pixel_size)
 
-        # add celldata to alt attribute
-        self.add_alt(celldata_to_add=celldata, key_to_add=key_to_add)
+    #     # add celldata to alt attribute
+    #     self.add_alt(celldata_to_add=celldata, key_to_add=key_to_add)
 
-        if read_transcripts:
-            #trans_attr_name = "transcripts"
-            if self._transcripts is None:
-                print("No transcript layer found. Addition of Baysor transcript data is skipped.", flush=True)
-            else:
-                trans_attr = self._transcripts
-                # read baysor transcripts
-                baysor_results = read_baysor_transcripts(baysor_output=path)
-                baysor_results = baysor_results[["cell"]]
+    #     if read_transcripts:
+    #         #trans_attr_name = "transcripts"
+    #         if self._transcripts is None:
+    #             print("No transcript layer found. Addition of Baysor transcript data is skipped.", flush=True)
+    #         else:
+    #             trans_attr = self._transcripts
+    #             # read baysor transcripts
+    #             baysor_results = read_baysor_transcripts(baysor_output=path)
+    #             baysor_results = baysor_results[["cell"]]
 
-                # merge transcripts with existing transcripts
-                baysor_results.columns = pd.MultiIndex.from_tuples([("cell_id", key_to_add)])
-                trans_attr = pd.merge(left=trans_attr,
-                                    right=baysor_results,
-                                    left_index=True,
-                                    right_index=True
-                                    )
+    #             # merge transcripts with existing transcripts
+    #             baysor_results.columns = pd.MultiIndex.from_tuples([("cell_id", key_to_add)])
+    #             trans_attr = pd.merge(left=trans_attr,
+    #                                 right=baysor_results,
+    #                                 left_index=True,
+    #                                 right_index=True
+    #                                 )
 
-                # add resulting dataframe to InSituData
-                self._transcripts = trans_attr
+    #             # add resulting dataframe to InSituData
+    #             self._transcripts = trans_attr
 
 
     def plot_dimred(self, save: Optional[str] = None):
